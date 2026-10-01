@@ -328,6 +328,7 @@ test("phone numbers: country picker, per-country display on statements, a pasted
   await expect(page.getByTestId("profile-phone-code")).toHaveText("CN +86");
   await expect(phone).toHaveValue("138 0013 8000");
   await country.selectOption("US");
+  await expect(page.getByTestId("profile-phone-code")).toHaveText("US +1");
   await phone.fill("2025550143");
   await expect(phone).toHaveValue("202-555-0143");
   await phone.press("Enter");
