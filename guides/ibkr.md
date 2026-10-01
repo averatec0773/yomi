@@ -1,6 +1,6 @@
 # Connect Interactive Brokers (Flex Web Service)
 
-Last checked: 2026-10-01 (query and token steps, the SendRequest date overrides; IBKR's pages do not list the Account Information field names, so those follow the Flex XML attributes `accountId`, `acctAlias` and `currency`). Sources: [Activity Flex Query guide](https://www.ibkrguides.com/clientportal/performanceandstatements/activityflex.htm), [Flex Web Service guide](https://www.ibkrguides.com/clientportal/performanceandstatements/flex3.htm), [SendRequest API reference](https://www.interactivebrokers.com/docs/web-api/api-reference/send-request), [Flex Web Service error codes](https://www.ibkrguides.com/clientportal/flex3.htm).
+Last checked: 2026-10-01. Sources: [Activity Flex Query guide](https://www.ibkrguides.com/clientportal/performanceandstatements/activityflex.htm), [Flex Web Service guide](https://www.ibkrguides.com/clientportal/performanceandstatements/flex3.htm), [SendRequest API reference](https://www.interactivebrokers.com/docs/web-api/api-reference/send-request).
 
 yomi can pull your Interactive Brokers (IBKR) holdings, cash balances, trades and dividends once per trading day through IBKR's Flex Web Service. You create a saved report (an Activity Flex Query) and a read-only token in IBKR's Client Portal, give both to yomi, and the Assets page shows positions at the last close. The token can only fetch that report; yomi cannot trade or move money.
 
