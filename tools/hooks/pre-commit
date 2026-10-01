@@ -1,0 +1,4 @@
+#!/bin/sh
+# Rejects a commit that stages private paths or denylisted text (see tools/hooks/guard.sh).
+root=$(git rev-parse --show-toplevel) || exit 1
+exec sh "$root/tools/hooks/guard.sh" staged

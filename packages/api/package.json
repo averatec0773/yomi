@@ -1,0 +1,26 @@
+{
+  "name": "@yomi/api",
+  "version": "0.1.0",
+  "description": "yomi HTTP API (Hono), mounted inside the web app.",
+  "license": "AGPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/averatec0773/yomi.git",
+    "directory": "packages/api"
+  },
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@yomi/contracts": "workspace:*",
+    "@yomi/core": "workspace:*",
+    "@yomi/db": "workspace:*",
+    "@yomi/importers": "workspace:*",
+    "hono": "^4.13.11"
+  }
+}

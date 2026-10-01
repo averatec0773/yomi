@@ -1,0 +1,381 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+/*
+ * yomi design tokens. Components use these classes, never raw colors or sizes.
+ *
+ * Surfaces      bg-background (page) · bg-surface (cards, lists) · bg-sunken (inputs, wells, sidebar)
+ *               bg-raised (popovers, menus) · bg-tile (neutral category icon tile) · bg-day (day header in a list)
+ * Text          text-foreground (primary) · text-2 (secondary, 6:1) · text-3 (hints, ≥ 4.5:1 on every surface, light and dark)
+ * Lines         border-border (hairlines, default for `border`) · border-line-soft (row dividers inside a card)
+ *               border-line-strong (popover edge, dashed suggestion)
+ * Accent        text-primary / bg-primary (teal: links, focus, the one primary button per view) · text-primary-foreground
+ *               bg-primary-soft + text-primary-soft-foreground (active nav, Split marker, soft Settle button)
+ * Money         text-pos / bg-pos-soft (inflows only) · text-neg / bg-neg-soft ("You pay X" on Split and settle only)
+ *               text-transfer (dimmed transfer rows). Spending is plain text-foreground, never colored.
+ * Type scale    text-hint 12/18 (shortcut hints, timestamps) · text-meta 13/19 (row secondary, meta, pills)
+ *               text-body 15/22 (default: merchant, buttons, inputs, nav) · text-title 16/24 (section title, person)
+ *               text-total 22/28 · text-page 24/30 (page title) · text-display 32/38 (spend strip)
+ *               text-hero 36/40 (balances, stats). Weights 400, 500 and 600 only.
+ * Numbers       .num (tabular, slashed zero, right aligned) or font-num for the numeric face alone.
+ * Sizing        h-row (60px desktop row) · h-row-phone (64px phone row) · h-row-compact (36px: day headers, menu lines)
+ *               px-gutter (16px) · max-w-list (1120px) · max-w-narrow (720px) · w-sidebar (232px) · w-sidebar-rail (64px)
+ * Radius        rounded-sm 4 · rounded-md 6 · rounded-lg 10 · rounded-xl 12 (lists, cards) · rounded-2xl 14 (popovers,
+ *               person cards) · rounded-full for pills and chips only.
+ * Shadows       none, except dialogs and popovers (shadow-dialog).
+ * Sidebar       html[data-sidebar=collapsed] (set before paint from localStorage "yomi.sidebar"); the `rail:` variant
+ *               styles the collapsed state. html[data-tools=closed] (localStorage "yomi.sidebar.tools"): the
+ *               `tools-closed:` variant hides the Tools sub-items (never in the rail, which always shows their icons).
+ * Anchors       [data-anchor] marks a deep-link target (/settings#backup); AnchorFlash sets [data-flash] on it briefly.
+ * Dark mode     html[data-theme=light|dark] (the user's theme, set server-side before paint) forces a theme; without it
+ *               the palette follows prefers-color-scheme. `.dark` / `.light` force a theme on any element (the
+ *               statement's paper is `.light`). `dark:` follows all of these.
+ * shadcn        --background/--foreground/--primary/--muted/--accent/--border/--ring map onto the tokens above,
+ *               so components/ui picks up the palette. Note shadcn's `accent` is the neutral hover fill
+ *               (= sunken), not our teal; use `primary` for teal.
+ * Tap targets   `hit` gives a positioned control (Button adds `relative`) a 44x44 px hit area below md without changing
+ *               its look. Icons: every lucide svg is forced to stroke 1.8 (below), so never pass strokeWidth.
+ * Bulk          html[data-bulk] while a selection bar is up (BulkBar); the `bulk:` variant hides the phone Add button.
+ * cn()          import from "@/lib/utils" (knows the custom font-size names so text-meta + text-2 both survive).
+ */
+
+@custom-variant rail (&:where([data-sidebar=collapsed] *));
+@custom-variant bulk (&:where([data-bulk] *));
+@custom-variant tools-closed (&:where([data-tools=closed]:not([data-sidebar=collapsed]) *));
+
+@custom-variant dark {
+  &:where(.dark, .dark *, [data-theme="dark"], [data-theme="dark"] *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not(.light, [data-theme]), :root:not(.light, [data-theme]) *) {
+      @slot;
+    }
+  }
+}
+
+@theme {
+  --font-sans: "Inter", -apple-system, "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei",
+    system-ui, sans-serif;
+  --font-num: "Inter", "SF Pro Text", -apple-system, system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+
+  --text-hint: 12px;
+  --text-hint--line-height: 18px;
+  --text-meta: 13px;
+  --text-meta--line-height: 19px;
+  --text-body: 15px;
+  --text-body--line-height: 22px;
+  --text-title: 16px;
+  --text-title--line-height: 24px;
+  --text-total: 22px;
+  --text-total--line-height: 28px;
+  --text-page: 24px;
+  --text-page--line-height: 30px;
+  --text-display: 32px;
+  --text-display--line-height: 38px;
+  --text-hero: 36px;
+  --text-hero--line-height: 40px;
+
+  --spacing-row: 60px;
+  --spacing-row-phone: 64px;
+  --spacing-row-compact: 36px;
+  --spacing-gutter: 16px;
+  --spacing-sidebar: 232px;
+  --spacing-sidebar-rail: 64px;
+  --container-list: 1120px;
+  --container-narrow: 720px;
+
+  --shadow-dialog: 0 16px 40px -8px rgb(0 0 0 / 0.18), 0 2px 6px rgb(0 0 0 / 0.06);
+}
+
+@theme inline {
+  --font-heading: var(--font-sans);
+
+  --color-surface: var(--surface);
+  --color-sunken: var(--sunken);
+  --color-primary-soft: var(--brand-soft);
+  --color-primary-soft-foreground: var(--brand-soft-ink);
+  --color-raised: var(--raised);
+  --color-tile: var(--tile);
+  --color-day: var(--day);
+  --color-line-soft: var(--tile);
+  --color-line-strong: var(--line-strong);
+  --color-pos: var(--pos);
+  --color-pos-soft: var(--pos-soft);
+  --color-neg: var(--neg);
+  --color-neg-soft: var(--neg-soft);
+  --color-transfer: var(--transfer);
+
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 12px;
+  --radius-2xl: 14px;
+  --radius-3xl: 16px;
+  --radius-4xl: 20px;
+}
+
+/* Base palette: light. `.light` on an element below the root (the statement's paper) scopes it to that subtree. */
+:root,
+.light {
+  color-scheme: light;
+  --bg: #fafaf9;
+  --surface: #ffffff;
+  --sunken: #f3f3f1;
+  --line: #e7e6e2;
+  --ink: #1c1c1a;
+  --ink-2: #5f5e58;
+  --ink-3: #6e6d66;
+  --brand: #2f6f73;
+  --brand-ink: #ffffff;
+  --brand-soft: #e4efef;
+  --brand-soft-ink: #285f62;
+  --raised: #ffffff;
+  --tile: #f1f0ed;
+  --day: #f7f7f5;
+  --line-strong: #d6d5cf;
+  --pos: #3f7a54;
+  --pos-soft: #e6f0e9;
+  --neg: #a65a3a;
+  --neg-soft: #f5eae3;
+  --transfer: #6e6d66;
+  --radius: 10px;
+}
+
+/*
+ * Base palette: dark. The user's theme (Settings > Appearance) is set on <html> by the root layout before paint:
+ * data-theme="dark" or "light" forces it; no attribute follows prefers-color-scheme. `.dark` forces dark on any element.
+ */
+@media (prefers-color-scheme: dark) {
+  :root:not(.light, [data-theme]) {
+    color-scheme: dark;
+    --bg: #121211;
+    --surface: #1a1a18;
+    --sunken: #0e0e0d;
+    --line: #2a2a27;
+    --ink: #ecebe6;
+    --ink-2: #a3a198;
+    --ink-3: #8b8981;
+    --brand: #6fb2b6;
+    --brand-ink: #0e1a1b;
+    --brand-soft: #1b2e30;
+    --brand-soft-ink: #8fcbcf;
+    --raised: #1f1f1d;
+    --tile: #22221f;
+    --day: #161614;
+    --line-strong: #3a3a36;
+    --pos: #7db88f;
+    --pos-soft: #1b2a20;
+    --neg: #d08f6e;
+    --neg-soft: #33241c;
+    --transfer: #8b8981;
+  }
+}
+
+.dark,
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #121211;
+  --surface: #1a1a18;
+  --sunken: #0e0e0d;
+  --line: #2a2a27;
+  --ink: #ecebe6;
+  --ink-2: #a3a198;
+  --ink-3: #8b8981;
+  --brand: #6fb2b6;
+  --brand-ink: #0e1a1b;
+  --brand-soft: #1b2e30;
+  --brand-soft-ink: #8fcbcf;
+  --raised: #1f1f1d;
+  --tile: #22221f;
+  --day: #161614;
+  --line-strong: #3a3a36;
+  --pos: #7db88f;
+  --pos-soft: #1b2a20;
+  --neg: #d08f6e;
+  --neg-soft: #33241c;
+  --transfer: #8b8981;
+}
+
+/* shadcn variables, derived from the palette. Re-declared wherever the palette can change. */
+:root,
+.dark,
+.light {
+  --background: var(--bg);
+  --foreground: var(--ink);
+  --card: var(--surface);
+  --card-foreground: var(--ink);
+  --popover: var(--raised);
+  --popover-foreground: var(--ink);
+  --primary: var(--brand);
+  --primary-foreground: var(--brand-ink);
+  --secondary: var(--sunken);
+  --secondary-foreground: var(--ink);
+  --muted: var(--sunken);
+  --muted-foreground: var(--ink-2);
+  --accent: var(--sunken);
+  --accent-foreground: var(--ink);
+  --destructive: var(--neg);
+  --border: var(--line);
+  --input: var(--line);
+  --ring: var(--brand);
+  --chart-1: var(--brand);
+  --chart-2: var(--pos);
+  --chart-3: var(--neg);
+  --chart-4: var(--ink-2);
+  --chart-5: var(--ink-3);
+  --sidebar: var(--sunken);
+  --sidebar-foreground: var(--ink);
+  --sidebar-primary: var(--brand);
+  --sidebar-primary-foreground: var(--brand-ink);
+  --sidebar-accent: var(--sunken);
+  --sidebar-accent-foreground: var(--ink);
+  --sidebar-border: var(--line);
+  --sidebar-ring: var(--brand);
+}
+
+@utility text-2 {
+  color: var(--ink-2);
+}
+
+@utility text-3 {
+  color: var(--ink-3);
+}
+
+/* A 44x44 px hit area on phones around a small positioned control; the visual size stays. */
+@utility hit {
+  @media (width < 48rem) {
+    &::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: max(100%, 44px);
+      height: max(100%, 44px);
+      transform: translate(-50%, -50%);
+    }
+  }
+}
+
+@utility num {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums slashed-zero;
+  letter-spacing: -0.01em;
+  text-align: right;
+  white-space: nowrap;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans;
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    @apply bg-background text-body text-foreground;
+  }
+  kbd {
+    font-family: var(--font-num);
+  }
+  /* One stroke for every lucide icon, whatever the call site passes. */
+  svg.lucide {
+    stroke-width: 1.8;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+/* A deep-linked section: tinted while [data-flash] is set, then fades out when it is removed. No layout shift. */
+[data-anchor] {
+  border-radius: 10px;
+  transition:
+    background-color 700ms ease-out,
+    box-shadow 700ms ease-out;
+}
+[data-anchor][data-flash] {
+  background-color: var(--brand-soft);
+  box-shadow: 0 0 0 10px var(--brand-soft);
+  transition: none;
+}
+
+/*
+ * Print views (a page with [data-print-doc], e.g. /split/statement/print): no app chrome on screen or on paper. On
+ * screen the document sits on a neutral well like a sheet of paper ([data-print-paper]); on paper it is the page.
+ * [data-print-colors=screen] keeps the app theme and its backgrounds (print-color-adjust: exact); otherwise the paper
+ * is `.light`. The route's own <style> holds the table, the sections and the @page footer.
+ */
+html:has([data-print-doc]) [data-shell-chrome] {
+  display: none;
+}
+html:has([data-print-doc]) body {
+  background: var(--sunken);
+}
+[data-print-doc],
+html:has([data-print-doc]),
+html:has([data-print-doc]) body {
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+@media print {
+  [data-shell-chrome],
+  [data-sonner-toaster],
+  [data-print-toolbar] {
+    display: none !important;
+  }
+  html:has([data-print-doc]) main {
+    padding: 0 !important;
+  }
+  html:has([data-print-doc]) main > div {
+    max-width: none !important;
+  }
+  html:has([data-print-doc]),
+  html:has([data-print-doc]) body {
+    background: #fff !important;
+  }
+  html:has([data-print-colors="screen"]),
+  html:has([data-print-colors="screen"]) body {
+    background: var(--surface) !important;
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "@yomi/importers",
+  "version": "0.1.0",
+  "description": "yomi statement parsers: Alipay, WeChat Pay, ICBC PDF and SMS, Bank of America CSV, Plaid and IBKR Flex mappers.",
+  "license": "AGPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/averatec0773/yomi.git",
+    "directory": "packages/importers"
+  },
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "exceljs": "^4.4.0",
+    "pdfjs-dist": "^6.3.289"
+  }
+}

@@ -1,0 +1,1 @@
+ALTER TABLE `merchant_rules` ADD `auto_split` integer DEFAULT 0 NOT NULL;

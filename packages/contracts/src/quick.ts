@@ -1,0 +1,74 @@
+import { z } from "zod";
+import { CurrencyCode, MessageParams } from "./common";
+import { CreatedEntry, SplitMode } from "./split";
+
+export const QuickParseBody = z.object({
+  text: z.string().min(1),
+  /** Optional overrides; the server defaults to its local today and CNY. */
+  today: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  defaultCurrency: CurrencyCode.optional(),
+});
+export type QuickParseBody = z.infer<typeof QuickParseBody>;
+
+export const QuickError = z.object({
+  code: z.enum([
+    "quick_missing_amount",
+    "quick_amount_not_positive",
+    "quick_invalid_amount",
+    "quick_invalid_date",
+    "quick_unknown_participant",
+    "quick_treat",
+    "quick_sms_unsupported",
+  ]),
+  message: z.string(),
+  params: MessageParams,
+  name: z.string().optional(),
+});
+
+/** A pasted ICBC card alert, as the quick-add preview shows it. */
+export const QuickSms = z.object({
+  bank: z.literal("icbc"),
+  last4: z.string().regex(/^\d{4}$/),
+  /** ISO with +08:00 (Beijing time). */
+  occurredAt: z.string(),
+  /** Day of occurredAt in the user's time zone. */
+  occurredOn: z.string(),
+  merchant: z.string(),
+  /** Signed minor units; negative = spending. */
+  amountMinor: z.int(),
+  currency: CurrencyCode,
+  kind: z.enum(["expense", "income", "transfer", "refund"]),
+});
+export type QuickSms = z.infer<typeof QuickSms>;
+
+export const QuickDraft = z.object({
+  amountMinor: z.int().positive().nullable(),
+  currency: CurrencyCode,
+  description: z.string(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  participantIds: z.array(z.int()),
+  payerId: z.int().nullable(),
+  mode: SplitMode,
+  categoryHint: z.string().nullable(),
+  errors: z.array(QuickError),
+  sms: QuickSms.nullable().optional(),
+});
+export type QuickDraft = z.infer<typeof QuickDraft>;
+
+/** What POST /api/quick accepts: a draft whose amount is set (errors are ignored). */
+export const QuickCreateBody = QuickDraft.extend({
+  amountMinor: z.int().positive(),
+  currency: z.string().trim().toUpperCase().pipe(CurrencyCode),
+  errors: z.array(QuickError).optional(),
+  /** The pasted alert, re-parsed on the server when the draft came from one (the draft's sms is only a preview). */
+  smsText: z.string().min(1).max(2000).optional(),
+  today: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+});
+export type QuickCreateBody = z.infer<typeof QuickCreateBody>;
+
+/** POST /api/quick: the created entry; for a pasted alert also whether it was there already or duplicates a statement row. */
+export const QuickCreated = CreatedEntry.extend({
+  alreadyAdded: z.boolean().optional(),
+  duplicateOfId: z.int().nullable().optional(),
+});
+export type QuickCreated = z.infer<typeof QuickCreated>;

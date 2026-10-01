@@ -1,0 +1,53 @@
+{
+  "name": "yomi",
+  "version": "0.2.1",
+  "description": "Self-hosted personal ledger for people whose money lives in both the US and China: Alipay, WeChat Pay, ICBC and US bank imports, splitting with roommates, monthly stats.",
+  "license": "AGPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/averatec0773/yomi.git"
+  },
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.33.1",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @yomi/web dev",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "pnpm -r --no-bail typecheck",
+    "lint": "eslint .",
+    "db:generate": "pnpm --filter @yomi/db generate",
+    "db:migrate": "pnpm --filter @yomi/db migrate",
+    "db:import-sqlite": "pnpm --filter @yomi/db import-sqlite",
+    "import:files": "tsx packages/core/src/cli/import-files.ts",
+    "invest:sync": "tsx packages/core/src/cli/invest-sync.ts",
+    "demo:db": "tsx packages/core/src/cli/demo.ts",
+    "demo:showcase": "tsx packages/core/src/cli/demo-showcase.ts",
+    "secrets:gen-key": "tsx packages/core/src/cli/secrets.ts gen-key",
+    "secrets:scrub-backups": "tsx packages/core/src/cli/secrets.ts scrub-backups",
+    "e2e": "playwright test",
+    "hooks:install": "sh tools/hooks/install.sh",
+    "guard": "sh tools/hooks/guard.sh tracked"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.0",
+    "@playwright/test": "~1.62.1",
+    "@types/node": "^25.0.0",
+    "@types/pg": "^8.23.1",
+    "@types/pngjs": "^6.0.5",
+    "@types/qrcode": "^1.5.6",
+    "eslint": "^10.11.0",
+    "globals": "^17.12.0",
+    "jsqr": "^1.4.0",
+    "pg": "^8.23.1",
+    "pngjs": "^7.0.0",
+    "qrcode": "^1.5.4",
+    "tsx": "^4.23.15",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.71.0",
+    "vitest": "^4.1.11"
+  }
+}

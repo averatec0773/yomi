@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Synthetic Activity Flex Query output shaped like IBKR Flex v3 (attribute-only rows). Not real data. -->
+<FlexQueryResponse queryName="yomi holdings" type="AF">
+<FlexStatements count="1">
+<FlexStatement accountId="U0000001" fromDate="2026-09-25" toDate="2026-09-28" period="LastBusinessDay" whenGenerated="2026-09-28;203015">
+<AccountInformation accountId="U0000001" acctAlias="Test IBKR" currency="USD" name="Test Person" accountType="Individual" />
+<CashReport>
+<CashReportCurrency accountId="U0000001" currency="BASE_SUMMARY" levelOfDetail="BaseCurrency" fromDate="2026-09-25" toDate="2026-09-28" startingCash="5100.25" endingCash="5230.75" />
+<CashReportCurrency accountId="U0000001" currency="USD" levelOfDetail="Currency" fromDate="2026-09-25" toDate="2026-09-28" startingCash="4000" endingCash="4102.335" />
+<CashReportCurrency accountId="U0000001" currency="HKD" levelOfDetail="Currency" fromDate="2026-09-25" toDate="2026-09-28" startingCash="8600" endingCash="8850.10" />
+</CashReport>
+<OpenPositions>
+<OpenPosition accountId="U0000001" currency="USD" fxRateToBase="1" assetCategory="STK" symbol="AAPL" description="APPLE INC" conid="265598" securityID="US0378331005" securityIDType="ISIN" cusip="" isin="US0378331005" multiplier="1" reportDate="2026-09-28" position="10.5" markPrice="227.1234" positionValue="2384.7957" costBasisPrice="190.4879" costBasisMoney="2000.123456" fifoPnlUnrealized="384.672244" side="Long" levelOfDetail="SUMMARY" />
+<OpenPosition accountId="U0000001" currency="USD" fxRateToBase="1" assetCategory="STK" symbol="AAPL" description="APPLE INC" conid="265598" multiplier="1" reportDate="2026-09-28" position="10.5" markPrice="227.1234" positionValue="2384.7957" costBasisMoney="2000.123456" side="Long" levelOfDetail="LOT" openDateTime="2026-01-05;101500" />
+<OpenPosition accountId="U0000001" currency="HKD" fxRateToBase="0.1283" assetCategory="STK" symbol="700" description="TENCENT HOLDINGS LTD" conid="37196556" isin="KYG875721634" multiplier="1" reportDate="2026-09-28" position="100" markPrice="420.2" positionValue="42020" costBasisPrice="380" costBasisMoney="38000" fifoPnlUnrealized="4020" side="Long" levelOfDetail="SUMMARY" />
+<OpenPosition accountId="U0000001" currency="USD" fxRateToBase="1" assetCategory="OPT" symbol="AAPL  261218C00250000" description="AAPL 18DEC26 250 C" conid="712345678" underlyingSymbol="AAPL" multiplier="100" strike="250" expiry="2026-12-18" putCall="C" reportDate="2026-09-28" position="2" markPrice="3.45" positionValue="690" costBasisPrice="5.1" costBasisMoney="1020" fifoPnlUnrealized="-330" side="Long" levelOfDetail="SUMMARY" />
+<OpenPosition accountId="U0000001" currency="USD" fxRateToBase="1" assetCategory="STK" symbol="XYZ" description="SHORT CO &amp; SONS" conid="1111" multiplier="1" reportDate="2026-09-28" position="-5" markPrice="12.5" positionValue="-62.5" costBasisMoney="-70" fifoPnlUnrealized="7.5" side="Short" levelOfDetail="SUMMARY" />
+</OpenPositions>
+<Trades>
+<Trade accountId="U0000001" currency="USD" fxRateToBase="1" assetCategory="STK" symbol="AAPL" description="APPLE INC" conid="265598" multiplier="1" tradeID="900001" reportDate="2026-09-26" tradeDate="2026-09-26" tradeTime="100312" quantity="0.5" tradePrice="226.5" proceeds="-113.25" ibCommission="-0.35" netCash="-113.6" buySell="BUY" transactionID="7000001" levelOfDetail="EXECUTION" />
+<Trade accountId="U0000001" currency="HKD" fxRateToBase="0.1283" assetCategory="STK" symbol="700" description="TENCENT HOLDINGS LTD" conid="37196556" multiplier="1" tradeID="900002" tradeDate="20260928" quantity="-100" tradePrice="421" proceeds="42100" ibCommission="-18" netCash="42082" buySell="SELL" transactionID="7000002" levelOfDetail="EXECUTION" />
+<Order accountId="U0000001" symbol="AAPL" conid="265598" quantity="0.5" levelOfDetail="ORDER" />
+</Trades>
+<CashTransactions>
+<CashTransaction accountId="U0000001" currency="USD" assetCategory="STK" symbol="AAPL" description="AAPL(US0378331005) CASH DIVIDEND USD 0.26 PER SHARE (Ordinary Dividend)" conid="265598" isin="US0378331005" multiplier="1" dateTime="2026-09-25;202000" amount="2.73" type="Dividends" transactionID="8000001" reportDate="2026-09-25" levelOfDetail="DETAIL" />
+<CashTransaction accountId="U0000001" currency="USD" assetCategory="STK" symbol="AAPL" description="AAPL(US0378331005) CASH DIVIDEND - US TAX" conid="265598" multiplier="1" dateTime="2026-09-25;202000" amount="-0.82" type="Withholding Tax" transactionID="8000002" reportDate="2026-09-25" levelOfDetail="DETAIL" />
+<CashTransaction accountId="U0000001" currency="USD" assetCategory="CASH" symbol="" description="USD CREDIT INT FOR SEP-2026" conid="" dateTime="2026-09-28" amount="1.05" type="Broker Interest Received" transactionID="8000003" reportDate="2026-09-28" levelOfDetail="DETAIL" />
+<CashTransaction accountId="U0000001" currency="USD" assetCategory="CASH" description="Dividends summary" amount="2.73" type="Dividends" levelOfDetail="SUMMARY" />
+</CashTransactions>
+<ChangeInDividendAccruals>
+<ChangeInDividendAccrual accountId="U0000001" currency="USD" assetCategory="STK" symbol="AAPL" conid="265598" date="2026-09-22" exDate="2026-09-22" payDate="2026-09-25" quantity="10.5" grossRate="0.26" grossAmount="2.73" netAmount="1.91" code="Po" />
+</ChangeInDividendAccruals>
+</FlexStatement>
+</FlexStatements>
+</FlexQueryResponse>

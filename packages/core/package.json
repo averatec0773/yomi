@@ -1,0 +1,29 @@
+{
+  "name": "@yomi/core",
+  "version": "0.1.0",
+  "description": "yomi ledger rules: import pipeline, dedup, splits and settlements, summaries, sync jobs. No framework imports.",
+  "license": "AGPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/averatec0773/yomi.git",
+    "directory": "packages/core"
+  },
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./access": "./src/access/index.ts",
+    "./money": "./src/money.ts",
+    "./time": "./src/time/zone.ts",
+    "./payment": "./src/payment.ts",
+    "./phone": "./src/phone.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@yomi/db": "workspace:*",
+    "@yomi/importers": "workspace:*",
+    "libphonenumber-js": "^1.13.14"
+  }
+}

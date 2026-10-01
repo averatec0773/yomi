@@ -1,0 +1,24 @@
+{
+  "name": "@yomi/contracts",
+  "version": "0.1.0",
+  "description": "Zod schemas for yomi's API inputs and outputs, shared by the web app, the API and future clients.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/averatec0773/yomi.git",
+    "directory": "packages/contracts"
+  },
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./shortcuts": "./src/shortcuts.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "libphonenumber-js": "^1.13.14",
+    "zod": "^4.6.5"
+  }
+}
