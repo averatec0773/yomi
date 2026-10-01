@@ -309,6 +309,8 @@ test("phone numbers: country picker, per-country display on statements, a pasted
   ]);
 
   // China: the example formats as typed and shows international on the statement.
+  // The full country list renders only after hydration; a choice made before that is lost when React takes over.
+  await expect.poll(() => country.locator("option").count()).toBeGreaterThan(10);
   await country.selectOption("CN");
   await expect(page.getByTestId("profile-phone-code")).toHaveText("CN +86");
   await phone.pressSequentially("13800138000");
@@ -327,6 +329,7 @@ test("phone numbers: country picker, per-country display on statements, a pasted
   await page.goto("/settings?tab=profile");
   await expect(page.getByTestId("profile-phone-code")).toHaveText("CN +86");
   await expect(phone).toHaveValue("138 0013 8000");
+  await expect.poll(() => country.locator("option").count()).toBeGreaterThan(10);
   await country.selectOption("US");
   await expect(page.getByTestId("profile-phone-code")).toHaveText("US +1");
   await phone.fill("2025550143");
