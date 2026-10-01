@@ -1,6 +1,11 @@
 [English](README.md) | **简体中文**
 
-# yomi
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="apps/web/public/brand/wordmark-light.svg">
+    <img src="apps/web/public/brand/wordmark.svg" alt="yomi" width="200">
+  </picture>
+</p>
 
 一个自托管的个人账本，为钱同时在中美两地流动的人而做：支付宝、微信支付、工商银行以及美国各家银行的账单合在一张列表里，和朋友分摊的费用清清楚楚，数据只留在你自己的电脑上。
 

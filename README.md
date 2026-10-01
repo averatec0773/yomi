@@ -1,6 +1,11 @@
 **English** | [简体中文](README.zh-CN.md)
 
-# yomi
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="apps/web/public/brand/wordmark-light.svg">
+    <img src="apps/web/public/brand/wordmark.svg" alt="yomi" width="200">
+  </picture>
+</p>
 
 A self-hosted personal ledger for people whose money lives in both the US and China: Alipay, WeChat Pay, ICBC and US bank statements in one list, shared costs split with friends, and your data on your own computer.
 
