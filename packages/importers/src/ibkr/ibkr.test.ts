@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { createFlexClient, FLEX_GET_STATEMENT_URL, FLEX_SEND_REQUEST_URL, FlexError, readFlexAnswer } from "./client";
+import { createFlexClient, FLEX_GET_STATEMENT_URL, FLEX_SEND_REQUEST_URL, FlexError, flexRangeParams, readFlexAnswer } from "./client";
 import { flexDate, mapFlexStatement } from "./map";
 
 const xml = readFileSync(new URL("../../test/fixtures/ibkr/flex-activity.xml", import.meta.url), "utf8");
@@ -80,6 +80,46 @@ describe("Flex client polling", () => {
     await t.client().fetchStatement();
     expect(t.calls[1]!.url.hostname).toBe("gdcdyn.interactivebrokers.com");
     expect(t.calls[1]!.url.searchParams.get("x")).toBeNull();
+  });
+});
+
+describe("Flex period override", () => {
+  it("sends p for days and fd/td (yyyymmdd) for dates, on SendRequest only", async () => {
+    const s = fakeFlex([sendOk(), xml, sendOk(), xml]);
+    await s.client().fetchStatement({ days: 30 });
+    await s.client().fetchStatement({ from: "2025-10-02", to: "2026-10-01" });
+    expect(Object.fromEntries(s.calls[0]!.url.searchParams)).toEqual({ t: "tok123", q: "987654", v: "3", p: "30" });
+    expect(Object.fromEntries(s.calls[1]!.url.searchParams)).toEqual({ t: "tok123", q: "1234567890", v: "3" });
+    expect(Object.fromEntries(s.calls[2]!.url.searchParams)).toEqual({ t: "tok123", q: "987654", v: "3", fd: "20251002", td: "20261001" });
+    expect(Object.fromEntries(s.calls[3]!.url.searchParams)).toEqual({ t: "tok123", q: "1234567890", v: "3" });
+  });
+
+  it("accepts 1 to 365 days, both ends counted", () => {
+    expect(flexRangeParams({ days: 1 })).toEqual({ p: "1" });
+    expect(flexRangeParams({ days: 365 })).toEqual({ p: "365" });
+    expect(flexRangeParams({ from: "2026-10-01", to: "2026-10-01" })).toEqual({ fd: "20261001", td: "20261001" });
+    // 2025-10-02..2026-10-01 is 365 days; one more is too many. 2024 is a leap year.
+    expect(flexRangeParams({ from: "2025-10-02", to: "2026-10-01" })).toEqual({ fd: "20251002", td: "20261001" });
+    expect(flexRangeParams({ from: "2024-03-01", to: "2025-02-28" })).toEqual({ fd: "20240301", td: "20250228" });
+  });
+
+  it("rejects an invalid range before calling IBKR", async () => {
+    const bad = [
+      { days: 0 },
+      { days: 366 },
+      { days: 1.5 },
+      { days: Number.NaN },
+      { from: "2025-10-01", to: "2026-10-01" },
+      { from: "2026-10-02", to: "2026-10-01" },
+      { from: "2026-02-30", to: "2026-03-01" },
+      { from: "20260901", to: "20261001" },
+      { from: "2026-09-01", to: "" },
+    ];
+    for (const range of bad) {
+      const s = fakeFlex([sendOk(), xml]);
+      const err = (await s.client().fetchStatement(range).catch((e: unknown) => e)) as FlexError;
+      expect([err instanceof FlexError, err.kind, err.code, err.params.max, s.calls.length]).toEqual([true, "range_invalid", "invest_ibkr_range_invalid", 365, 0]);
+    }
   });
 });
 

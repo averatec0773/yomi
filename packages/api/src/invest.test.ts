@@ -11,6 +11,7 @@ const xml = readFileSync(new URL("../../importers/test/fixtures/ibkr/flex-activi
 
 async function setup(opts: { ibkr?: boolean; fxDown?: boolean; ibkrError?: InvestError } = {}) {
   const db = await testDb();
+  const ranges: unknown[] = [];
   await seed(db);
   const linkCalls: { kind?: string }[] = [];
   const provider = {
@@ -36,7 +37,8 @@ async function setup(opts: { ibkr?: boolean; fxDown?: boolean; ibkrError?: Inves
       ibkr: () =>
         opts.ibkr === false ? null : (
           {
-            fetchStatement: async () => {
+            fetchStatement: async (range?: unknown) => {
+              ranges.push(range);
               if (opts.ibkrError) throw opts.ibkrError;
               return mapFlexStatement(xml);
             },
@@ -49,7 +51,7 @@ async function setup(opts: { ibkr?: boolean; fxDown?: boolean; ibkrError?: Inves
   });
   const req = (method: string, path: string, body?: unknown) =>
     app.request(`/api${path}`, { method, headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
-  return { db, app, req, linkCalls };
+  return { db, app, req, linkCalls, ranges };
 }
 
 describe("/api/invest", () => {
@@ -102,6 +104,50 @@ describe("/api/invest", () => {
 
     const bad = await off.req("GET", "/invest/overview?asOf=yesterday");
     expect([bad.status, ((await bad.json()) as { code: string }).code]).toEqual([400, "validation_failed"]);
+  });
+});
+
+describe("IBKR date windows", () => {
+  const codeOf = async (r: Response) => [r.status, ((await r.json()) as { code: string; params?: Record<string, unknown> })] as const;
+
+  it("backfills 365 days on the first sync, then asks from a week before the last statement", async () => {
+    const { req, ranges } = await setup();
+    const first = InvestSyncResult.parse(await (await req("POST", "/invest/sync", { provider: "ibkr" })).json());
+    expect(first.results[0]!.range).toEqual({ from: "2025-09-30", to: "2026-09-29" });
+    await req("POST", "/invest/sync", { provider: "ibkr" });
+    expect(ranges).toEqual([
+      { from: "2025-09-30", to: "2026-09-29" },
+      { from: "2026-09-21", to: "2026-09-29" },
+    ]);
+  });
+
+  it("POST /invest/ibkr/history validates days, pulls that window and refuses a second pull within 10 minutes", async () => {
+    const { req, ranges } = await setup();
+    for (const body of [{ days: 0 }, { days: 366 }, { days: 1.5 }, { days: "30" }, {}]) {
+      const [status, err] = await codeOf(await req("POST", "/invest/ibkr/history", body));
+      expect([status, err.code, err.params]).toEqual([400, "invest_ibkr_history_days_invalid", { min: 1, max: 365 }]);
+    }
+    expect(ranges).toEqual([]);
+
+    const ok = InvestSyncResult.parse(await (await req("POST", "/invest/ibkr/history", { days: 30 })).json());
+    expect(ok.results[0]).toMatchObject({ provider: "ibkr", range: { from: "2026-08-31", to: "2026-09-29" }, transactionsNew: 5 });
+    expect(ranges).toEqual([{ from: "2026-08-31", to: "2026-09-29" }]);
+
+    const [status, err] = await codeOf(await req("POST", "/invest/ibkr/history", { days: 365 }));
+    expect([status, err.code, err.params]).toEqual([429, "invest_ibkr_pull_too_soon", { minutes: 10 }]);
+    expect(ranges.length).toBe(1);
+  });
+
+  it("POST /invest/ibkr/history reports a failed pull, then waits 30 minutes; not configured is 409", async () => {
+    const expired = await setup({ ibkrError: new InvestError("invest_ibkr_token_expired", "Token has expired.") });
+    const [s1, e1] = await codeOf(await expired.req("POST", "/invest/ibkr/history", { days: 365 }));
+    expect([s1, e1.code]).toEqual([409, "invest_ibkr_token_expired"]);
+    const [s2, e2] = await codeOf(await expired.req("POST", "/invest/ibkr/history", { days: 365 }));
+    expect([s2, e2.code, e2.params]).toEqual([429, "invest_ibkr_pull_backoff", { minutes: 30 }]);
+
+    const off = await setup({ ibkr: false });
+    const [s3, e3] = await codeOf(await off.req("POST", "/invest/ibkr/history", { days: 10 }));
+    expect([s3, e3.code]).toEqual([409, "invest_ibkr_not_configured"]);
   });
 });
 

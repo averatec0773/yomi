@@ -15,6 +15,7 @@ export type FlexErrorKind =
   | "rate_limited"
   | "in_progress_timeout"
   | "unavailable"
+  | "range_invalid"
   | "other";
 
 /** Stable code per kind (the UI translates it); `flexCode` travels in params. */
@@ -26,6 +27,7 @@ export const FLEX_ERROR_CODES: Record<FlexErrorKind, string> = {
   rate_limited: "invest_ibkr_rate_limited",
   in_progress_timeout: "invest_flex_in_progress_timeout",
   unavailable: "invest_ibkr_unavailable",
+  range_invalid: "invest_ibkr_range_invalid",
   other: "invest_ibkr_error",
 };
 
@@ -75,9 +77,54 @@ export interface FlexClientOptions {
   maxDelayMs?: number;
 }
 
+/** IBKR: a SendRequest override may cover "up to 365 days" (`p` 1-365, or `fd`/`td`). */
+export const FLEX_MAX_RANGE_DAYS = 365;
+
+/**
+ * SendRequest period override, replacing the period saved in the query. `days`: `p`, "number of days from
+ * the current date". `from`/`to`: `fd`/`td` (YYYY-MM-DD here, sent as yyyymmdd), both required together; yomi
+ * treats both as inclusive, so the span from..to counts at most 365 calendar days.
+ */
+export type FlexRange = { days: number } | { from: string; to: string };
+
+const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+function validIsoDate(v: string): boolean {
+  const m = ISO_DATE.exec(v);
+  if (!m) return false;
+  const d = new Date(`${v}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
+}
+
+/** Calendar days from `from` to `to`, both counted (2026-10-01..2026-10-01 is 1). */
+export function inclusiveDays(from: string, to: string): number {
+  return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000) + 1;
+}
+
+const rangeError = (message: string, params: MessageParams = {}) =>
+  new FlexError("range_invalid", null, message, { max: FLEX_MAX_RANGE_DAYS, ...params });
+
+/** The SendRequest query parameters of a range (`p`, or `fd` + `td`); throws `range_invalid` before anything is sent. */
+export function flexRangeParams(range: FlexRange): Record<string, string> {
+  if ("days" in range) {
+    if (!Number.isInteger(range.days) || range.days < 1 || range.days > FLEX_MAX_RANGE_DAYS) {
+      throw rangeError(`Flex period must be 1 to ${FLEX_MAX_RANGE_DAYS} days, got ${String(range.days)}`, { days: String(range.days) });
+    }
+    return { p: String(range.days) };
+  }
+  if (!validIsoDate(range.from) || !validIsoDate(range.to)) throw rangeError(`Flex range dates must be YYYY-MM-DD, got ${range.from}..${range.to}`);
+  const span = inclusiveDays(range.from, range.to);
+  if (span < 1) throw rangeError(`Flex range starts after it ends: ${range.from}..${range.to}`);
+  if (span > FLEX_MAX_RANGE_DAYS) throw rangeError(`Flex range covers ${span} days, more than ${FLEX_MAX_RANGE_DAYS}`, { days: span });
+  return { fd: range.from.replaceAll("-", ""), td: range.to.replaceAll("-", "") };
+}
+
 export interface FlexClient {
-  /** SendRequest, then GetStatement until the statement is ready. Returns the FlexQueryResponse XML. */
-  fetchStatement(): Promise<string>;
+  /**
+   * SendRequest, then GetStatement until the statement is ready. Returns the FlexQueryResponse XML. Without
+   * `range` the period saved in the query applies.
+   */
+  fetchStatement(range?: FlexRange): Promise<string>;
 }
 
 type Step = { kind: "done"; xml: string } | { kind: "ref"; code: string; url: string | null } | { kind: "retry"; code: string; message: string };
@@ -126,11 +173,12 @@ export function createFlexClient(opts: FlexClientOptions): FlexClient {
   const firstDelay = opts.initialDelayMs ?? 5000;
   const maxDelay = opts.maxDelayMs ?? 30_000;
 
-  async function get(base: string, q: string): Promise<string> {
+  async function get(base: string, q: string, extra: Record<string, string> = {}): Promise<string> {
     const u = new URL(base);
     u.searchParams.set("t", opts.token);
     u.searchParams.set("q", q);
     u.searchParams.set("v", "3");
+    for (const [k, v] of Object.entries(extra)) u.searchParams.set(k, v);
     let res: Response;
     try {
       res = await doFetch(u.toString(), {
@@ -165,8 +213,9 @@ export function createFlexClient(opts: FlexClientOptions): FlexClient {
   }
 
   return {
-    async fetchStatement() {
-      const sent = await withRetry(async () => readFlexAnswer(await get(FLEX_SEND_REQUEST_URL, opts.queryId)));
+    async fetchStatement(range) {
+      const extra = range ? flexRangeParams(range) : {};
+      const sent = await withRetry(async () => readFlexAnswer(await get(FLEX_SEND_REQUEST_URL, opts.queryId, extra)));
       if (sent.kind === "done") return sent.xml;
       const url = statementUrl(sent.url);
       // The statement is generated asynchronously: give it a moment before the first poll.

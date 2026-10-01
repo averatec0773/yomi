@@ -16,12 +16,15 @@ import { dayLabel } from "@/lib/month";
 import { ConfirmRemove } from "./confirm-remove";
 import { Guide, KeyNote, SecretInput, UntestedToggle } from "./secret-form";
 
-/** IBKR pages the steps link to (checked on GUIDES_CHECKED_ON). */
+/** IBKR pages the steps link to (checked on IBKR_GUIDE_CHECKED_ON). */
 const IBKR_LINKS = {
   portal: "https://www.interactivebrokers.com/portal/",
   queryGuide: "https://www.ibkrguides.com/clientportal/performanceandstatements/activityflex.htm",
   tokenGuide: "https://www.ibkrguides.com/clientportal/performanceandstatements/flex3.htm",
+  flexApi: "https://www.interactivebrokers.com/docs/web-api/api-reference/send-request",
 };
+/** When the IBKR steps were last compared with the pages above (update with the copy). */
+const IBKR_GUIDE_CHECKED_ON = "2026-10-01";
 
 type TestState = { kind: "idle" } | { kind: "testing" } | { kind: "ok"; result: IbkrTestResult } | { kind: "error"; text: string };
 
@@ -147,7 +150,7 @@ function IbkrSetupSheet({ ibkr, keyInfo, onDone }: { ibkr: SecretsView["ibkr"]; 
   return (
     <Sheet title={configured ? i.replaceTitle : i.setupTitle} description={i.description} footer={footer} data-testid="ibkr-setup-dialog">
       <div className="flex flex-col gap-4 pb-5">
-        <Guide title={i.guideTitle} steps={i.steps} labels={i.links} hrefs={IBKR_LINKS} testId="ibkr-guide" defaultOpen={!configured} />
+        <Guide title={i.guideTitle} steps={i.steps} labels={i.links} hrefs={IBKR_LINKS} testId="ibkr-guide" defaultOpen={!configured} checkedOn={IBKR_GUIDE_CHECKED_ON} />
         <SecretInput
           id="ibkr-query"
           label={i.queryId}

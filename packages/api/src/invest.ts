@@ -1,5 +1,7 @@
 import {
   type ApiError,
+  IBKR_HISTORY_DAYS,
+  IbkrHistoryBody,
   type InvestAccountList,
   type InvestConfig,
   type InvestOverview,
@@ -26,6 +28,7 @@ import {
   resolvePlaidConfig,
   resolvePlaidProvider,
   portfolioOverview,
+  pullIbkrHistory,
   SecretKeyError,
   syncHoldings,
 } from "@yomi/core";
@@ -57,6 +60,11 @@ const INVEST_ERROR_STATUS: Record<InvestErrorCode, ContentfulStatusCode> = {
   invest_ibkr_unavailable: 502,
   invest_ibkr_error: 502,
   invest_ibkr_statement_invalid: 502,
+  invest_ibkr_range_invalid: 400,
+  invest_ibkr_history_days_invalid: 400,
+  invest_ibkr_pull_too_soon: 429,
+  invest_ibkr_pull_backoff: 429,
+  invest_ibkr_pull_running: 409,
   invest_flex_in_progress_timeout: 504,
   invest_plaid_not_configured: 409,
   invest_plaid_error: 502,
@@ -64,7 +72,7 @@ const INVEST_ERROR_STATUS: Record<InvestErrorCode, ContentfulStatusCode> = {
   invest_fx_currency_unsupported: 400,
 };
 
-/** Routes under /api/invest: config, accounts, overview, sync. Read-only holdings; no trading, no advice. */
+/** Routes under /api/invest: config, accounts, overview, sync, ibkr/history. Read-only holdings; no trading, no advice. */
 export function investRoutes(deps: { getDb: () => Db | Promise<Db> } & InvestDeps): Hono {
   const r = new Hono();
   const getIbkr = deps.ibkr ?? (async () => await resolveIbkrSource(await deps.getDb(), getCurrentUser(), process.env, deps.ibkrFlex));
@@ -119,6 +127,23 @@ export function investRoutes(deps: { getDb: () => Db | Promise<Db> } & InvestDep
     const text = await c.req.text();
     const body = text.trim() ? await readJson(c, InvestSyncBody) : InvestSyncBody.parse({});
     const out = await syncHoldings(await deps.getDb(), getCurrentUser(), { provider: body.provider }, { ibkr: await getIbkr(), plaid: await getPlaid(), now: deps.now });
+    return c.json(out satisfies InvestSyncResult);
+  });
+
+  /** "Pull history": the last `days` days of IBKR activity (1 to 365); refused while too soon after the last pull. */
+  r.post("/ibkr/history", async (c) => {
+    const text = await c.req.text();
+    let raw: unknown;
+    try {
+      raw = text.trim() ? JSON.parse(text) : {};
+    } catch {
+      throw new BadRequest("invalid_json", "The request body is not valid JSON");
+    }
+    const body = IbkrHistoryBody.safeParse(raw);
+    if (!body.success) {
+      throw new InvestError("invest_ibkr_history_days_invalid", "days must be a whole number from 1 to 365", { min: IBKR_HISTORY_DAYS.min, max: IBKR_HISTORY_DAYS.max });
+    }
+    const out = await pullIbkrHistory(await deps.getDb(), getCurrentUser(), { days: body.data.days }, { ibkr: await getIbkr(), now: deps.now });
     return c.json(out satisfies InvestSyncResult);
   });
 

@@ -1,4 +1,4 @@
-import { createFlexClient, type FlexClientOptions, mapFlexStatement } from "@yomi/importers";
+import { createFlexClient, type FlexClientOptions, FlexError, type FlexRange, mapFlexStatement } from "@yomi/importers";
 import type { Db } from "@yomi/db";
 import {
   auditSecretChange,
@@ -18,6 +18,7 @@ import { getTimeZone } from "../settings/time-zone";
 import { clockNow, todayIn } from "../time/zone";
 import type { CurrentUser } from "../user";
 import { IBKR_QUERY_ENV, IBKR_TOKEN_ENV, type IbkrConfig, type IbkrSource, toInvestError } from "./ibkr";
+import { lastCompletedTradingDay, previousWeekday } from "./time";
 
 /** user_settings keys (per user). Token and query id are sealed (`enc:v1:`); the expiry date is plain. */
 export const IBKR_TOKEN_SETTING = "ibkr_flex_token";
@@ -49,13 +50,28 @@ export async function resolveIbkrConfig(q: Q, user: CurrentUser, env: NodeJS.Pro
 
 export type FlexOptions = Pick<FlexClientOptions, "fetch" | "sleep" | "maxWaitMs" | "initialDelayMs" | "maxDelayMs" | "timeoutMs">;
 
+/**
+ * Flex answers after which a `from`/`to` pull is asked once more with `to` one weekday earlier: 1003 "Statement
+ * is not available" and 1020 "Invalid request or unable to validate request". IBKR's docs do not say what
+ * SendRequest answers when `td` is a day whose statement is not published yet; these are the plausible codes,
+ * and the earlier `to` gives the same result the "Last Business Day" period did (the job sees a stale statement
+ * and retries overnight).
+ */
+export const FLEX_UNPUBLISHED_CODES = new Set(["1003", "1020"]);
+
 /** A Flex source for one token and query id (SendRequest, then GetStatement with the client's retry behavior). */
 export function ibkrSourceFor(token: string, queryId: string, opts: FlexOptions = {}): IbkrSource {
   const client = createFlexClient({ ...opts, token: token.trim(), queryId: queryId.trim() });
   return {
-    async fetchStatement() {
+    async fetchStatement(range?: FlexRange) {
       try {
-        return mapFlexStatement(await client.fetchStatement());
+        try {
+          return mapFlexStatement(await client.fetchStatement(range));
+        } catch (e) {
+          if (!range || !("to" in range) || !(e instanceof FlexError) || !e.flexCode || !FLEX_UNPUBLISHED_CODES.has(e.flexCode)) throw e;
+          const to = previousWeekday(range.to);
+          return mapFlexStatement(await client.fetchStatement({ from: range.from < to ? range.from : to, to }));
+        }
       } catch (e) {
         throw toInvestError(e);
       }
@@ -82,11 +98,14 @@ export interface IbkrTestResult {
 }
 
 /**
- * "Test connection": pulls the query once through the real flow and reports the statement date and positions.
+ * "Test connection": pulls the query once through the real flow (for the last completed trading day only) and
+ * reports the statement date and positions.
  * Stores nothing. Throws InvestError (token expired, invalid, query invalid, rate limited, …).
  */
-export async function testIbkrCredentials(token: string, queryId: string, opts: FlexOptions = {}): Promise<IbkrTestResult> {
-  const s = await ibkrSourceFor(token, queryId, { maxWaitMs: 2 * 60 * 1000, ...opts }).fetchStatement();
+export async function testIbkrCredentials(token: string, queryId: string, opts: FlexOptions = {}, now: Date = clockNow()): Promise<IbkrTestResult> {
+  // One day is enough to check the token and the query, whatever period the query has saved.
+  const day = lastCompletedTradingDay(now);
+  const s = await ibkrSourceFor(token, queryId, { maxWaitMs: 2 * 60 * 1000, ...opts }).fetchStatement({ from: day, to: day });
   return { statementDate: s.asOf, positions: s.holdings.filter((h) => h.securityExternalId != null).length, accounts: s.accounts.length };
 }
 

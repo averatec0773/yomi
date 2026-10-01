@@ -32,7 +32,9 @@ test("IBKR: set up with a tested token, sync, replace and remove; the token neve
   const guide = dialog.getByTestId("ibkr-guide");
   await expect(guide.getByRole("listitem")).toHaveCount(5);
   await expect(guide.getByRole("link", { name: "Client Portal" })).toHaveAttribute("href", "https://www.interactivebrokers.com/portal/");
-  await expect(guide).toContainText("Period Last Business Day");
+  await expect(guide).toContainText("Any Period works because yomi asks for its own dates");
+  await expect(guide).toContainText("Account Information with only Account ID, Account Alias and Currency");
+  await expect(guide.getByRole("link", { name: "IBKR API reference" })).toHaveAttribute("href", "https://www.interactivebrokers.com/docs/web-api/api-reference/send-request");
   await expect(dialog.getByTestId("secret-key-note")).toContainText("Saving creates a key file at");
   const save = dialog.getByRole("button", { name: "Save" });
   await expect(save).toBeDisabled();
@@ -89,6 +91,30 @@ test("IBKR: set up with a tested token, sync, replace and remove; the token neve
   await expect(page.getByText(/^Synced: Interactive Brokers, 5 positions/)).toBeVisible({ timeout: 20_000 });
   await expect(meta).toContainText(/Synced (just now|\d+ (second|minute)s? ago)/);
   expect(await page.content()).not.toContain(TOKEN);
+
+  // Pull history: a number of days within IBKR's 365-day limit, ending on the last trading day (Tuesday 09-29 at
+  // the pinned clock); a second pull within 10 minutes is refused with the reason, in the dialog.
+  await ibkr.getByRole("button", { name: "More actions for Interactive Brokers" }).click();
+  await page.getByRole("menuitem", { name: "Pull history…" }).click();
+  const history = page.getByRole("dialog", { name: "Pull IBKR history" });
+  const days = history.getByLabel("Days of history");
+  await expect(days).toHaveValue("365");
+  await expect(history).toContainText("older activity can't be pulled through the Flex Web Service");
+  await days.fill("400");
+  await expect(history.getByTestId("ibkr-history-error")).toHaveText("Enter a whole number of days from 1 to 365.");
+  await expect(history.getByTestId("ibkr-history-pull")).toBeDisabled();
+  await days.fill("30");
+  await expect(history.getByTestId("ibkr-history-error")).toHaveText("");
+  await history.getByTestId("ibkr-history-pull").click();
+  await expect(page.getByText("IBKR activity from Aug 31, 2026 to Sep 29, 2026: 0 new transactions")).toBeVisible({ timeout: 20_000 });
+  await expect(history).toBeHidden();
+  await ibkr.getByRole("button", { name: "More actions for Interactive Brokers" }).click();
+  await page.getByRole("menuitem", { name: "Pull history…" }).click();
+  await history.getByTestId("ibkr-history-pull").click();
+  await expect(history.getByTestId("ibkr-history-error")).toContainText("IBKR was pulled less than 10 minutes ago");
+  await expect(history.getByTestId("ibkr-history-error")).toContainText("Try again in 10 min.");
+  await page.keyboard.press("Escape");
+  await expect(history).toBeHidden();
 
   // The master key was created on first need, outside the database, readable by the owner only.
   expect(existsSync(E2E_KEY_FILE)).toBe(true);

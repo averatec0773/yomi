@@ -1,6 +1,6 @@
 "use client";
 
-import { ChartCandlestickIcon, ChartNoAxesColumnIcon, KeyRoundIcon, RefreshCwIcon, SettingsIcon } from "lucide-react";
+import { ChartCandlestickIcon, ChartNoAxesColumnIcon, HistoryIcon, KeyRoundIcon, RefreshCwIcon, SettingsIcon } from "lucide-react";
 import type { InvestSyncResult, SecretsView, SettingsStatus } from "@yomi/contracts";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -15,6 +15,7 @@ import { apiFetch } from "@/lib/api";
 import { dayLabel } from "@/lib/month";
 import { cn } from "@/lib/utils";
 import { INVESTMENTS_HREF, SyncedAt } from "./bank-connections";
+import { IbkrHistoryDialog } from "./ibkr-history-dialog";
 import { IbkrSetupDialog } from "./ibkr-setup-dialog";
 import { MetaPill, menuItem, SourceRow } from "./source-row";
 
@@ -37,7 +38,8 @@ function expiryText(expiry: SecretsView["ibkr"]["expiry"], t: ReturnType<typeof 
 /**
  * Interactive Brokers in the Brokerages card. Set up: Flex report pill, state (Active, Waiting for
  * today's statement, Needs attention), when it last synced, positions on the statement date, and the token
- * expiry from 14 days before; Sync now pulls the Flex query (POST /api/invest/sync, provider ibkr). Not set up:
+ * expiry from 14 days before; Sync now pulls the Flex query (POST /api/invest/sync, provider ibkr); the menu's
+ * "Pull history…" opens `IbkrHistoryDialog` (POST /api/invest/ibkr/history). Not set up:
  * "Not set up" and "Set up". "Set up" and the menu's "Replace token" open `IbkrSetupDialog`; the token and
  * the query id are never shown.
  */
@@ -50,6 +52,7 @@ export function IbkrRow({ status, secrets, keyInfo }: { status: IbkrStatusView; 
   const name = t.assets.ibkr.title;
   const [busy, setBusy] = useState(false);
   const [sheet, setSheet] = useState(false);
+  const [history, setHistory] = useState(false);
   const statement = status.lastStatementDate ? dayLabel(status.lastStatementDate, locale) : null;
   const expiry = status.configured ? expiryText(secrets.expiry, t) : null;
 
@@ -141,6 +144,10 @@ export function IbkrRow({ status, secrets, keyInfo }: { status: IbkrStatusView; 
               <RefreshCwIcon />
               {t.bank.syncNow}
             </DropdownMenuItem>
+            <DropdownMenuItem className={menuItem} onSelect={() => setHistory(true)} disabled={busy} data-testid="ibkr-pull-history">
+              <HistoryIcon />
+              {i.pullHistory}
+            </DropdownMenuItem>
             <DropdownMenuItem className={menuItem} asChild>
               <Link href={INVESTMENTS_HREF}>
                 <ChartNoAxesColumnIcon />
@@ -156,6 +163,7 @@ export function IbkrRow({ status, secrets, keyInfo }: { status: IbkrStatusView; 
         }
       />
       {sheetEl}
+      <IbkrHistoryDialog open={history} onOpenChange={setHistory} />
     </>
   );
 }
