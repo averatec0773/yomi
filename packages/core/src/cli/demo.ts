@@ -1,10 +1,10 @@
 // Synthetic demo ledger for UI work: `pnpm demo:db [dir]` (default data/demo-pglite, a PGlite data directory).
 // Deletes the directory first; refuses while another process (a dev server) has it open.
 // Everything goes through the public core API (except the demo brokerage login row, which Plaid would
-// create); all names, merchants, card numbers and brokerage accounts are made up.
+// create, and the backdated import instants); all names, merchants, card numbers and brokerage accounts are made up.
 import path from "node:path";
 import { and, eq } from "@yomi/db/orm";
-import { accounts, bankAccounts, bankConnections, closeDb, createDb, migrate } from "@yomi/db";
+import { accounts, bankAccounts, bankConnections, closeDb, createDb, importBatches, migrate, transactions } from "@yomi/db";
 import { bucketTotals, type InvestHoldingRow, type InvestStatement, type NormalizedRow, type ParseResult, type SourceId } from "@yomi/importers";
 import {
   balances,
@@ -150,6 +150,21 @@ function alipayRows(): NormalizedRow[] {
   refund(partial, 2390, "refund", 1);
   // A friend nobody has claimed yet (also on WeChat): shows up in the "who is transferring with you" list.
   out("2026-09-10", "Momo", "转账", "转账红包", 8800, { direction: "in", kind: "income", amountMinor: 8800, paymentMethod: "账户余额" });
+  // The same tea on Alipay and WeChat on one day (Analysis lists it as a possible duplicate). Fixed values, so the
+  // random sequence of every other demo row stays as it was.
+  d.push({
+    source: "alipay",
+    externalId: "2026092222001000000000000001",
+    occurredAt: "2026-09-22T15:12:08+08:00",
+    amountMinor: -3200,
+    currency: "CNY",
+    direction: "out",
+    kind: "expense",
+    counterparty: "喜茶",
+    description: "多肉葡萄",
+    sourceCategory: "餐饮美食",
+    paymentMethod: "账户余额",
+  });
 
   return finish("alipay", d, (r) => ({
     交易时间: r.occurredAt.slice(0, 19).replace("T", " "),
@@ -204,7 +219,9 @@ function wechatRows(): NormalizedRow[] {
 
   for (let i = 0; i < 41; i++) {
     const [cp, desc, lo, hi] = pick(shops);
-    row(randomDay(), "商户消费", cp, desc, -cents(lo, hi), "out", "expense", pick(pays));
+    // The WeChat file ends on Sep 24 (WECHAT_PERIOD_END): later random days move a week back.
+    const day = randomDay();
+    row(day > "2026-09-24" ? addDays(day, -7) : day, "商户消费", cp, desc, -cents(lo, hi), "out", "expense", pick(pays));
   }
   row("2026-08-16", "商户消费", "海底捞火锅", "海底捞(望京店)", -38600, "out", "expense", "招商银行储蓄卡(0001)", "haidilao");
   // Transfers and red packets with friends.
@@ -227,6 +244,19 @@ function wechatRows(): NormalizedRow[] {
   // Momo is not a participant yet: an unclaimed counterparty in /split until someone claims it.
   row("2026-08-11", "转账", "Momo", "转账备注:房租分摊", -50000, "out", "expense", "零钱");
   row("2026-09-18", "转账", "Momo", "/", 25000, "in", "income", null);
+  d.push({
+    source: "wechat",
+    externalId: "4200000000000000000000000001",
+    occurredAt: "2026-09-22T15:12:40+08:00",
+    amountMinor: -3200,
+    currency: "CNY",
+    direction: "out",
+    kind: "expense",
+    counterparty: "喜茶",
+    description: "多肉葡萄",
+    sourceCategory: "商户消费",
+    paymentMethod: "零钱",
+  });
   row("2026-07-31", "零钱提现", "招商银行(0001)", "零钱提现", -50000, "neutral", "transfer", "零钱");
   row("2026-09-05", "零钱提现", "招商银行(0001)", "零钱提现", -30000, "neutral", "transfer", "零钱");
 
@@ -329,6 +359,35 @@ function icbcRows(): NormalizedRow[] {
   credit("2026-08-25", "ONLINE PAYMENT THANK YOU", 165000, "transfer", "还款");
   credit("2026-09-25", "ONLINE PAYMENT THANK YOU", 182000, "transfer", "还款");
 
+  // Yesterday on the pinned e2e clock (Sep 29 in Chicago): coffee for the team, larger than usual there.
+  d.push({
+    source: "icbc_pdf",
+    externalId: null,
+    occurredAt: "2026-09-29T21:14:05+08:00",
+    amountMinor: -2840,
+    currency: "USD",
+    direction: "out",
+    kind: "expense",
+    counterparty: "TST*BUSY BEE CAFE HOUSTON TX",
+    description: "消费",
+    sourceCategory: "消费",
+    paymentMethod: pm,
+  });
+  // A new TV: a large first purchase at a merchant never seen before (Analysis "first large", "new merchant").
+  d.push({
+    source: "icbc_pdf",
+    externalId: null,
+    occurredAt: "2026-09-26T16:05:31+08:00",
+    amountMinor: -64900,
+    currency: "USD",
+    direction: "out",
+    kind: "expense",
+    counterparty: "BRIGHT SCREENS ELECTRONICS HOUSTON TX",
+    description: "消费",
+    sourceCategory: "消费",
+    paymentMethod: pm,
+  });
+
   const cur = (c: string) => (c === "HKD" ? "港币" : "美元");
   // 账户余额 (account balance) after each row, negative while owed; rows arrive oldest first.
   let balance = ICBC_OPENING;
@@ -353,25 +412,31 @@ await migrate(db);
 await seed(db);
 const user = getCurrentUser();
 
-const files: [string, NormalizedRow[]][] = [
-  ["支付宝交易明细(20260701-20260929).csv", alipayRows()],
-  ["微信支付账单(20260701-20260929).xlsx", wechatRows()],
-  ["工商银行信用卡对账单-2026Q3.pdf", icbcRows()],
+/** The WeChat export was taken on Sep 25 at 09:41 Beijing time, so it covers through Sep 24 (Analysis: CNY partial). */
+const WECHAT_PERIOD_END = "2026-09-25T09:41:00+08:00";
+// [file, rows, period end, when it was imported]. Import instants are backdated (the rows' and batch's created_at) so
+// Analysis "Arrived" reads like a real week: WeChat on Sep 24 evening, Alipay and ICBC on Sep 29 (Chicago time).
+const files: [string, NormalizedRow[], string, string][] = [
+  ["支付宝交易明细(20260701-20260929).csv", alipayRows(), TODAY, "2026-09-29T19:20:00.000Z"],
+  ["微信支付账单(20260701-20260925).xlsx", wechatRows(), WECHAT_PERIOD_END, "2026-09-25T02:10:00.000Z"],
+  ["工商银行信用卡对账单-2026Q3.pdf", icbcRows(), TODAY, "2026-09-29T19:20:00.000Z"],
 ];
 const batchCounts: string[] = [];
-for (const [fileName, rows] of files) {
+for (const [fileName, rows, periodEnd, importedAt] of files) {
   const source = rows[0]!.source;
   const parsed: ParseResult = {
     source,
     rows,
     declared: bucketTotals(rows),
     periodStart: "2026-07-01",
-    periodEnd: TODAY,
+    periodEnd,
     warnings: [],
   };
   const bytes = new TextEncoder().encode(`demo:${fileName}:${JSON.stringify(rows)}`);
   const r = await commitImport(db, user, async () => parsed, bytes, fileName, { backup: false });
   if (!r.reconciliation.ok) throw new Error(`${source}: reconciliation failed`);
+  await db.update(importBatches).set({ createdAt: importedAt }).where(eq(importBatches.id, r.batchId));
+  await db.update(transactions).set({ createdAt: importedAt }).where(eq(transactions.importBatchId, r.batchId));
   batchCounts.push(`${source} ${r.inserted}`);
 }
 

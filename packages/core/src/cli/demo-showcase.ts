@@ -120,6 +120,9 @@ spend("2026-09-27", "TST*ROSIE'S TACO BAR", "AUSTIN TX", 1865);
 spend("2026-09-26", "COSTCO WHOLESALE #681", "AUSTIN TX", 18764, "grocery_last");
 spend("2026-09-26", "TARGET 00012345", "AUSTIN TX", 2749);
 spend("2026-09-25", "AMAZON MKTPL*2K4AB1", "AMZN.COM/BILL WA", 4299);
+// For Analysis: coffee for the team (larger than usual) and a first purchase at a new store (first large).
+spend("2026-09-28", "SQ *MERIDIAN COFFEE", "AUSTIN TX", 3460);
+spend("2026-09-24", "BRIGHT SCREENS ELECTRONICS", "AUSTIN TX", 64900);
 // Card payments from checking, the month after each statement.
 const payments = [["2026-07-25", 118240], ["2026-08-25", 131575], ["2026-09-25", 127310]] as const;
 for (const [day, minor] of payments) {
