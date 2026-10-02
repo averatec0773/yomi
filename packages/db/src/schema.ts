@@ -55,6 +55,12 @@ export const importBatches = pgTable("import_batches", {
   rowsLinked: integer("rows_linked").notNull().default(0),
   declared: jsonb("declared").$type<Record<string, unknown>>(),
   parsed: jsonb("parsed").$type<Record<string, unknown>>(),
+  /**
+   * Days the file covers ('YYYY-MM-DD', both inclusive), from the period the export states; an end taken before 23:59
+   * covers through the day before. Null when the file states none (bank sync, older batches without a dated name).
+   */
+  periodStart: text("period_start"),
+  periodEnd: text("period_end"),
   status: text("status", { enum: ["committed", "reverted"] }).notNull().default("committed"),
   createdAt: createdAt(),
   revertedAt: text("reverted_at"),
