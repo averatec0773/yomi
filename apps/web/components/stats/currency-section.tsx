@@ -1,6 +1,7 @@
-import type { RangeCurrencyOverview } from "@yomi/core";
-import { ArrowDownWideNarrowIcon, ChartColumnIcon, TagIcon } from "lucide-react";
+import type { AnalysisCurrency, RangeCurrencyOverview } from "@yomi/core";
+import { ChartColumnIcon, TagIcon } from "lucide-react";
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { Money } from "@/components/money";
 import { ListCard } from "@/components/ui-kit/list-card";
 import { fmt, plural } from "@/i18n";
@@ -9,11 +10,12 @@ import { rich } from "@/i18n/rich";
 import { getI18n } from "@/i18n/server";
 import { dayLabel } from "@/lib/month";
 import { CategoryList } from "./category-list";
+import { LargestCard } from "./largest-card";
 import { MonthlyTrend } from "./monthly-trend";
 import { TargetEditor } from "./target-editor";
 
 export interface CurrencySectionProps {
-  data: RangeCurrencyOverview;
+  data: AnalysisCurrency;
   /** Query params naming the period on /transactions: `{ month }` or `{ from, to }`. */
   period: Record<string, string>;
   /** Days the daily average divides by. */
@@ -30,6 +32,10 @@ export interface CurrencySectionProps {
   anyTarget: boolean;
   /** The range crosses a year boundary: dates carry the year. */
   multiYear: boolean;
+  /** Short observations under a divider in the summary card (Analysis Insights). */
+  insights: ReactNode;
+  /** The monthly trend; off for weeks (a month or two of bars says nothing about seven days). */
+  showTrend: boolean;
 }
 
 /** Neutral comparison with the previous period: totals once the range is over, daily averages while it runs. */
@@ -53,10 +59,14 @@ function Dot() {
   );
 }
 
-/** One currency over the period: summary card, monthly trend, categories, small payments, largest. */
-export async function CurrencySection({ data, period, days, inProgress, previousLabel, month, showCode, anyTarget, multiYear }: CurrencySectionProps) {
+/**
+ * One currency over the period: summary card (with Insights), monthly trend, categories, small payments, and the
+ * largest rows or the top merchants. The comparison waits while the currency's data is partial.
+ */
+export async function CurrencySection({ data, period, days, inProgress, previousLabel, month, showCode, anyTarget, multiYear, insights, showTrend }: CurrencySectionProps) {
   const { locale, t } = await getI18n();
   const cur = data.currency;
+  const compare = data.previous != null && data.partialSources.length === 0;
   const code = showCode && <span className="ml-2 text-meta font-normal text-3">{cur}</span>;
 
   return (
@@ -77,8 +87,8 @@ export async function CurrencySection({ data, period, days, inProgress, previous
             <Money minor={data.spendingMinor} currency={cur} />
           </div>
           <div className="flex flex-col gap-y-1 text-body text-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-2">
-            <Comparison data={data} inProgress={inProgress} label={previousLabel} t={t} />
-            {data.previous != null && <Dot />}
+            {compare && <Comparison data={data} inProgress={inProgress} label={previousLabel} t={t} />}
+            {compare && <Dot />}
             <span>
               {rich(t.stats.dailyAvg, { amount: <Money minor={data.dailyAverageMinor} currency={cur} /> })}
               <span className="text-3">{plural(t.stats.days, days)}</span>
@@ -104,13 +114,14 @@ export async function CurrencySection({ data, period, days, inProgress, previous
               )}
             </div>
           )}
+          {insights}
         </div>
         {month && (
           <TargetEditor month={month} currency={cur} spendingMinor={data.spendingMinor} target={data.target} otherCurrencyTarget={anyTarget && !data.target} />
         )}
       </div>
 
-      {data.monthly && (
+      {showTrend && data.monthly && (
         <div className="flex flex-col gap-4">
           <h2 className="flex items-center gap-2 text-title font-semibold">
             <ChartColumnIcon className="size-[18px] text-2" aria-hidden />
@@ -136,28 +147,52 @@ export async function CurrencySection({ data, period, days, inProgress, previous
           )}
         </div>
 
-        <ListCard icon={ArrowDownWideNarrowIcon} title={<>{t.stats.largest}{code}</>}>
-          {data.largest.length === 0 ? (
-            <p className="px-4 py-4 text-body text-2 md:px-5">{t.stats.noSpending}</p>
-          ) : (
-            <ol className="divide-y divide-line-soft">
-              {data.largest.map((r) => (
-                <li key={r.id}>
-                  <Link
-                    href={`/transactions?month=${r.occurredOn.slice(0, 7)}`}
-                    className="flex h-12 items-center gap-3 px-4 transition-colors duration-[120ms] hover:bg-sunken md:px-5"
-                  >
-                    <span className={multiYear ? "w-24 shrink-0 text-meta text-2" : "w-16 shrink-0 text-meta text-2"}>
-                      {dayLabel(r.occurredOn, locale, { year: multiYear })}
-                    </span>
-                    <span className="min-w-0 flex-1 truncate">{r.merchant}</span>
-                    <Money minor={r.minor} currency={cur} />
-                  </Link>
-                </li>
-              ))}
-            </ol>
-          )}
-        </ListCard>
+        <LargestCard
+          code={code}
+          largest={
+            data.largest.length === 0 ? (
+              <p className="px-4 py-4 text-body text-2 md:px-5">{t.stats.noSpending}</p>
+            ) : (
+              <ol className="divide-y divide-line-soft">
+                {data.largest.map((r) => (
+                  <li key={r.id}>
+                    <Link
+                      href={`/transactions?month=${r.occurredOn.slice(0, 7)}`}
+                      className="flex h-12 items-center gap-3 px-4 transition-colors duration-[120ms] hover:bg-sunken md:px-5"
+                    >
+                      <span className={multiYear ? "w-24 shrink-0 text-meta text-2" : "w-16 shrink-0 text-meta text-2"}>
+                        {dayLabel(r.occurredOn, locale, { year: multiYear })}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate">{r.merchant}</span>
+                      <Money minor={r.minor} currency={cur} />
+                    </Link>
+                  </li>
+                ))}
+              </ol>
+            )
+          }
+          merchants={
+            data.topMerchants.length === 0 ? (
+              <p className="px-4 py-4 text-body text-2 md:px-5">{t.stats.noSpending}</p>
+            ) : (
+              <ol className="divide-y divide-line-soft">
+                {data.topMerchants.map((m) => (
+                  <li key={m.merchant}>
+                    <Link
+                      href={`/transactions?${new URLSearchParams({ ...period, q: m.merchant }).toString()}`}
+                      className="flex h-12 items-center gap-3 px-4 transition-colors duration-[120ms] hover:bg-sunken md:px-5"
+                    >
+                      <span className="min-w-0 flex-1 truncate">{m.merchant}</span>
+                      <span className="num shrink-0 text-meta text-3">{plural(t.stats.categoryCount, m.count)}</span>
+                      <span className="num w-10 shrink-0 text-right text-meta text-2">{m.share > 0 && m.share < 100 ? "<1%" : `${Math.round(m.share / 100)}%`}</span>
+                      <Money minor={m.minor} currency={cur} />
+                    </Link>
+                  </li>
+                ))}
+              </ol>
+            )
+          }
+        />
       </div>
     </section>
   );

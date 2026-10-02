@@ -94,7 +94,7 @@ export default async function AssetsPage({ searchParams }: PageProps<"/assets">)
     holdingsConverted,
     fx,
     cashFlow,
-    statsHref: `/stats?${new URLSearchParams({ from: nw.from, to: nw.asOf }).toString()}`,
+    statsHref: `/analysis?${new URLSearchParams({ from: nw.from, to: nw.asOf }).toString()}`,
     activity: params.view === "investments" ? await recentInvestmentActivity(db, user) : [],
     brokerages,
     plaid: { configured: plaid.configured, defaultEnvironment: plaid.defaultEnvironment, environments: plaid.environments },

@@ -7,6 +7,7 @@ export * from "./quick";
 export * from "./ledger";
 export * from "./month";
 export * from "./stats";
+export * from "./analysis";
 export * from "./maintenance";
 export * from "./bank";
 export * from "./invest";

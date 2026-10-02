@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { closeDb, createDb, type Db, listTables, migrate, queryRows } from "./index";
@@ -73,7 +74,7 @@ describe("migrations", () => {
   it("is idempotent: a second run applies nothing and logs one migration per journal entry", async () => {
     await migrate(db);
     const log = await queryRows<{ n: number }>(db, sql`select count(*)::int as n from drizzle.__drizzle_migrations`);
-    expect(log[0]!.n).toBe(2);
+    expect(log[0]!.n).toBe(3);
     expect(await listTables(db)).toHaveLength(23);
   });
 
@@ -117,5 +118,30 @@ describe("migrations", () => {
     expect(p).toEqual([{ is_self: false, aliases: "[]" }]);
     const m = await queryRows<{ participant_ids: unknown; auto_split: unknown; suggest: unknown }>(db, sql`select participant_ids, auto_split, suggest from merchant_rules`);
     expect(m).toEqual([{ participant_ids: [1], auto_split: false, suggest: true }]);
+  });
+
+  it("0002 backfills import coverage from a dated file name, capped at the day before the import", async () => {
+    await resetDb(db);
+    const batch = (source: string, fileName: string, createdAt: string) =>
+      db.execute(sql`insert into import_batches (user_id, source, file_name, file_hash, created_at) values (1, ${source}, ${fileName}, ${fileName}, ${createdAt})`);
+    await batch("alipay", "支付宝交易明细(20260701-20260929).csv", "2026-10-02T03:00:00.000Z");
+    await batch("wechat", "微信支付账单(20260801-20260930).xlsx", "2026-09-30T02:00:00.000Z");
+    await batch("icbc_pdf", "statement.pdf", "2026-09-30T02:00:00.000Z");
+    await batch("plaid", "plaid 20260901-20260930", "2026-10-02T03:00:00.000Z");
+    await batch("boa_csv", "stmt 20261301-20261302.csv", "2026-10-02T03:00:00.000Z");
+    const file = readFileSync(new URL("../migrations/0002_import_batch_coverage.sql", import.meta.url), "utf8");
+    const update = file.split("--> statement-breakpoint").find((s) => s.includes("UPDATE"))!;
+    await db.execute(sql.raw(update));
+    const rows = await queryRows<{ source: string; period_start: string | null; period_end: string | null }>(
+      db,
+      sql`select source, period_start, period_end from import_batches order by id`,
+    );
+    expect(rows).toEqual([
+      { source: "alipay", period_start: "2026-07-01", period_end: "2026-09-29" },
+      { source: "wechat", period_start: "2026-08-01", period_end: "2026-09-29" },
+      { source: "icbc_pdf", period_start: null, period_end: null },
+      { source: "plaid", period_start: null, period_end: null },
+      { source: "boa_csv", period_start: null, period_end: null },
+    ]);
   });
 });

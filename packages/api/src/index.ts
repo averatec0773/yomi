@@ -4,6 +4,7 @@ import type { Db } from "@yomi/db";
 import { detectAndParse } from "@yomi/importers";
 import { type Context, Hono } from "hono";
 import { accessRoutes } from "./access";
+import { analysisRoutes } from "./analysis";
 import { assetsRoutes } from "./assets";
 import { type BankDeps, bankRoutes } from "./bank";
 import { importRoutes } from "./import";
@@ -53,6 +54,7 @@ export function createApi(deps: ApiDeps) {
   app.route("/import", importRoutes({ getDb: deps.getDb, parse: deps.parse ?? detectAndParse }));
   app.route("/", ledgerRoutes({ getDb: deps.getDb }));
   app.route("/", monthRoutes({ getDb: deps.getDb, today: deps.today }));
+  app.route("/", analysisRoutes({ getDb: deps.getDb, today: deps.today }));
   app.route("/", splitRoutes({ getDb: deps.getDb }));
   app.route("/quick", quickRoutes({ getDb: deps.getDb }));
   app.route("/", maintenanceRoutes({ getDb: deps.getDb }));

@@ -6,7 +6,7 @@ import type { ShortcutAction } from "@yomi/contracts/shortcuts";
  */
 export const NAV = [
   { href: "/transactions", label: "transactions", action: "goTransactions", match: ["/transactions"] },
-  { href: "/stats", label: "stats", action: "goStats", match: ["/stats"] },
+  { href: "/analysis", label: "analysis", action: "goStats", match: ["/analysis"] },
   { href: "/assets", label: "assets", action: "goAssets", match: ["/assets"] },
   { href: "/tools", label: "tools", action: "goTools", match: ["/tools", "/split", "/import"] },
 ] as const;

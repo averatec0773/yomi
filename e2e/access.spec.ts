@@ -8,9 +8,9 @@ test.use({ baseURL: base });
 test("the gate: redirects, 401s, bearer, token once, form, sign out", async ({ page, request }) => {
   const noRedirect = { maxRedirects: 0 } as const;
 
-  const page1 = await request.get("/stats?preset=this-month", noRedirect);
+  const page1 = await request.get("/analysis?preset=this-month", noRedirect);
   expect(page1.status()).toBe(307);
-  expect(page1.headers().location).toContain(`/access?next=${encodeURIComponent("/stats?preset=this-month")}`);
+  expect(page1.headers().location).toContain(`/access?next=${encodeURIComponent("/analysis?preset=this-month")}`);
 
   const api = await request.get("/api/participants", noRedirect);
   expect(api.status()).toBe(401);
@@ -21,13 +21,13 @@ test("the gate: redirects, 401s, bearer, token once, form, sign out", async ({ p
   const wrongBearer = await request.get("/api/participants", { headers: { Authorization: "Bearer nope" } });
   expect(wrongBearer.status()).toBe(401);
 
-  const wrongOnce = await request.get("/stats?token=nope", noRedirect);
+  const wrongOnce = await request.get("/analysis?token=nope", noRedirect);
   expect(wrongOnce.status()).toBe(307);
-  expect(wrongOnce.headers().location).toContain(`/access?next=${encodeURIComponent("/stats")}`);
+  expect(wrongOnce.headers().location).toContain(`/access?next=${encodeURIComponent("/analysis")}`);
   expect(wrongOnce.headers()["set-cookie"]).toBeUndefined();
-  const once = await request.get(`/stats?preset=this-month&token=${ACCESS_E2E_TOKEN}`, noRedirect);
+  const once = await request.get(`/analysis?preset=this-month&token=${ACCESS_E2E_TOKEN}`, noRedirect);
   expect(once.status()).toBe(307);
-  expect(once.headers().location).toMatch(/\/stats\?preset=this-month$/);
+  expect(once.headers().location).toMatch(/\/analysis\?preset=this-month$/);
   expect(once.headers()["set-cookie"]).toMatch(/^yomi_access=[0-9a-f]{64}; Path=\/; Max-Age=31536000; HttpOnly; SameSite=Lax$/);
   // The request context now holds the cookie: the API answers without a bearer.
   expect((await request.get("/api/participants")).status()).toBe(200);

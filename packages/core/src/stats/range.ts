@@ -1,7 +1,7 @@
 import { categories, type Db } from "@yomi/db";
 import { eq } from "@yomi/db/orm";
 import { LedgerError } from "../ledger/errors";
-import { countsAsSpending } from "../ledger/share";
+import { countsAsIncome, countsAsSpending } from "../ledger/share";
 import { loadRangeRows, type SpendingRow } from "../ledger/transactions";
 import { getMonthlyTarget, type MonthTarget } from "../month/target";
 import { getTimeZone } from "../settings/time-zone";
@@ -106,14 +106,12 @@ function divisorDays(r: DateRange, today: string): number {
   return daysInclusive(r.from, today);
 }
 
-const isIncome = (r: SpendingRow) => r.kind === "income" && r.status === "ok" && r.duplicateOfId == null;
-
 function metrics(rows: readonly SpendingRow[], days: number): PeriodMetrics {
   const spend = rows.filter(countsAsSpending);
   const spendingMinor = spend.reduce((a, r) => a + r.myShareMinor, 0);
   return {
     spendingMinor,
-    incomeMinor: rows.filter(isIncome).reduce((a, r) => a + r.amountMinor, 0),
+    incomeMinor: rows.filter(countsAsIncome).reduce((a, r) => a + r.amountMinor, 0),
     transactionCount: spend.length,
     dailyAverageMinor: Math.round(spendingMinor / days),
   };

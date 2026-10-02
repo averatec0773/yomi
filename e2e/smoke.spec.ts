@@ -169,17 +169,17 @@ test("split: opening balance moves 室友's number", async ({ page }) => {
   await expect(page.getByText("Opening: to settle with 室友").first()).toBeVisible();
 });
 
-test("stats: the ?month= alias opens that month with a total", async ({ page }) => {
-  await page.goto("/stats?month=2026-09");
+test("analysis: the ?month= alias opens that month with a total", async ({ page }) => {
+  await page.goto("/analysis?month=2026-09");
   await expect(page.getByRole("navigation", { name: "Period" })).toContainText("September 2026");
-  await expect(page.getByRole("navigation", { name: "Main navigation" }).locator("[aria-current=page]")).toHaveText("Stats");
+  await expect(page.getByRole("navigation", { name: "Main navigation" }).locator("[aria-current=page]")).toHaveText("Analysis");
   const section = page.getByRole("region", { name: "USD stats" });
   await expect(section).toContainText("USD spending");
   expect(await minorOf(section.locator(".text-hero"))).toBeGreaterThan(0);
 });
 
-test("stats: preset in the URL, custom range with monthly trend, category opens the same range", async ({ page }) => {
-  await page.goto("/stats");
+test("analysis: preset in the URL, custom range with monthly trend, category opens the same range", async ({ page }) => {
+  await page.goto("/analysis");
   const bar = page.getByRole("navigation", { name: "Period" });
   await bar.getByRole("button", { name: /^Choose a period/ }).click();
   await page.getByRole("menuitem", { name: "Last 3 months" }).click();
@@ -199,7 +199,7 @@ test("stats: preset in the URL, custom range with monthly trend, category opens 
   await form.getByLabel("End date").fill("2026-09-30");
   await form.getByRole("button", { name: "View" }).click();
   await expect(page).toHaveURL(/from=2026-07-01&to=2026-09-30/);
-  await expect(page.getByRole("heading", { name: "Stats" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Analysis" })).toBeVisible();
   await expect(page.getByText("Jul – Sep 2026").first()).toBeVisible();
 
   const cny = page.getByRole("region", { name: "CNY stats" });
@@ -214,7 +214,7 @@ test("stats: preset in the URL, custom range with monthly trend, category opens 
   await expect(page.getByRole("row").first()).toBeVisible();
 
   // Invalid custom range: the message comes from core's error code, no crash.
-  await page.goto("/stats?from=2026-09-30&to=2026-07-01");
+  await page.goto("/analysis?from=2026-09-30&to=2026-07-01");
   await expect(page.getByRole("form", { name: "Custom range" }).getByRole("alert")).toContainText("The start date cannot be after the end date.");
 });
 
@@ -222,7 +222,7 @@ test("nav: sidebar Tools group, sub-items light up, group and rail remember thei
   await page.goto("/transactions");
   const nav = page.getByRole("navigation", { name: "Main navigation" });
   const main = page.getByRole("main");
-  await expect(nav.getByRole("link")).toHaveText(["Transactions", "Stats", "Assets", "Tools", "Split and settle", "Import", "Rules"]);
+  await expect(nav.getByRole("link")).toHaveText(["Transactions", "Analysis", "Assets", "Tools", "Split and settle", "Import", "Rules"]);
   await nav.getByRole("link", { name: "Tools", exact: true }).click();
   await expect(page).toHaveURL(/\/tools$/);
   await expect(nav.locator("[aria-current=page]")).toHaveText("Tools");
@@ -269,7 +269,7 @@ test("nav: sidebar Tools group, sub-items light up, group and rail remember thei
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/tools");
   const tabs = page.getByRole("navigation", { name: "Main navigation" });
-  await expect(tabs.getByRole("link")).toHaveText(["Transactions", "Stats", "Assets", "Tools"]);
+  await expect(tabs.getByRole("link")).toHaveText(["Transactions", "Analysis", "Assets", "Tools"]);
   await expect(page.getByRole("button", { name: "Add a transaction" })).toBeVisible();
   await page.getByRole("button", { name: /Keyboard shortcuts/ }).click();
   await expect(page.getByRole("dialog", { name: "Keyboard shortcuts" })).toBeVisible();
@@ -385,7 +385,7 @@ test("counterparties: claim Momo as a new participant, its transfer becomes a re
 test("language: switching to 中文 in settings shows Chinese nav labels and stays after a reload", async ({ page }) => {
   await page.goto("/transactions?month=2026-09");
   const nav = page.getByRole("navigation", { name: "Main navigation" });
-  await expect(nav.getByRole("link")).toHaveText(["Transactions", "Stats", "Assets", "Tools", "Split and settle", "Import", "Rules"]);
+  await expect(nav.getByRole("link")).toHaveText(["Transactions", "Analysis", "Assets", "Tools", "Split and settle", "Import", "Rules"]);
   await expect(page.getByRole("group", { name: "Language" })).toHaveCount(0);
   await page.getByRole("link", { name: "Settings" }).click();
   await expect(page).toHaveURL(/\/settings$/);
@@ -409,10 +409,10 @@ test("language: switching to 中文 in settings shows Chinese nav labels and sta
   await expect(page.getByRole("tabpanel").getByRole("heading", { level: 2 })).toHaveText("键盘快捷键");
   const zhNav = page.getByRole("navigation", { name: "主导航" });
   await zhNav.getByRole("link", { name: "交易" }).click();
-  await expect(zhNav.getByRole("link")).toHaveText(["交易", "统计", "资产", "工具", "分摊与结算", "导入", "规则"]);
+  await expect(zhNav.getByRole("link")).toHaveText(["交易", "分析", "资产", "工具", "分摊与结算", "导入", "规则"]);
   await expect(page.getByText(/2026年\d+月/).first()).toBeVisible();
   await page.reload();
-  await expect(zhNav.getByRole("link")).toHaveText(["交易", "统计", "资产", "工具", "分摊与结算", "导入", "规则"]);
+  await expect(zhNav.getByRole("link")).toHaveText(["交易", "分析", "资产", "工具", "分摊与结算", "导入", "规则"]);
 
   // ? lists every shortcut; \ , opens settings from the keyboard.
   await page.keyboard.press("?");
@@ -426,7 +426,7 @@ test("language: switching to 中文 in settings shows Chinese nav labels and sta
   await page.keyboard.press(",");
   await expect(page).toHaveURL(/\/settings$/);
   await page.getByRole("group", { name: "语言" }).getByRole("button", { name: "EN" }).click();
-  await expect(nav.getByRole("link")).toHaveText(["Transactions", "Stats", "Assets", "Tools", "Split and settle", "Import", "Rules"]);
+  await expect(nav.getByRole("link")).toHaveText(["Transactions", "Analysis", "Assets", "Tools", "Split and settle", "Import", "Rules"]);
 });
 
 test("settings tabs: server-rendered ?tab=, arrows and back/forward switch tabs, phones scroll the bar only", async ({ page, browser, baseURL }) => {
@@ -559,7 +559,7 @@ test("assets: \\ a opens net worth with history; Cash, a starting balance, Inves
   await legend.getByRole("button", { name: "Cash" }).click();
   await expect(legend.getByRole("button", { name: "Cash" })).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByTestId("assets-by-currency")).toContainText(/CNY[\s\S]*HKD[\s\S]*USD/);
-  await expect(page.getByTestId("assets-cash-flow")).toHaveAttribute("href", /^\/stats\?from=\d{4}-\d{2}-\d{2}&to=/);
+  await expect(page.getByTestId("assets-cash-flow")).toHaveAttribute("href", /^\/analysis\?from=\d{4}-\d{2}-\d{2}&to=/);
   const cash = page.getByTestId("assets-cash-card");
   await expect(cash.getByTestId("assets-account-row").filter({ hasText: "Alipay balance" })).toContainText("Starting balance Jun 30 + transactions");
   await expect(cash.getByTestId("assets-account-row").filter({ hasText: "ICBC credit card 0003" })).toContainText(/Statement balance · Sep 29[\s\S]*−\$[\d,.]+[\s\S]*Owed to the bank/);
@@ -616,8 +616,8 @@ test("assets: \\ a opens net worth with history; Cash, a starting balance, Inves
   await expect(page.getByTestId("ibkr-setup").getByRole("link", { name: "Set up Interactive Brokers" })).toHaveAttribute("href", "/settings?tab=connections");
   await expect(page.getByTestId("assets-sources")).toContainText("Robinhood");
 
-  // Stats links back with the net worth change over its period.
-  await page.goto("/stats?preset=last_month");
+  // Analysis links back with the net worth change over its period.
+  await page.goto("/analysis?preset=last_month");
   const nw = page.getByTestId("stats-net-worth");
   await expect(nw).toContainText(/^Net worth change in this period: [+−]/);
   await nw.getByRole("link", { name: "Assets" }).click();

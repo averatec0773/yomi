@@ -58,9 +58,9 @@ Press ⌘K (Ctrl+K) anywhere. Word order does not matter, and English and Chines
 
 Dates: `today`, `yesterday`, weekday names (`mon`, `last fri`), `9/28`, `2026-09-28`, `今天`, `昨天`, `前天`, `周一`, `9月28日`. Currency: `$`, `usd`, `dollars` for USD; `¥`, `rmb`, `yuan`, `元`, `块` for CNY. Pasting an ICBC card SMS alert adds that charge.
 
-## Stats and assets
+## Analysis and assets
 
-- **Stats** covers any period: spending by category, the largest items, a monthly target, small payments and net worth change. Links of the form `/stats?month=YYYY-MM` and `/transactions?month=YYYY-MM` open that month.
+- **Analysis** covers a day, a week (from Monday), a month, a year or any period: spending by category, the largest items or top merchants, a few short insights, a monthly target, small payments and net worth change. Links of the form `/analysis?month=YYYY-MM` and `/transactions?month=YYYY-MM` open that month.
 - **Assets** shows net worth across currencies, cash and card balances, and brokerage holdings with unrealized gains.
 
 ## Update yomi

@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
 
-/** Sidebar destinations with a leader key: Transactions, Stats, Assets, Tools, Split and settle, Import, Rules, Settings. */
+/** Sidebar destinations with a leader key: Transactions, Analysis, Assets, Tools, Split and settle, Import, Rules, Settings. */
 const NAV_HINTS = 8;
 
 // Every test leaves the stored shortcuts at the defaults, so the other specs keep "\" as the leader.
@@ -23,7 +23,7 @@ async function holdLeader(page: Page, key: string) {
 
 test("shortcuts: no hints at rest, badges while \\ is held, \\ t and a quick tap navigate, Esc and time end it", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto("/stats");
+  await page.goto("/analysis");
   const aside = page.locator("aside");
   const hints = page.getByTestId("nav-key-hint");
   await expect(aside.getByRole("link", { name: "Transactions" })).toBeVisible();
@@ -52,7 +52,7 @@ test("shortcuts: no hints at rest, badges while \\ is held, \\ t and a quick tap
   await page.keyboard.press("\\");
   await expect(hints).toHaveCount(NAV_HINTS);
   await page.keyboard.press("m");
-  await expect(page).toHaveURL(/\/stats$/);
+  await expect(page).toHaveURL(/\/analysis$/);
   await expect(hints).toHaveCount(0);
 
   // Esc cancels; an unused tap runs out after about 1.5 s.
@@ -64,7 +64,7 @@ test("shortcuts: no hints at rest, badges while \\ is held, \\ t and a quick tap
   await expect(hints).toHaveCount(NAV_HINTS);
   await expect(hints).toHaveCount(0, { timeout: 2500 });
   await page.keyboard.press("a");
-  await expect(page).toHaveURL(/\/stats$/);
+  await expect(page).toHaveURL(/\/analysis$/);
 
   // Typing a backslash in a field is just typing.
   await page.goto("/transactions?month=2026-09");
@@ -82,7 +82,7 @@ test("shortcuts: Settings changes the leader to ;, ; a opens Assets, the sheet f
   await expect(section.getByRole("heading", { level: 2 })).toHaveText("Keyboard shortcuts");
   await expect(section).toContainText("Fixed");
   const leader = section.getByRole("button", { name: "Change the key for Leader key" });
-  const stats = section.getByRole("button", { name: "Change the key for Stats" });
+  const stats = section.getByRole("button", { name: "Change the key for Analysis" });
   await expect(leader).toHaveText("\\");
 
   // Capture: Esc cancels, Tab cannot be used, Backspace cannot clear the leader.
@@ -104,7 +104,7 @@ test("shortcuts: Settings changes the leader to ;, ; a opens Assets, the sheet f
   await stats.click();
   await page.keyboard.press("t");
   await expect(section.getByTestId("shortcut-goStats")).toContainText("Also used by Transactions");
-  await expect(section.getByTestId("shortcut-goTransactions")).toContainText("Also used by Stats");
+  await expect(section.getByTestId("shortcut-goTransactions")).toContainText("Also used by Analysis");
   await stats.click();
   await page.keyboard.press("m");
   await expect(section.getByRole("alert")).toHaveCount(0);

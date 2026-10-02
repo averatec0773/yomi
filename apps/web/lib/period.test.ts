@@ -32,6 +32,9 @@ describe("period labels", () => {
     expect(previousLabel("2026-09-01", "2026-09-30", 30, en)).toBe("last month");
     expect(previousLabel("2026-07-01", "2026-09-30", 92, en)).toBe("the previous 3 months");
     expect(previousLabel("2026-09-05", "2026-09-05", 1, en)).toBe("the previous day");
+    expect(previousLabel("2026-09-28", "2026-10-04", 7, en)).toBe("last week");
+    expect(previousLabel("2026-09-27", "2026-10-03", 7, en)).toBe("the previous 7 days");
+    expect(previousLabel("2026-09-28", "2026-10-04", 7, zhCN)).toBe("上周");
   });
 
   it("formats months and days per locale", () => {

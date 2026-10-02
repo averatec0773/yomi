@@ -290,6 +290,9 @@ export interface SpendingRow {
   merchant: string;
   categoryId: number | null;
   accountId: number | null;
+  source: TransactionItem["source"];
+  /** When the row was written (ISO instant): what arrived on a day, whatever its occurred_on. */
+  createdAt: string;
   splits: SplitItem[];
   myShareMinor: number;
 }
@@ -322,6 +325,8 @@ async function loadRowsBetween(db: Db, userId: number, start: string, end: strin
       merchant: transactions.merchant,
       categoryId: transactions.categoryId,
       accountId: transactions.accountId,
+      source: transactions.source,
+      createdAt: transactions.createdAt,
     })
     .from(transactions)
     .where(and(eq(transactions.userId, userId), gte(transactions.occurredOn, start), lt(transactions.occurredOn, end)))

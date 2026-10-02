@@ -51,6 +51,9 @@ export function sqliteMigrationsFolder(): string {
 /** Tables added after v0.1: a v0.1 ledger has none of them, so the import leaves them empty. */
 const POSTGRES_ONLY_TABLES = new Set(["investment_daily_nav"]);
 
+/** Nullable columns added after v0.1 (`table.column`): a v0.1 ledger has none of them, so the import leaves them null. */
+const POSTGRES_ONLY_COLUMNS = new Set(["import_batches.period_start", "import_batches.period_end"]);
+
 /** The ledger tables a v0.1 ledger also has (Postgres-only tables left out). */
 function schemaTables(): Map<string, PgTable> {
   const m = new Map<string, PgTable>();
@@ -208,7 +211,9 @@ export async function importSqliteLedger(opts: {
     const plans = order.map((name) => {
       const table = drizzleTables.get(name)!;
       const srcCols = (src.prepare(`select name from pragma_table_info(?)`).all(name) as { name: string }[]).map((c) => c.name);
-      const cols = Object.entries(getTableColumns(table)).map(([key, col]) => ({ key, name: col.name, convert: converterFor(col.columnType) }));
+      const cols = Object.entries(getTableColumns(table))
+        .filter(([, col]) => !POSTGRES_ONLY_COLUMNS.has(`${name}.${col.name}`))
+        .map(([key, col]) => ({ key, name: col.name, convert: converterFor(col.columnType) }));
       const onlySource = srcCols.filter((c) => !cols.some((x) => x.name === c));
       const onlyTarget = cols.filter((c) => !srcCols.includes(c.name)).map((c) => c.name);
       if (onlySource.length || onlyTarget.length) {

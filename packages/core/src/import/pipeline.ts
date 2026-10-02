@@ -20,6 +20,7 @@ import type { CurrentUser } from "../user";
 import { removeBatchBalances, statementBalances, upsertBalanceSnapshot } from "../assets/balances";
 import { accountKey, type AccountSpec, fileAccountCurrency, parsePaymentMethod, resolveAccountSpec } from "./accounts";
 import { resolveCategoryId } from "./categorize";
+import { statementCoverage } from "./coverage";
 import { computeDedupKeys, sha256Hex } from "./dedup";
 import { cleanMerchant } from "./merchant";
 import { findCardMatch } from "./sms-link";
@@ -614,6 +615,7 @@ export async function commitParsed(db: Db, user: CurrentUser, parsed: ParseResul
       );
     }
 
+    const coverage = statementCoverage(parsed.periodStart, parsed.periodEnd);
     const batch = (await tx
       .insert(importBatches)
       .values({
@@ -627,6 +629,8 @@ export async function commitParsed(db: Db, user: CurrentUser, parsed: ParseResul
         rowsLinked: preview.linkCount,
         declared: opts.noDeclared ? null : { ...parsed.declared },
         parsed: { ...parsedTotals },
+        periodStart: coverage.start,
+        periodEnd: coverage.end,
         status: "committed",
       })
       .returning({ id: importBatches.id })

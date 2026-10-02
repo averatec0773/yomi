@@ -18,6 +18,11 @@ export function countsAsSpending(row: ShareRow): boolean {
   return (row.kind === "expense" || row.kind === "refund") && row.status === "ok" && row.duplicateOfId == null;
 }
 
+/** Income on the summary card: the whole amount of ok income rows that are not linked duplicates. */
+export function countsAsIncome(row: ShareRow): boolean {
+  return row.kind === "income" && row.status === "ok" && row.duplicateOfId == null;
+}
+
 export function myShareMinor(row: ShareRow, splits: readonly ShareSplit[]): number {
   if (!countsAsSpending(row)) return 0;
   if (splits.length === 0) return -row.amountMinor;

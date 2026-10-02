@@ -34,7 +34,7 @@ function groups(mac: boolean, k: ShortcutBindings): { group: keyof Dictionary["s
       group: "go",
       rows: [
         ["transactions", go(k.goTransactions)],
-        ["stats", go(k.goStats)],
+        ["analysis", go(k.goStats)],
         ["assets", go(k.goAssets)],
         ["tools", go(k.goTools)],
         ["settings", go(k.goSettings)],

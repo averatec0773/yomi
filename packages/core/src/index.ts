@@ -8,6 +8,7 @@ export * from "./quick";
 export * from "./ledger";
 export * from "./month";
 export * from "./stats";
+export * from "./analysis";
 export * from "./export";
 export * from "./sync";
 export * from "./secrets";

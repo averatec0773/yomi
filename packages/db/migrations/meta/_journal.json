@@ -15,6 +15,13 @@
       "when": 1790898429904,
       "tag": "0001_investment_daily_nav",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790905632269,
+      "tag": "0002_import_batch_coverage",
+      "breakpoints": true
     }
   ]
 }
