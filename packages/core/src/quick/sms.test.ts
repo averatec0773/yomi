@@ -4,7 +4,7 @@ import type { NormalizedRow, ParseResult } from "@yomi/importers";
 import { eq } from "@yomi/db/orm";
 import { describe, expect, it } from "vitest";
 import { commitImport } from "../import/pipeline";
-import { merchantsOverlap } from "../import/sms-link";
+import { merchantsOverlap } from "../capture/match";
 import { seed } from "../seed";
 import { balances, createParticipant, setSplit } from "../split";
 import { getCurrentUser } from "../user";
@@ -108,7 +108,7 @@ describe("createSmsEntry", () => {
 });
 
 describe("SMS and the monthly PDF", () => {
-  it("SMS first: the PDF row links to it and the SMS split and category survive", async () => {
+  it("SMS first and split: the PDF row links to it and the SMS split and category survive", async () => {
     const db = await freshDb();
     const roommate = await createParticipant(db, user, "室友");
     const sms = await createSmsEntry(db, user, { text: POS, today });
@@ -117,7 +117,7 @@ describe("SMS and the monthly PDF", () => {
     await db.update(transactions).set({ categoryId: dining.id, note: "boba run" }).where(eq(transactions.id, sms.transactionId));
 
     const res = await importPdf(db, [pdfRow({ amountMinor: -1574 }), pdfRow({ amountMinor: -500, counterparty: "OTHER" })]);
-    expect(res.linked).toBe(1);
+    expect(res.captures.linked).toBe(1);
     const pdf = await db.select().from(transactions).where(eq(transactions.source, "icbc_pdf"));
     expect(pdf.find((t) => t.amountMinor === -1574)?.duplicateOfId).toBe(sms.transactionId);
     expect(pdf.find((t) => t.amountMinor === -500)?.duplicateOfId).toBeNull();
@@ -127,13 +127,15 @@ describe("SMS and the monthly PDF", () => {
     expect(await balances(db, user)).toEqual([expect.objectContaining({ currency: "USD", owedToMeMinor: 787 })]);
   });
 
-  it("SMS first without a merchant: the PDF fills it in", async () => {
+  it("SMS first without a merchant: the PDF row becomes the record and the SMS its duplicate", async () => {
     const db = await freshDb();
     const sms = await createSmsEntry(db, user, { text: ONLINE, today });
     expect(await catName(db, (await get(db, sms.transactionId)).categoryId)).toBe("其他");
     await importPdf(db, [pdfRow({ amountMinor: -1448, counterparty: "OPENAI *CHATGPT SUBSCR" })]);
-    expect(await get(db, sms.transactionId)).toMatchObject({ merchant: "Openai", counterpartyRaw: "OPENAI *CHATGPT SUBSCR" });
-    expect(await catName(db, (await get(db, sms.transactionId)).categoryId)).toBe("订阅");
+    const pdf = (await db.select().from(transactions).where(eq(transactions.source, "icbc_pdf")).limit(1))[0]!;
+    expect(pdf).toMatchObject({ merchant: "Openai", duplicateOfId: null });
+    expect(await catName(db, pdf.categoryId)).toBe("订阅");
+    expect((await get(db, sms.transactionId)).duplicateOfId).toBe(pdf.id);
   });
 
   it("does not link a different card, amount, date or merchant", async () => {

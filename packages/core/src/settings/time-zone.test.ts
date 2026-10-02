@@ -116,7 +116,7 @@ describe("filters and totals read occurred_on", () => {
     // Beijing 08:00 to 15:00 is 01:00 to 08:00 in London (BST): every row keeps its day.
     await setTimeZone(db, user, "Europe/London");
     expect(await spend()).toEqual([["CNY", 1500, 2]]);
-    expect(await rangeTotalsForList(db, user, "2026-09-01", "2026-09-30")).toEqual([{ currency: "CNY", count: 2, spendingMinor: 1500 }]);
+    expect(await rangeTotalsForList(db, user, "2026-09-01", "2026-09-30")).toMatchObject([{ currency: "CNY", count: 2, spendingMinor: 1500 }]);
     await setTimeZone(db, user, "America/Chicago");
     expect(await spend()).toEqual([["CNY", 2000, 3]]);
     const year = (await rangeOverview(db, user, { from: "2026-09-01", to: "2026-10-31" }, { today: "2026-11-15" })).currencies[0]!;

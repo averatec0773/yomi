@@ -4,6 +4,7 @@ export { formatMinor, formatMinorDecimal, minorDigits, parseAmountToMinor, split
 export { seed, SELF_PARTICIPANT_NAME, SYSTEM_EXPENSE_CATEGORIES, SYSTEM_INCOME_CATEGORIES } from "./seed";
 export * from "./import";
 export * from "./split";
+export * from "./capture";
 export * from "./quick";
 export * from "./ledger";
 export * from "./month";

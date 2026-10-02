@@ -72,6 +72,8 @@ export const DayRow = z.object({
   occurredOn: DateString,
   source: z.string(),
   categoryId: z.int().nullable(),
+  /** A provisional capture (no statement row yet). */
+  provisional: z.boolean(),
 });
 export type DayRow = z.infer<typeof DayRow>;
 

@@ -85,7 +85,7 @@ describe("listTransactions", () => {
     await addSplit(db, noSelf, roomie, 900);
     const share = new Map((await listTransactions(db, user)).items.map((t) => [t.id, t.myShareMinor]));
     expect([orig, linked, closed, refund, splitRefund, noSelf].map((id) => share.get(id))).toEqual([1000, 0, 0, -300, -200, 0]);
-    expect(await monthTotalsForList(db, user, "2026-09")).toEqual([{ currency: "CNY", count: 4, spendingMinor: 500 }]);
+    expect(await monthTotalsForList(db, user, "2026-09")).toMatchObject([{ currency: "CNY", count: 4, spendingMinor: 500 }]);
   });
 
   it("lists months with counts, newest first", async () => {

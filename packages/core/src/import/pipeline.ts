@@ -12,6 +12,9 @@ import {
   type SourceId,
 } from "@yomi/importers";
 import { and, desc, eq, gt, inArray, isNull } from "@yomi/db/orm";
+import { runMatching } from "../capture/match";
+import { capturesConfirmedBy, listReview } from "../capture/review";
+import { detachFromAuthority } from "../capture/supersede";
 import { autoSplitParticipants } from "../split/rules";
 import { applySplit } from "../split/splits";
 import { getTimeZone } from "../settings/time-zone";
@@ -23,7 +26,6 @@ import { resolveCategoryId } from "./categorize";
 import { statementCoverage } from "./coverage";
 import { computeDedupKeys, sha256Hex } from "./dedup";
 import { cleanMerchant } from "./merchant";
-import { findCardMatch } from "./sms-link";
 
 /** Db or a transaction handle: both are Drizzle Postgres databases. */
 type Q = Db;
@@ -87,6 +89,8 @@ export interface ImportResult extends ImportPreview {
   inserted: number;
   skippedDup: number;
   linked: number;
+  /** Pasted card alerts this import confirmed, and the size of the review queue after it. */
+  captures: { linked: number; toReview: number };
 }
 
 export interface BatchSummary {
@@ -136,8 +140,6 @@ interface PlannedRow {
   duplicateOfId: number | null;
   /** Wallet row only: an existing bank row that duplicates it; linked to this row after insert. */
   linkBankId: number | null;
-  /** ICBC PDF row linked to a pasted SMS row that has no merchant: fill it from this row after insert. */
-  fillSms: { id: number; setCategory: boolean } | null;
   participantIds: number[] | null;
   /** Auto-split rule participants (non-self), when this new row will be split on commit. */
   autoSplitIds: number[] | null;
@@ -278,7 +280,6 @@ async function buildPlan(q: Q, user: CurrentUser, parsed: ParseResult, fileHash:
     categoryId: null,
     duplicateOfId: null,
     linkBankId: null,
-    fillSms: null,
     participantIds: null,
     autoSplitIds: null,
   }));
@@ -297,23 +298,6 @@ async function buildPlan(q: Q, user: CurrentUser, parsed: ParseResult, fileHash:
   for (const p of planned) {
     const ids = parseIds(rules.get(p.merchant)?.participantIds ?? null);
     if (ids && ids.length > 0) p.participantIds = ids;
-  }
-
-  // New ICBC PDF rows → the card alert pasted earlier (same card, amount, currency, ±3 days, overlapping
-  // merchant). The SMS row stays primary so its split, category and note survive; an empty SMS merchant is
-  // filled from the statement after insert.
-  const smsClaimed = new Set<number>();
-  const otherId = idByName.get("其他");
-  for (const p of planned) {
-    if (p.isDup || p.row.source !== "icbc_pdf" || p.row.status !== "ok" || !p.spec.last4) continue;
-    const charge = { last4: p.spec.last4, amountMinor: p.row.amountMinor, currency: p.row.currency, occurredAt: p.row.occurredAt, merchant: p.merchant };
-    const sms = await findCardMatch(q, userId, charge, ["sms"], "icbc_pdf", smsClaimed);
-    if (!sms) continue;
-    smsClaimed.add(sms.id);
-    p.duplicateOfId = sms.id;
-    if (!sms.merchant && p.merchant) {
-      p.fillSms = { id: sms.id, setCategory: sms.userEditedAt == null || sms.categoryId == null || sms.categoryId === otherId };
-    }
   }
 
   // Fuzzy link: new bank rows → the Alipay/WeChat row paid with the same card.
@@ -362,7 +346,8 @@ async function buildPlan(q: Q, user: CurrentUser, parsed: ParseResult, fileHash:
 
   // Reverse link: new Alipay/WeChat rows paid by card → a bank row imported earlier. The wallet row
   // becomes the canonical one and the bank row points at it, unless the user already worked on the
-  // bank row (split, settlement, edit); then both stay and a warning says so.
+  // bank row (split, settlement, edit); then both stay and a warning says so. A card alert the user kept
+  // (split, settled, edited) is the record instead: the wallet row points at it, so the charge counts once.
   const bankClaimed = new Set<number>();
   for (const p of planned) {
     if (p.isDup || (p.row.source !== "alipay" && p.row.source !== "wechat") || p.row.status !== "ok" || !p.spec.last4) continue;
@@ -370,6 +355,7 @@ async function buildPlan(q: Q, user: CurrentUser, parsed: ParseResult, fileHash:
     const candidates = (await q
       .select({
         id: transactions.id,
+        source: transactions.source,
         occurredAt: transactions.occurredAt,
         paymentMethod: transactions.paymentMethod,
         accountLast4: accounts.last4,
@@ -380,8 +366,10 @@ async function buildPlan(q: Q, user: CurrentUser, parsed: ParseResult, fileHash:
       .where(
         and(
           eq(transactions.userId, userId),
-          // A pasted card alert is the card's own record too.
+          // A card alert no statement confirmed yet is matched as a capture after insert (runMatching); one that
+          // is final (kept, or confirmed with the user's split) is the card's own record here.
           inArray(transactions.source, [...BANK_SOURCES, "sms"]),
+          isNull(transactions.provisional),
           eq(transactions.currency, p.row.currency),
           eq(transactions.amountMinor, p.row.amountMinor),
           eq(transactions.status, "ok"),
@@ -408,6 +396,10 @@ async function buildPlan(q: Q, user: CurrentUser, parsed: ParseResult, fileHash:
       .from(settlements)
       .where(and(eq(settlements.userId, userId), eq(settlements.transactionId, best.id)))
       .limit(1))[0];
+    if ((split || settled || best.userEditedAt != null) && best.source === "sms") {
+      p.duplicateOfId = best.id;
+      continue;
+    }
     if (split || settled || best.userEditedAt != null) {
       const reason = split ? "split" : settled ? "settled" : "edited";
       const words = { split: "split", settled: "recorded as a settlement", edited: "edited by hand" }[reason];
@@ -589,6 +581,8 @@ export interface CommitParsedOptions extends PlanOptions {
   noDeclared?: boolean;
   /** Plan first and write nothing (no backup, no batch) when no row is new; returns null then. */
   skipIfNothingNew?: boolean;
+  /** Who the capture audit trail names for links this import makes; default `import:<batch id>`. */
+  by?: string;
 }
 
 /** Plans without writing: the same preview commitParsed would act on. */
@@ -701,16 +695,6 @@ export async function commitParsed(db: Db, user: CurrentUser, parsed: ParseResul
       for (const r of inserted) idByKey.set(r.dedupKey, r.id);
     }
     for (const p of fresh) {
-      if (!p.fillSms) continue;
-      await tx.update(transactions)
-        .set({
-          merchant: p.merchant,
-          counterpartyRaw: p.row.counterparty,
-          ...(p.fillSms.setCategory && p.categoryId != null ? { categoryId: p.categoryId } : {}),
-        })
-        .where(and(eq(transactions.userId, userId), eq(transactions.id, p.fillSms.id), eq(transactions.merchant, "")));
-    }
-    for (const p of fresh) {
       const walletId = idByKey.get(p.dedupKey);
       if (p.linkBankId == null || walletId == null) continue;
       await tx.update(transactions)
@@ -727,6 +711,9 @@ export async function commitParsed(db: Db, user: CurrentUser, parsed: ParseResul
       await applySplit(tx, user, id, { participantIds: p.autoSplitIds, mode: "equal" }, { markEdited: false, rememberMerchant: false });
       autoSplit += 1;
     }
+
+    // Pasted card alerts this file confirms: strict one-to-one, ties and near misses to the review queue.
+    const matched = await runMatching(tx, user, { by: opts.by ?? `import:${batch.id}`, newAuthorityIds: [...idByKey.values()] });
 
     const participantSuggestions = fresh
       .filter((p) => p.participantIds)
@@ -745,6 +732,7 @@ export async function commitParsed(db: Db, user: CurrentUser, parsed: ParseResul
       inserted: fresh.length,
       skippedDup: preview.dupCount,
       linked: preview.linkCount,
+      captures: { linked: matched.linked, toReview: (await listReview(tx, user)).total },
     };
   });
 }
@@ -771,6 +759,9 @@ export async function revertBatch(db: Db, user: CurrentUser, batchId: number, op
       .from(transactions)
       .where(and(eq(transactions.userId, userId), eq(transactions.importBatchId, batchId)));
     const ids = rows.filter((r) => r.userEditedAt == null).map((r) => r.id);
+    // Card alerts these rows confirmed go back to provisional first, so a split alert gets its own amount back
+    // instead of keeping a deleted statement's.
+    for (const captureId of await capturesConfirmedBy(tx, user, ids)) await detachFromAuthority(tx, user, captureId, { by: `revert:${batchId}` });
     const parts = chunks(ids);
     for (const part of parts) {
       await tx.update(transactions)
@@ -787,6 +778,7 @@ export async function revertBatch(db: Db, user: CurrentUser, batchId: number, op
     await tx.update(importBatches)
       .set({ status: "reverted", revertedAt: new Date().toISOString() })
       .where(and(eq(importBatches.userId, userId), eq(importBatches.id, batchId)));
+    await runMatching(tx, user, { by: `revert:${batchId}` });
     return { batchId, deleted: ids.length, keptEdited: rows.length - ids.length };
   });
 }

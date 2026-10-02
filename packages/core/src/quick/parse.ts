@@ -71,6 +71,8 @@ export interface QuickSms {
   amountMinor: number;
   currency: string;
   kind: "expense" | "income" | "transfer" | "refund";
+  /** A card hold (预授权): saved as provisional and not counted until the statement row. */
+  hold: boolean;
 }
 
 /** Everything from 您尾号 to the 【工商银行】 signature (or the end): what is left can still carry @people. */
@@ -117,6 +119,7 @@ function parseSmsEntry(text: string, ctx: QuickParseContext): QuickDraft | null 
       amountMinor: sms.amountMinor,
       currency: sms.currency,
       kind: sms.kind,
+      hold: sms.hold,
     },
   };
 }

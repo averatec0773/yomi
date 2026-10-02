@@ -1,5 +1,5 @@
 import "server-only";
-import { configureKeyFile, defaultKeyFilePath, ensureOccurredOn, getCurrentUser, seed, upgradeSecretsOnOpen } from "@yomi/core";
+import { configureKeyFile, defaultKeyFilePath, ensureOccurredOn, getCurrentUser, runMatching, seed, upgradeSecretsOnOpen } from "@yomi/core";
 import { createDb, type Db, migrate } from "@yomi/db";
 
 // One handle per process, kept on globalThis so dev hot reload reuses it: a PGlite directory can be open in
@@ -15,6 +15,8 @@ async function open(): Promise<Db> {
   await upgradeSecretsOnOpen(db);
   const regrouped = await ensureOccurredOn(db, getCurrentUser());
   if (regrouped) console.log(`[yomi] Regrouped ${regrouped} transactions by day in your time zone`);
+  // Captures waiting since before this start (or since the upgrade that added them) get their review items; nothing is linked.
+  await db.transaction((tx) => runMatching(tx, getCurrentUser(), { by: "startup" }));
   return db;
 }
 
@@ -23,7 +25,7 @@ async function open(): Promise<Db> {
  * migrates (backing up first when migrations are pending on a ledger with data), seeds, loads the secret key
  * file (used when YOMI_SECRET_KEY is unset; created on the first secret saved in Settings), and with a key
  * encrypts any plaintext bank tokens in place (backing up first). Recomputes transaction days when they are
- * not in the user's time zone yet. Concurrent first calls share one opening; a failed opening is retried by
+ * not in the user's time zone yet, and refreshes the capture review queue. Concurrent first calls share one opening; a failed opening is retried by
  * the next call.
  */
 export function getDb(): Promise<Db> {

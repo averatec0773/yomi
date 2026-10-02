@@ -237,19 +237,27 @@ export async function loadPlaidLogins(db: Db, user: CurrentUser): Promise<Map<nu
 
 /**
  * Which sources have rows of which currency in the period's activity window (90 days before through its end). Plaid
- * rows count for the login their account is linked to.
+ * rows count for the login their account is linked to; a provisional card alert counts for the ICBC statement that is
+ * still to confirm it (a week with only alerts is partial until the statement reaches it).
  */
 export async function loadSourceActivity(db: Db, user: CurrentUser, r: DateRange): Promise<SourceActivity[]> {
   const w = activityWindow(r);
   const rows = await db
-    .select({ source: transactions.source, accountId: transactions.accountId, currency: transactions.currency, n: count() })
+    .select({ source: transactions.source, provisional: transactions.provisional, accountId: transactions.accountId, currency: transactions.currency, n: count() })
     .from(transactions)
     .where(and(eq(transactions.userId, user.id), gte(transactions.occurredOn, w.from), lte(transactions.occurredOn, w.to)))
-    .groupBy(transactions.source, transactions.accountId, transactions.currency);
+    .groupBy(transactions.source, transactions.provisional, transactions.accountId, transactions.currency);
   const logins = await loadPlaidLogins(db, user);
   const out = new Map<string, SourceActivity>();
   for (const row of rows) {
-    const key = row.source === "plaid" ? (row.accountId != null ? logins.get(row.accountId) : undefined) : row.source;
+    const key =
+      row.source === "plaid"
+        ? row.accountId != null
+          ? logins.get(row.accountId)
+          : undefined
+        : row.source === "sms" && row.provisional != null
+          ? "icbc_pdf"
+          : row.source;
     if (key) out.set(`${key}|${row.currency}`, { key, currency: row.currency });
   }
   return [...out.values()];

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CaptureState } from "./capture";
 import { CurrencyCode, MessageParams } from "./common";
 import { CreatedEntry, SplitMode } from "./split";
 
@@ -38,6 +39,8 @@ export const QuickSms = z.object({
   amountMinor: z.int(),
   currency: CurrencyCode,
   kind: z.enum(["expense", "income", "transfer", "refund"]),
+  /** A card hold (预授权): saved as provisional and not counted until the statement row. */
+  hold: z.boolean(),
 });
 export type QuickSms = z.infer<typeof QuickSms>;
 
@@ -70,5 +73,9 @@ export type QuickCreateBody = z.infer<typeof QuickCreateBody>;
 export const QuickCreated = CreatedEntry.extend({
   alreadyAdded: z.boolean().optional(),
   duplicateOfId: z.int().nullable().optional(),
+  /** A pasted alert: its capture, the capture's state, and the review it landed in (null when none). */
+  captureId: z.int().optional(),
+  state: CaptureState.optional(),
+  review: z.enum(["ambiguous", "near_miss", "amount_changed"]).nullable().optional(),
 });
 export type QuickCreated = z.infer<typeof QuickCreated>;

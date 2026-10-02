@@ -14,6 +14,7 @@ function row(day: string, minor: number, p: Partial<AnalysisRow> = {}): Analysis
     kind: "expense",
     status: "ok",
     duplicateOfId: null,
+    provisional: null,
     merchant: "Corner Cafe",
     categoryId: 1,
     source: "plaid",
@@ -140,6 +141,14 @@ describe("unusualItems", () => {
     const linked = row("2026-09-21", 1500, { merchant: "Bean Barn", source: "boa_csv", duplicateOfId: c.id });
     const out = unusualItems([a, b, c, d, linked], [a, b, c, d, linked], "USD", { since: "2026-01-01" });
     expect(out).toEqual([{ kind: "possible_duplicate", id: b.id, otherId: a.id, otherSource: "plaid", merchant: "Lumen Gym", minor: 4200, occurredOn: "2026-09-20", source: "boa_csv" }]);
+  });
+
+  it("skips provisional captures: their statement row would flag the same charge again", () => {
+    const sms = row("2026-09-20", 4200, { merchant: "Lumen Gym", source: "sms", provisional: "capture" });
+    const card = row("2026-09-20", 4200, { merchant: "Lumen Gym", source: "icbc_pdf" });
+    const big = row("2026-09-21", 90000, { merchant: "Harbor Grill", source: "sms", provisional: "capture" });
+    expect(unusualItems([sms, card, big], [...history, sms, card, big], "USD", { since: "2026-01-01" })).toEqual([]);
+    expect(newMerchants([big], [big], "USD", { since: "2026-01-01" })).toEqual([]);
   });
 
   it("caps the list at five, largest first", () => {

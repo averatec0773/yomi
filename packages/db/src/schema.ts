@@ -66,6 +66,9 @@ export const importBatches = pgTable("import_batches", {
   revertedAt: text("reverted_at"),
 });
 
+export const PROVISIONAL_KINDS = ["capture", "hold"] as const;
+export type ProvisionalKind = (typeof PROVISIONAL_KINDS)[number];
+
 export const transactions = pgTable(
   "transactions",
   {
@@ -103,6 +106,11 @@ export const transactions = pgTable(
     userEditedAt: text("user_edited_at"),
     /** Set when the user said "not this one" to the row's split suggestion; the row gets no suggestion while set. */
     splitSuggestionDismissedAt: text("split_suggestion_dismissed_at"),
+    /**
+     * A row made from a capture (SMS) that no statement has confirmed yet: `capture` counts like any row, `hold` (a card
+     * pre-authorisation) is not counted until superseded. Null = final (statements, syncs, manual entries).
+     */
+    provisional: text("provisional", { enum: PROVISIONAL_KINDS }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -110,6 +118,87 @@ export const transactions = pgTable(
     uniqueIndex("transactions_user_dedup_key_uq").on(t.userId, t.dedupKey),
     index("transactions_user_occurred_at_idx").on(t.userId, t.occurredAt),
     index("transactions_user_occurred_on_idx").on(t.userId, t.occurredOn),
+  ],
+);
+
+export const CAPTURE_KINDS = ["sms", "screenshot", "agent", "manual", "plaid_pending"] as const;
+export type CaptureKind = (typeof CAPTURE_KINDS)[number];
+/**
+ * provisional: its row counts (labelled) until a statement row arrives. confirmed: survived as the primary (a locked
+ * capture took the statement's facts, or the user kept it as final). superseded: its row points at the statement row.
+ * discarded: its row is closed. The other states are for later kinds (screenshots, agents, Plaid pending).
+ */
+export const CAPTURE_STATES = ["proposed", "provisional", "confirmed", "superseded", "enriched", "released", "discarded", "rejected"] as const;
+export type CaptureState = (typeof CAPTURE_STATES)[number];
+/** Stored open review of a capture; `stale` is derived when read, never stored. */
+export const CAPTURE_REVIEWS = ["ambiguous", "near_miss", "amount_changed"] as const;
+export type CaptureReview = (typeof CAPTURE_REVIEWS)[number];
+
+/** A statement row the matcher offers for a capture under review, best first. */
+export interface CaptureCandidate {
+  id: number;
+  /** What agrees: amount, card, merchant, time. */
+  reasons: string[];
+}
+
+/** One resolution of a capture, kept so Undo (or reverting the statement's batch) can put it back. */
+export interface CaptureUndo {
+  action: string;
+  /** The capture before the action. */
+  prev: { state: CaptureState; review: CaptureReview | null; authorityId: number | null; rejected: number[]; text?: string };
+  /** Prior values of the capture's own row, for the columns the action changed. */
+  row?: Record<string, unknown>;
+  /** Prior values of the statement row, for the columns the action changed. */
+  authority?: { id: number; fields: Record<string, unknown> };
+  /** The equal split recomputed for the statement's amount; applied again once the capture's amount is back. */
+  resplit?: { participantIds: number[]; mode: "equal" | "full" };
+}
+
+/** What a capture's payload holds (jsonb, version 1). Never images. */
+export interface CapturePayload {
+  v: 1;
+  /** The pasted text, kept only while the capture is provisional. */
+  text?: string;
+  candidates?: CaptureCandidate[];
+  /** Rows the user said are not this capture ("Keep separate"); never offered again. */
+  rejected?: number[];
+  /** Resolutions, newest last. */
+  undo?: CaptureUndo[];
+  history: { at: string; from: string | null; to: string; by: string }[];
+}
+
+/**
+ * A fast capture of a charge (a pasted card SMS) before the statement arrives. Its ledger row (transaction_id) is a
+ * normal transaction marked `provisional`; a later statement row (authority_id) supersedes or confirms it. Unique per
+ * (user_id, dedup_key), so the same SMS pasted twice is one capture.
+ */
+export const captures = pgTable(
+  "captures",
+  {
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
+    userId: integer("user_id").notNull(),
+    kind: text("kind", { enum: CAPTURE_KINDS }).notNull(),
+    state: text("state", { enum: CAPTURE_STATES }).notNull(),
+    review: text("review", { enum: CAPTURE_REVIEWS }),
+    dedupKey: text("dedup_key").notNull(),
+    transactionId: integer("transaction_id").references(() => transactions.id),
+    authorityId: integer("authority_id").references(() => transactions.id),
+    /** As captured, with its own offset (ICBC SMS: +08:00). */
+    occurredAt: text("occurred_at").notNull(),
+    amountMinor: bigint("amount_minor", { mode: "number" }).notNull(),
+    currency: text("currency").notNull(),
+    last4: text("last4"),
+    hold: boolean("hold").notNull().default(false),
+    payload: jsonb("payload").$type<CapturePayload>().notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+    resolvedAt: text("resolved_at"),
+  },
+  (t) => [
+    uniqueIndex("captures_user_dedup_key_uq").on(t.userId, t.dedupKey),
+    index("captures_user_state_idx").on(t.userId, t.state),
+    index("captures_transaction_idx").on(t.transactionId),
+    index("captures_authority_idx").on(t.authorityId),
   ],
 );
 

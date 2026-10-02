@@ -2,7 +2,7 @@ import { categories, type Db } from "@yomi/db";
 import { eq } from "@yomi/db/orm";
 import { LedgerError } from "../ledger/errors";
 import { countsAsIncome, countsAsSpending } from "../ledger/share";
-import { loadRangeRows, type SpendingRow } from "../ledger/transactions";
+import { loadRangeRows, type ProvisionalTotals, provisionalTotals, type SpendingRow } from "../ledger/transactions";
 import { getMonthlyTarget, type MonthTarget } from "../month/target";
 import { getTimeZone } from "../settings/time-zone";
 import { clockNow, todayIn } from "../time/zone";
@@ -25,6 +25,8 @@ export interface LargestRow {
   occurredAt: string;
   /** Day in the user's time zone. */
   occurredOn: string;
+  /** A provisional capture (no statement row yet): shown with its label. */
+  provisional: boolean;
 }
 
 export interface PeriodMetrics {
@@ -43,7 +45,7 @@ export interface MonthlyPoint {
   partial: boolean;
 }
 
-export interface RangeCurrencyOverview extends PeriodMetrics {
+export interface RangeCurrencyOverview extends PeriodMetrics, ProvisionalTotals {
   currency: string;
   byCategory: CategoryShare[];
   smallPayments: { thresholdMinor: number; count: number; minor: number };
@@ -191,7 +193,7 @@ export async function rangeOverview(
       .filter((r) => r.kind === "expense" && r.myShareMinor > 0)
       .sort((a, b) => b.myShareMinor - a.myShareMinor || b.occurredAt.localeCompare(a.occurredAt))
       .slice(0, opts.largest ?? LARGEST)
-      .map((r) => ({ id: r.id, merchant: r.merchant, minor: r.myShareMinor, occurredAt: r.occurredAt, occurredOn: r.occurredOn }));
+      .map((r) => ({ id: r.id, merchant: r.merchant, minor: r.myShareMinor, occurredAt: r.occurredAt, occurredOn: r.occurredOn, provisional: r.provisional != null }));
 
     const prevMine = prevRows.filter((r) => r.currency === currency);
     const previous = prevMine.some(countsAsSpending) ? metrics(prevMine, prevDays) : null;
@@ -217,6 +219,7 @@ export async function rangeOverview(
       smallPayments: { thresholdMinor, count: small.length, minor: small.reduce((a, r) => a + r.myShareMinor, 0) },
       largest,
       sharedReceivableMinor: mine.reduce((a, r) => a + receivable(r), 0),
+      ...provisionalTotals(mine, currency),
       previous,
       monthly,
       target:

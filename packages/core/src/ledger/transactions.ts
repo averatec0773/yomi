@@ -1,4 +1,4 @@
-import { accounts, categories, type Db, participants, transactions, transactionSplits } from "@yomi/db";
+import { accounts, type CaptureKind, captures, type CaptureState, categories, type Db, participants, transactions, transactionSplits } from "@yomi/db";
 import { and, count, desc, eq, gte, inArray, isNull, like, lt, lte, ne, or, type SQL, sql } from "@yomi/db/orm";
 import { parseAmountToMinor } from "../money";
 import type { CurrentUser } from "../user";
@@ -65,6 +65,10 @@ export interface TransactionItem {
   importBatchId: number | null;
   duplicateOfId: number | null;
   userEditedAt: string | null;
+  /** capture: from a pasted SMS no statement has confirmed yet (counted, labelled); hold: a card hold (not counted). */
+  provisional: "capture" | "hold" | null;
+  /** The capture behind this row (pasted SMS), for the details panel; null for rows that are not captures. */
+  capture: CaptureInfo | null;
   splits: SplitItem[];
   /** What this row adds to my spending (plan §3); positive = spent, refunds negative, 0 if not counted. */
   myShareMinor: number;
@@ -72,6 +76,21 @@ export interface TransactionItem {
   suggestedParticipantIds: number[];
   /** The split suggestion (merchant rule, else the category's learned set), null when there is none. */
   suggestion: SplitSuggestion | null;
+}
+
+export interface CaptureInfo {
+  id: number;
+  kind: CaptureKind;
+  state: CaptureState;
+  /** As captured, with its own offset (ICBC SMS: Beijing time). */
+  occurredAt: string;
+  /** The statement row that confirmed or superseded it. */
+  authorityId: number | null;
+  authoritySource: TransactionItem["source"] | null;
+  /** When it was confirmed, superseded, kept or discarded; null while provisional. */
+  resolvedAt: string | null;
+  /** Its last resolution can be undone. */
+  canUndo: boolean;
 }
 
 export interface TransactionPage {
@@ -84,7 +103,7 @@ export interface MonthCount {
   count: number;
 }
 
-export interface CurrencyTotal {
+export interface CurrencyTotal extends ProvisionalTotals {
   currency: string;
   /** Rows counted as spending. */
   count: number;
@@ -195,6 +214,36 @@ export async function loadSplits(db: Db, userId: number, ids: readonly number[])
   return out;
 }
 
+/** The capture behind each of the given rows, keyed by transaction id. */
+async function loadCaptures(db: Db, userId: number, ids: readonly number[]): Promise<Map<number, CaptureInfo>> {
+  const out = new Map<number, CaptureInfo>();
+  for (const part of chunks(ids)) {
+    const rows = await db
+      .select()
+      .from(captures)
+      .where(and(eq(captures.userId, userId), inArray(captures.transactionId, part)));
+    const authorityIds = rows.flatMap((c) => (c.authorityId != null ? [c.authorityId] : []));
+    const sources = new Map(
+      authorityIds.length
+        ? (await db.select({ id: transactions.id, source: transactions.source }).from(transactions).where(inArray(transactions.id, authorityIds))).map((t) => [t.id, t.source])
+        : [],
+    );
+    for (const c of rows) {
+      out.set(c.transactionId!, {
+        id: c.id,
+        kind: c.kind,
+        state: c.state,
+        occurredAt: c.occurredAt,
+        authorityId: c.authorityId,
+        authoritySource: c.authorityId != null ? (sources.get(c.authorityId) ?? null) : null,
+        resolvedAt: c.resolvedAt,
+        canUndo: (c.payload.undo ?? []).length > 0,
+      });
+    }
+  }
+  return out;
+}
+
 export async function listTransactions(db: Db, user: CurrentUser, filter: TransactionFilter = {}): Promise<TransactionPage> {
   const userId = user.id;
   const where = await buildWhere(db, userId, filter);
@@ -225,6 +274,7 @@ export async function listTransactions(db: Db, user: CurrentUser, filter: Transa
       importBatchId: transactions.importBatchId,
       duplicateOfId: transactions.duplicateOfId,
       userEditedAt: transactions.userEditedAt,
+      provisional: transactions.provisional,
       splitSuggestionDismissedAt: transactions.splitSuggestionDismissedAt,
     })
     .from(transactions)
@@ -246,12 +296,18 @@ export async function listTransactions(db: Db, user: CurrentUser, filter: Transa
     user,
     rows.map((r) => ({ ...r, hasSplits: splits.has(r.id) })),
   );
+  const captured = await loadCaptures(
+    db,
+    userId,
+    rows.filter((r) => r.source === "sms").map((r) => r.id),
+  );
 
   const items = rows.map(({ splitSuggestionDismissedAt: _d, ...r }): TransactionItem => {
     const s = splits.get(r.id) ?? [];
     const suggestion = suggestions.get(r.id) ?? null;
     return {
       ...r,
+      capture: captured.get(r.id) ?? null,
       splits: s,
       myShareMinor: myShareMinor(r, s),
       suggestedParticipantIds: suggestion?.participantIds ?? [],
@@ -291,10 +347,36 @@ export interface SpendingRow {
   categoryId: number | null;
   accountId: number | null;
   source: TransactionItem["source"];
+  provisional: TransactionItem["provisional"];
   /** When the row was written (ISO instant): what arrived on a day, whatever its occurred_on. */
   createdAt: string;
   splits: SplitItem[];
   myShareMinor: number;
+}
+
+/** What a period's total of one currency rests on that no statement has confirmed yet. */
+export interface ProvisionalTotals {
+  /** Provisional captures counted in the total: rows and my share of them. */
+  provisional: { count: number; minor: number };
+  /** Card holds not counted: rows and their amount (positive = money held). */
+  holds: { count: number; minor: number };
+}
+
+/** The provisional part of `rows` in `currency` (rows outside the spending rule ignored, holds by their amount). */
+export function provisionalTotals(rows: readonly SpendingRow[], currency: string): ProvisionalTotals {
+  const out: ProvisionalTotals = { provisional: { count: 0, minor: 0 }, holds: { count: 0, minor: 0 } };
+  for (const r of rows) {
+    if (r.currency !== currency || r.provisional == null) continue;
+    if (r.provisional === "hold") {
+      if (!countsAsSpending({ ...r, provisional: null })) continue;
+      out.holds.count += 1;
+      out.holds.minor -= r.amountMinor;
+    } else if (countsAsSpending(r)) {
+      out.provisional.count += 1;
+      out.provisional.minor += r.myShareMinor;
+    }
+  }
+  return out;
 }
 
 /** All rows of a month with their splits and my share. */
@@ -326,6 +408,7 @@ async function loadRowsBetween(db: Db, userId: number, start: string, end: strin
       categoryId: transactions.categoryId,
       accountId: transactions.accountId,
       source: transactions.source,
+      provisional: transactions.provisional,
       createdAt: transactions.createdAt,
     })
     .from(transactions)
@@ -343,7 +426,7 @@ async function loadRowsBetween(db: Db, userId: number, start: string, end: strin
 }
 
 export function spendingByCurrency(rows: readonly SpendingRow[]): CurrencyTotal[] {
-  const map = new Map<string, CurrencyTotal>();
+  const map = new Map<string, Omit<CurrencyTotal, keyof ProvisionalTotals>>();
   for (const r of rows) {
     if (!countsAsSpending(r)) continue;
     const t = map.get(r.currency) ?? { currency: r.currency, count: 0, spendingMinor: 0 };
@@ -351,7 +434,7 @@ export function spendingByCurrency(rows: readonly SpendingRow[]): CurrencyTotal[
     t.spendingMinor += r.myShareMinor;
     map.set(r.currency, t);
   }
-  return [...map.values()].sort((a, b) => a.currency.localeCompare(b.currency));
+  return [...map.values()].sort((a, b) => a.currency.localeCompare(b.currency)).map((t) => ({ ...t, ...provisionalTotals(rows, t.currency) }));
 }
 
 /** Spending per currency for the list header (same rule as the month view). */

@@ -6,6 +6,7 @@ import { type Context, Hono } from "hono";
 import { accessRoutes } from "./access";
 import { analysisRoutes } from "./analysis";
 import { assetsRoutes } from "./assets";
+import { captureRoutes } from "./capture";
 import { type BankDeps, bankRoutes } from "./bank";
 import { importRoutes } from "./import";
 import { type InvestDeps, investRoutes } from "./invest";
@@ -57,6 +58,7 @@ export function createApi(deps: ApiDeps) {
   app.route("/", analysisRoutes({ getDb: deps.getDb, today: deps.today }));
   app.route("/", splitRoutes({ getDb: deps.getDb }));
   app.route("/quick", quickRoutes({ getDb: deps.getDb }));
+  app.route("/", captureRoutes({ getDb: deps.getDb, today: deps.today }));
   app.route("/", maintenanceRoutes({ getDb: deps.getDb }));
   app.route("/bank", bankRoutes({ getDb: deps.getDb, ...deps.bank }));
   app.route("/settings/secrets", secretsRoutes({ getDb: deps.getDb, ibkrFlex: deps.invest?.ibkrFlex, ...deps.secrets }));
