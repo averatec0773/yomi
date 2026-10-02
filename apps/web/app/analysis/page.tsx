@@ -134,20 +134,26 @@ export default async function AnalysisPage({ searchParams }: PageProps<"/analysi
           </Link>
         </>
       )}
-      {invest.map((i, k) => (
-        <span key={i.currency} data-testid="net-worth-investments">
-          {(nwChange || k > 0) && <span aria-hidden>· </span>}
+      {invest.length > 0 && (
+        <span data-testid="net-worth-investments">
+          {nwChange && <span aria-hidden>· </span>}
           {rich(t.analysis.investLine, {
-            change: <Money minor={i.changeMinor!} currency={i.currency} sign="signed" showCode={invest.length > 1} className="text-foreground" />,
+            // One "Investments" label, then each currency's change.
+            change: invest.map((i, k) => (
+              <span key={i.currency}>
+                {k > 0 && " · "}
+                <Money minor={i.changeMinor!} currency={i.currency} sign="signed" showCode={invest.length > 1} className="text-foreground" />
+                {/* Without deposits the whole change is the market's: no split to show. */}
+                {i.netDepositsMinor !== 0 &&
+                  rich(i.marketMinor == null ? t.analysis.investDeposits : t.analysis.investSplit, {
+                    market: i.marketMinor != null && <Money minor={i.marketMinor} currency={i.currency} sign="signed" />,
+                    deposits: <Money minor={i.netDepositsMinor} currency={i.currency} />,
+                  })}
+              </span>
+            )),
           })}
-          {/* Without deposits the whole change is the market's: no split to show. */}
-          {i.netDepositsMinor !== 0 &&
-            rich(i.marketMinor == null ? t.analysis.investDeposits : t.analysis.investSplit, {
-              market: i.marketMinor != null && <Money minor={i.marketMinor} currency={i.currency} sign="signed" />,
-              deposits: <Money minor={i.netDepositsMinor} currency={i.currency} />,
-            })}
         </span>
-      ))}
+      )}
     </p>
   );
 
