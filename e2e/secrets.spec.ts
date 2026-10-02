@@ -30,10 +30,16 @@ test("IBKR: set up with a tested token, sync, replace and remove; the token neve
 
   const dialog = page.getByRole("dialog", { name: "Set up Interactive Brokers" });
   const guide = dialog.getByTestId("ibkr-guide");
-  await expect(guide.getByRole("listitem")).toHaveCount(5);
+  await expect(guide.locator("ol > li")).toHaveCount(6);
   await expect(guide.getByRole("link", { name: "Client Portal" })).toHaveAttribute("href", "https://www.interactivebrokers.com/portal/");
-  await expect(guide).toContainText("Any Period works because yomi asks for its own dates");
-  await expect(guide).toContainText("Account Information with only Account ID, Account Alias and Currency");
+  await expect(guide).toContainText("Period does not matter because yomi asks for its own dates");
+  await expect(guide).toContainText("Net Asset Value (NAV) in Base. In each one click Select All");
+  // The privacy-minimal fields are one click away.
+  const minimal = guide.getByTestId("ibkr-guide-more");
+  await expect(minimal).not.toHaveAttribute("open");
+  await minimal.getByText("Privacy-minimal setup (fewer fields)").click();
+  await expect(minimal).toContainText("Account Information: Account ID, Account Alias, Currency");
+  await expect(minimal).toContainText("Exclude long and short breakout");
   await expect(guide.getByRole("link", { name: "IBKR API reference" })).toHaveAttribute("href", "https://www.interactivebrokers.com/docs/web-api/api-reference/send-request");
   await expect(dialog.getByTestId("secret-key-note")).toContainText("Saving creates a key file at");
   const save = dialog.getByRole("button", { name: "Save" });
@@ -77,6 +83,11 @@ test("IBKR: set up with a tested token, sync, replace and remove; the token neve
   await expect(dialog.getByRole("checkbox", { name: "Save without a successful test" })).toBeVisible();
   await dialog.getByRole("button", { name: "Test connection" }).click();
   await expect(dialog.getByTestId("ibkr-test-result")).toContainText("Connected. Statement for Sep 28, 2026, 3 positions.", { timeout: 20_000 });
+  // The fake statement has no NAV in Base: named with what yomi would miss, and nothing else.
+  const sections = dialog.getByTestId("ibkr-test-sections");
+  await expect(sections).toContainText("Not in the statement, so yomi will miss:");
+  await expect(sections.getByRole("listitem")).toHaveCount(1);
+  await expect(sections).toContainText("Net Asset Value (NAV) in Base: earlier history");
   await dialog.getByTestId("ibkr-expires-on").fill(inDays(5));
   await expect(save).toBeEnabled();
   await save.click();

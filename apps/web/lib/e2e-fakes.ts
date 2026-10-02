@@ -4,7 +4,8 @@ import "server-only";
  * boundary, so e2e runs the real client (SendRequest, GetStatement, parsing) without calling IBKR. It accepts
  * the fictional token `test-token-3141` with query `123456` and answers anything else with IBKR's
  * "token is invalid" (1015). The statement repeats the demo ledger's latest IBKR statement (2026-09-28, same
- * values), so a Sync now in e2e rewrites it in place and later specs see the same numbers.
+ * values), so a Sync now in e2e rewrites it in place and later specs see the same numbers. Trades and Cash
+ * Transactions are there but empty; NAV in Base is left out, so Test connection reports it missing.
  */
 export const E2E_FLEX_TOKEN = "test-token-3141";
 export const E2E_FLEX_QUERY = "123456";
@@ -31,6 +32,8 @@ ${pos("AAPL", "APPLE INC", "265598", "USD", "25", "229.87", "5746.75", "4380.50"
 ${pos("VTI", "VANGUARD TOTAL STOCK MKT ETF", "12345001", "USD", "40", "301.12", "12044.80", "10212.40")}
 ${pos("700", "TENCENT HOLDINGS LTD", "12345002", "HKD", "100", "512.5", "51250", "38420")}
 </OpenPositions>
+<Trades />
+<CashTransactions />
 </FlexStatement></FlexStatements></FlexQueryResponse>`;
 }
 

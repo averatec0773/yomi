@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2Icon, PlugZapIcon, SaveIcon, Trash2Icon } from "lucide-react";
+import { CheckCircle2Icon, PlugZapIcon, SaveIcon, Trash2Icon, TriangleAlertIcon } from "lucide-react";
 import type { IbkrSaveInput, IbkrTestResult, SecretsView } from "@yomi/contracts";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -14,6 +14,7 @@ import { errorText } from "@/i18n/errors";
 import { apiFetch } from "@/lib/api";
 import { dayLabel } from "@/lib/month";
 import { ConfirmRemove } from "./confirm-remove";
+import { missingSectionNotes } from "./ibkr-sections";
 import { Guide, KeyNote, SecretInput, UntestedToggle } from "./secret-form";
 
 /** IBKR pages the steps link to (checked on IBKR_GUIDE_CHECKED_ON). */
@@ -150,7 +151,16 @@ function IbkrSetupSheet({ ibkr, keyInfo, onDone }: { ibkr: SecretsView["ibkr"]; 
   return (
     <Sheet title={configured ? i.replaceTitle : i.setupTitle} description={i.description} footer={footer} data-testid="ibkr-setup-dialog">
       <div className="flex flex-col gap-4 pb-5">
-        <Guide title={i.guideTitle} steps={i.steps} labels={i.links} hrefs={IBKR_LINKS} testId="ibkr-guide" defaultOpen={!configured} checkedOn={IBKR_GUIDE_CHECKED_ON} />
+        <Guide
+          title={i.guideTitle}
+          steps={i.steps}
+          labels={i.links}
+          hrefs={IBKR_LINKS}
+          testId="ibkr-guide"
+          defaultOpen={!configured}
+          checkedOn={IBKR_GUIDE_CHECKED_ON}
+          more={{ title: i.minimalTitle, items: i.minimal }}
+        />
         <SecretInput
           id="ibkr-query"
           label={i.queryId}
@@ -173,16 +183,19 @@ function IbkrSetupSheet({ ibkr, keyInfo, onDone }: { ibkr: SecretsView["ibkr"]; 
             <PlugZapIcon aria-hidden />
             {test.kind === "testing" ? s.testing : s.test}
           </Button>
-          <p role="status" className="text-meta text-2" data-testid="ibkr-test-result">
-            {test.kind === "testing" && s.testSlow}
+          <div role="status" className="flex flex-col gap-1 text-meta text-2" data-testid="ibkr-test-result">
+            {test.kind === "testing" && <span>{s.testSlow}</span>}
             {test.kind === "ok" && (
-              <span className="inline-flex items-center gap-1.5 text-foreground">
-                <CheckCircle2Icon className="size-3.5 text-2" aria-hidden />
-                {plural(i.testOk, test.result.positions, { date: dayLabel(test.result.statementDate, locale, { year: true }) })}
-              </span>
+              <>
+                <span className="inline-flex items-center gap-1.5 text-foreground">
+                  <CheckCircle2Icon className="size-3.5 text-2" aria-hidden />
+                  {plural(i.testOk, test.result.positions, { date: dayLabel(test.result.statementDate, locale, { year: true }) })}
+                </span>
+                <SectionsReport sections={test.result.sections} />
+              </>
             )}
             {test.kind === "error" && <span className="text-foreground">{test.text}</span>}
-          </p>
+          </div>
         </div>
         <KeyNote keyInfo={keyInfo} />
       </div>
@@ -197,5 +210,28 @@ function IbkrSetupSheet({ ibkr, keyInfo, onDone }: { ibkr: SecretsView["ibkr"]; 
         testId="ibkr-remove-dialog"
       />
     </Sheet>
+  );
+}
+
+/** After a successful test: all six sections there, or each missing one with what yomi will lack. */
+function SectionsReport({ sections }: { sections: IbkrTestResult["sections"] }) {
+  const t = useT();
+  const i = t.secrets.ibkr;
+  const notes = missingSectionNotes(sections, t);
+  if (!notes) return <span data-testid="ibkr-test-sections">{i.sectionsAll}</span>;
+  return (
+    <div className="flex flex-col gap-1" data-testid="ibkr-test-sections">
+      <span className="inline-flex items-center gap-1.5 text-foreground">
+        <TriangleAlertIcon className="size-3.5 text-2" aria-hidden />
+        {i.sectionsMissing}
+      </span>
+      <ul className="flex list-disc flex-col gap-0.5 pl-5">
+        {notes.map((n) => (
+          <li key={n.id}>
+            <span className="font-medium text-foreground">{n.name}</span>: {n.effect}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
