@@ -32,7 +32,7 @@ async function parse(text: string): Promise<Draft> {
 /** "ICBC card ····3141 · Sep 27 08:24 · BUSY BEE BOBA · $15.74" for a pasted card alert. */
 function SmsLine({ sms, t, locale }: { sms: QuickSms; t: Dictionary; locale: ReturnType<typeof useLocale> }) {
   const timeZone = useTimeZone();
-  const kind = t.quickAdd.sms.kinds[sms.kind];
+  const kind = sms.hold ? t.capture.hold : t.quickAdd.sms.kinds[sms.kind];
   const parts = [
     fmt(t.quickAdd.sms.card, { last4: sms.last4 }),
     `${dayLabel(sms.occurredOn, locale)} ${localTimeOf({ occurredAt: sms.occurredAt, source: "sms" }, timeZone)}`,
@@ -148,6 +148,8 @@ export function QuickAdd() {
       const amount = formatMinor(d.amountMinor, d.currency);
       if (res.alreadyAdded) toast(q.sms.already, { description: d.description || undefined });
       else if (res.duplicateOfId != null) toast.success(q.sms.linked, { description: d.description || undefined });
+      else if (res.review) toast.success(fmt(q.sms.toReview, { amount }), { description: d.description || undefined });
+      else if (sms?.hold) toast.success(fmt(q.sms.holdSaved, { amount }), { description: d.description || undefined });
       else toast.success(fmt(sms ? q.sms.saved : q.saved, { amount }), { description: d.description || undefined });
       setText("");
       setDraft(null);

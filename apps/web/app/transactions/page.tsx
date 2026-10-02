@@ -5,6 +5,7 @@ import {
   listMerchantRules,
   listMonths,
   listParticipants,
+  listReview,
   listTransactions,
   monthRangeOf,
   rangeTotalsForList,
@@ -91,6 +92,7 @@ export default async function TransactionsPage({ searchParams }: PageProps<"/tra
         autoSplitMerchants={(await listMerchantRules(db, user, { autoSplitOnly: true })).map((r) => r.merchant)}
         balances={filters.participantId ? (await balances(db, user)).filter((b) => b.participantId === filters.participantId) : []}
         today={today}
+        reviewCount={(await listReview(db, user)).total}
       />
     </>
   );

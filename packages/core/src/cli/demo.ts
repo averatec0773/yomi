@@ -4,7 +4,7 @@
 // create, and the backdated import instants); all names, merchants, card numbers and brokerage accounts are made up.
 import path from "node:path";
 import { and, eq } from "@yomi/db/orm";
-import { accounts, bankAccounts, bankConnections, closeDb, createDb, importBatches, migrate, transactions } from "@yomi/db";
+import { accounts, bankAccounts, bankConnections, captures, closeDb, createDb, importBatches, migrate, transactions } from "@yomi/db";
 import { bucketTotals, type InvestHoldingRow, type InvestStatement, type NormalizedRow, type ParseResult, type SourceId } from "@yomi/importers";
 import {
   balances,
@@ -12,6 +12,7 @@ import {
   createFriendPaidExpense,
   createParticipant,
   createQuickEntry,
+  createSmsEntry,
   formatMinor,
   getCurrentUser,
   listCategories,
@@ -517,6 +518,62 @@ await markAsSettlement(db, user, one("settle_aug"), {
 
 // One default target only (month null); USD is where most spending happens.
 await setMonthlyTarget(db, user, { month: null, amountMinor: 150000, currency: "USD" });
+
+// ---------- card alerts (captures) on a second ICBC card, then its statement ----------
+// Pasted SMS first, as they arrive; the statement (cycle Aug 27 to Sep 26) then confirms one alert, offers two rows
+// for a hold (ambiguous), a tip-sized difference for another hold (near miss), and says nothing about one alert (stale).
+// The last alert is after the statement and stays provisional. Card 3141 is made up.
+const ALERTS = [
+  "您尾号3141信用卡9月5日09:12POS支出(消费SHIPLEY DONUTS Houston)8.85美元。【工商银行】",
+  "您尾号3141信用卡9月12日01:26网上银行支出(预授权额度冻结)28.79美元。【工商银行】",
+  "您尾号3141信用卡9月16日19:02POS支出(预授权额度冻结)31.20美元。【工商银行】",
+  "您尾号3141信用卡9月20日23:31POS支出(消费KROGER Houston)42.16美元。【工商银行】",
+  "您尾号3141信用卡9月28日02:15POS支出(消费H-E-B Houston)23.37美元。【工商银行】",
+];
+for (const text of ALERTS) {
+  const r = await createSmsEntry(db, user, { text, today: TODAY });
+  // Pasted a few minutes after the charge (the demo is built later; Analysis "last pasted" should read like it).
+  const t = (await db.select({ occurredAt: transactions.occurredAt }).from(transactions).where(eq(transactions.id, r.transactionId)))[0]!;
+  const pastedAt = new Date(Date.parse(t.occurredAt) + 5 * 60_000).toISOString();
+  await db.update(transactions).set({ createdAt: pastedAt }).where(eq(transactions.id, r.transactionId));
+  await db.update(captures).set({ createdAt: pastedAt }).where(eq(captures.id, r.captureId));
+}
+const card3141 = (occurredAt: string, place: string, minor: number): NormalizedRow => ({
+  source: "icbc_pdf",
+  lineNo: 0,
+  externalId: null,
+  occurredAt,
+  amountMinor: -minor,
+  currency: "USD",
+  originalAmountMinor: null,
+  originalCurrency: null,
+  direction: "out",
+  kind: "expense",
+  status: "ok",
+  counterparty: place,
+  description: "消费",
+  sourceCategory: "消费",
+  paymentMethod: "工商银行信用卡(3141)",
+  raw: { 入账日期: occurredAt.slice(0, 19).replace("T", " "), 交易卡号: "****3141", 交易场所: place },
+});
+const statement3141 = [
+  card3141("2026-09-12T20:05:00+08:00", "UBER *EATS HELP.UBER.COM CA", 2879),
+  card3141("2026-09-13T09:40:00+08:00", "UBER *EATS HELP.UBER.COM CA", 2879),
+  card3141("2026-09-17T10:15:00+08:00", "SQ *PHO HOUSE HOUSTON TX", 3587),
+  card3141("2026-09-21T08:00:00+08:00", "KROGER #412 HOUSTON TX", 4216),
+].map((r, i) => ({ ...r, lineNo: i + 1 }));
+const statementName = "工商银行信用卡对账单-3141-202609.pdf";
+const confirmed = await commitImport(
+  db,
+  user,
+  async () => ({ source: "icbc_pdf", rows: statement3141, declared: bucketTotals(statement3141), periodStart: "2026-08-27", periodEnd: "2026-09-26", warnings: [] }),
+  new TextEncoder().encode(`demo:${statementName}`),
+  statementName,
+  { backup: false },
+);
+await db.update(importBatches).set({ createdAt: "2026-09-27T15:00:00.000Z" }).where(eq(importBatches.id, confirmed.batchId));
+await db.update(transactions).set({ createdAt: "2026-09-27T15:00:00.000Z" }).where(eq(transactions.importBatchId, confirmed.batchId));
+batchCounts.push(`icbc_pdf ${confirmed.inserted} (card 3141; captures ${confirmed.captures.linked} linked, ${confirmed.captures.toReview} to review)`);
 
 // ---------- investments: a synthetic IBKR account and a Plaid brokerage, two daily snapshots each ----------
 // Tickers are real listings; account ids, quantities, prices and costs are made up.

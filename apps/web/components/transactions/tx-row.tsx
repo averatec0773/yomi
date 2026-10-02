@@ -2,6 +2,7 @@
 
 import { BellOffIcon, CheckIcon, ChevronDownIcon, EllipsisIcon, UsersIcon, XIcon } from "lucide-react";
 import { memo, type ReactNode, useRef, useState } from "react";
+import { ProvisionalLabel } from "@/components/capture/provisional";
 import { CategoryTile, sourceIcon } from "@/components/category-icon";
 import { Money } from "@/components/money";
 import {
@@ -240,7 +241,8 @@ function TxRowImpl({ tx, others, selfId, nameOf, categories, selected, focused, 
     // Phones keep the category and drop the source (it is in the details), so the meta does not truncate to a stub.
     desktop || !tx.categoryName ? origin : null,
     tx.note,
-    displayDescription(tx, t),
+    // Without a merchant the description is the row's title already.
+    tx.merchant || tx.counterpartyRaw ? displayDescription(tx, t) : null,
     tx.source === "sms" ? r.badgeAuto : null,
   ]
     .filter(Boolean)
@@ -338,7 +340,14 @@ function TxRowImpl({ tx, others, selfId, nameOf, categories, selected, focused, 
           />
         ) : (
           <span className="flex min-w-0 items-center gap-1.5 text-meta text-2" title={tx.source === "sms" ? r.autoTitle : undefined}>
-            <SourceIcon className="size-[13px] shrink-0 max-md:hidden" aria-hidden />
+            {tx.provisional ? (
+              <>
+                <ProvisionalLabel kind={tx.provisional} />
+                <span aria-hidden>·</span>
+              </>
+            ) : (
+              <SourceIcon className="size-[13px] shrink-0 max-md:hidden" aria-hidden />
+            )}
             <span className="truncate">{meta}</span>
           </span>
         )}

@@ -11,6 +11,7 @@ import {
   TrendingUpIcon,
 } from "lucide-react";
 import Link from "next/link";
+import { ProvisionalLabel, ProvisionalNote } from "@/components/capture/provisional";
 import { categoryIcon } from "@/components/category-icon";
 import { Money } from "@/components/money";
 import { ListCard } from "@/components/ui-kit/list-card";
@@ -83,6 +84,7 @@ export function DayView({ ctx, categoryNames }: { ctx: InsightContext; categoryN
               <div className="text-hero font-semibold tracking-[-0.02em]">
                 <Money minor={c.spendingMinor} currency={cur} />
               </div>
+              <ProvisionalNote totals={c} currency={cur} />
               <div className="text-meta text-2">{plural(t.stats.count, c.transactionCount)}</div>
             </div>
             {insights.length > 0 && (
@@ -110,6 +112,7 @@ export function DayView({ ctx, categoryNames }: { ctx: InsightContext; categoryN
                       <li key={r.id} className="flex h-12 items-center gap-3 px-4 md:px-5">
                         <Icon aria-hidden className="size-4 shrink-0 text-2" />
                         <span className="min-w-0 flex-1 truncate">{r.merchant}</span>
+                        {r.provisional && <ProvisionalLabel kind="capture" />}
                         <span className="hidden shrink-0 text-meta text-3 sm:inline">{sourceLabel(r.source, t)}</span>
                         <Money minor={r.minor} currency={cur} />
                       </li>

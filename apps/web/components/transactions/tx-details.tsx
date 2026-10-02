@@ -1,7 +1,12 @@
 "use client";
 
+import type { CaptureInfo, ResolveResult } from "@yomi/contracts";
+import { localDate } from "@yomi/core/time";
 import { dialogSize } from "@/components/ui-kit/dialog-size";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { apiFetch } from "@/lib/api";
 import { Money } from "@/components/money";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { fmt } from "@/i18n";
@@ -16,6 +21,7 @@ export function TxDetails({ tx, onClose }: { tx: Tx | null; onClose: () => void 
   const t = useT();
   const locale = useLocale();
   const timeZone = useTimeZone();
+  const router = useRouter();
   const d = t.transactions.details;
   const booked = tx ? beijingDateIfDifferent(tx) : null;
   const none = t.common.none;
@@ -24,6 +30,48 @@ export function TxDetails({ tx, onClose }: { tx: Tx | null; onClose: () => void 
     const label = sourceTermLabel(raw, t);
     return label && label !== raw.trim() ? `${raw} (${label})` : raw;
   };
+  /** The capture behind the row: "SMS, Oct 1 12:26", then where it stands ("Confirmed by ICBC credit card row #812 · Undo"). */
+  const captureRows = (c: CaptureInfo): [string, React.ReactNode][] => {
+    const cd = t.capture.details;
+    const source = c.authoritySource ? (t.transactions.sources[c.authoritySource as keyof typeof t.transactions.sources] ?? c.authoritySource) : "";
+    const state =
+      c.authorityId != null && c.state === "confirmed"
+        ? fmt(cd.confirmedBy, { source, id: c.authorityId })
+        : c.authorityId != null && c.state === "superseded"
+          ? fmt(cd.supersededBy, { source, id: c.authorityId })
+          : c.state === "confirmed"
+            ? cd.keptFinal
+            : cd.states[c.state];
+    const when = c.resolvedAt ? ` · ${dayLabel(localDate(c.resolvedAt, timeZone), locale)}` : "";
+    return [
+      [cd.title, `${t.capture.kinds[c.kind]}, ${dayLabel(localDate(c.occurredAt, timeZone), locale)} ${localTimeOf({ occurredAt: c.occurredAt, source: "sms" }, timeZone)}`],
+      [
+        cd.state,
+        <span key="c" data-testid="tx-capture-state">
+          {state}
+          {when}
+          {c.canUndo && c.state !== "provisional" && (
+            <>
+              {" · "}
+              <button type="button" className="text-primary underline-offset-4 hover:underline" onClick={() => void undoCapture(c.id)}>
+                {cd.undo}
+              </button>
+            </>
+          )}
+        </span>,
+      ],
+    ];
+  };
+  async function undoCapture(id: number) {
+    try {
+      await apiFetch<ResolveResult>(`/captures/${id}/undo`, { method: "POST" });
+      toast(t.transactions.toastUndone);
+      onClose();
+      router.refresh();
+    } catch {
+      /* apiFetch toasted */
+    }
+  }
   const rows: [string, React.ReactNode][] = tx
     ? [
         [
@@ -60,6 +108,7 @@ export function TxDetails({ tx, onClose }: { tx: Tx | null; onClose: () => void 
         [t.common.note, tx.note || none],
         [d.duplicate, tx.duplicateOfId != null ? fmt(d.duplicateOf, { id: tx.duplicateOfId }) : t.common.no],
         [d.edited, tx.userEditedAt ? tx.userEditedAt.replace("T", " ").slice(0, 16) : t.common.no],
+        ...(tx.capture ? captureRows(tx.capture) : []),
         [d.id, `#${tx.id}`],
       ]
     : [];

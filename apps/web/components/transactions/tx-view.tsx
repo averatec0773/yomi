@@ -21,6 +21,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
+import { ProvisionalNote } from "@/components/capture/provisional";
+import { ReviewLine } from "@/components/capture/review-line";
 import { CsvLink } from "@/components/csv-link";
 import { Money } from "@/components/money";
 import { awaitingNavKey } from "@/components/shell/shell-keys";
@@ -97,6 +99,7 @@ export function TxView({
   autoSplitMerchants: autoSplitProp,
   balances,
   today,
+  reviewCount,
   isRange = false,
 }: {
   /** 'YYYY-MM', or 'from~to' when the list shows a date range. */
@@ -113,6 +116,8 @@ export function TxView({
   /** Balances with the person the list is filtered by (empty otherwise). */
   balances: Balance[];
   today: string;
+  /** Items in the capture review queue (all periods). */
+  reviewCount: number;
   /** The list shows a date range (from /stats) rather than one month: copy says "this range" instead of "this month". */
   isRange?: boolean;
 }) {
@@ -736,12 +741,18 @@ export function TxView({
 
   return (
     <div className="flex flex-col gap-5">
+      <ReviewLine count={reviewCount} />
       <div className="flex flex-wrap items-center justify-between gap-x-8 gap-y-3">
-        <SpendStrip
-          totals={shownTotals.map((x) => ({ ...x, count: counts.get(x.currency) ?? 0 }))}
-          label={fmt(t.transactions.yourShare, { period: periodLabel })}
-          note={filtered ? t.transactions.wholePeriodNote : undefined}
-        />
+        <div className="flex min-w-0 flex-col gap-1">
+          <SpendStrip
+            totals={shownTotals.map((x) => ({ ...x, count: counts.get(x.currency) ?? 0 }))}
+            label={fmt(t.transactions.yourShare, { period: periodLabel })}
+            note={filtered ? t.transactions.wholePeriodNote : undefined}
+          />
+          {totals.map((x) => (
+            <ProvisionalNote key={x.currency} totals={x} currency={x.currency} />
+          ))}
+        </div>
         {filters.participantId !== undefined && <PersonBalance balances={balances} today={today} />}
         {suggestedCount > 0 && (
           <Button onClick={acceptAll} title={t.transactions.acceptAllTitle}>
