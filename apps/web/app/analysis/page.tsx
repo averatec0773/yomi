@@ -2,7 +2,7 @@ import { analysisReport, getCurrentUser, getTimeZone, listCategories, netWorthCh
 import { ArrowRightIcon, ChartColumnIcon } from "lucide-react";
 import Link from "next/link";
 import { DayView } from "@/components/analysis/day-view";
-import { CurrencyInsights, type InsightContext, PeriodExtras, sourceName } from "@/components/analysis/insights";
+import { CurrencyInsights, type InsightContext, PartialCurrencies, sourceName } from "@/components/analysis/insights";
 import { type SourceLine, SourcesPopover } from "@/components/analysis/sources-popover";
 import { CsvLink } from "@/components/csv-link";
 import { Money } from "@/components/money";
@@ -28,9 +28,9 @@ const KIND_PRESET = { day: "yesterday", week: "this_week", month: "this_month", 
 
 /**
  * Analysis: one place for the numbers of any period. A Day / Week / Month / Year switcher sits next to the PeriodBar
- * (presets and custom ranges). Fixed periods get Insights on top (comparisons, shifts, unusual and largest rows, new
- * merchants, target, investments, data freshness); a day stays light; weeks, months, years and custom ranges keep the
- * neutral full numbers below. "Today" is the user's time-zone day.
+ * (presets and custom ranges). A day stays light (DayView). Any other period keeps the Stats composition: a net worth
+ * line (with investments), then per currency the summary card with its Insights, the monthly trend, categories, and
+ * the largest rows or top merchants. "Today" is the user's time-zone day.
  */
 export default async function AnalysisPage({ searchParams }: PageProps<"/analysis">) {
   const sp = await searchParams;
@@ -88,13 +88,7 @@ export default async function AnalysisPage({ searchParams }: PageProps<"/analysi
 
   // Same order as the Transactions spend strip: the currency with the most rows first.
   const ordered = [...report.currencies].sort((a, b) => b.transactionCount - a.transactionCount || b.spendingMinor - a.spendingMinor);
-  const ctx: InsightContext = {
-    report: { ...report, currencies: ordered },
-    locale,
-    t,
-    previousLabel: previousLabel(range.from, range.to, report.lengthDays, t),
-    showCode: ordered.length > 1,
-  };
+  const ctx: InsightContext = { report: { ...report, currencies: ordered }, locale, t };
 
   if (kind === "day") {
     const names = new Map((await listCategories(db, user)).map((c) => [c.id, c.name]));
@@ -112,34 +106,56 @@ export default async function AnalysisPage({ searchParams }: PageProps<"/analysi
   const period: Record<string, string> = report.month ? { month: report.month } : { from: range.from, to: range.to };
   // Stocks next to flows: how net worth moved over the same days (only when account balances exist).
   const nwChange = report.future ? null : await netWorthChange(db, user, { from: range.from, to: range.to < today ? range.to : today, currency: "USD" });
-  const nwLine = nwChange && (
-    <p className="flex flex-wrap items-center gap-x-1.5 text-body text-2" data-testid="stats-net-worth">
-      <span>
-        {rich(t.stats.netWorthChange, {
-          amount: nwChange.converted ? (
-            <Money minor={nwChange.converted.changeMinor} currency={nwChange.converted.currency} sign="signed" className="text-foreground" />
-          ) : (
-            <>
-              {nwChange.currencies.map((c, i) => (
-                <span key={c.currency}>
-                  {i > 0 && " · "}
-                  <Money minor={c.changeMinor} currency={c.currency} sign="signed" showCode={nwChange.currencies.length > 1} className="text-foreground" />
-                </span>
-              ))}
-            </>
-          ),
-        })}
-      </span>
-      <Link href="/assets" className="inline-flex items-center gap-1 text-primary underline-offset-4 hover:underline">
-        <ArrowRightIcon className="size-3.5" aria-hidden />
-        {t.stats.netWorthLink}
-      </Link>
+  // The investments part of that change, deposits apart from the market (only with investment accounts).
+  const invest = (report.investments ?? []).filter((i) => i.changeMinor != null);
+  const nwLine = (nwChange || invest.length > 0) && (
+    <p className="mb-6 flex flex-wrap items-center gap-x-1.5 text-body text-2" data-testid="stats-net-worth">
+      {nwChange && (
+        <>
+          <span>
+            {rich(t.stats.netWorthChange, {
+              amount: nwChange.converted ? (
+                <Money minor={nwChange.converted.changeMinor} currency={nwChange.converted.currency} sign="signed" className="text-foreground" />
+              ) : (
+                <>
+                  {nwChange.currencies.map((c, i) => (
+                    <span key={c.currency}>
+                      {i > 0 && " · "}
+                      <Money minor={c.changeMinor} currency={c.currency} sign="signed" showCode={nwChange.currencies.length > 1} className="text-foreground" />
+                    </span>
+                  ))}
+                </>
+              ),
+            })}
+          </span>
+          <Link href="/assets" className="inline-flex items-center gap-1 text-primary underline-offset-4 hover:underline">
+            <ArrowRightIcon className="size-3.5" aria-hidden />
+            {t.stats.netWorthLink}
+          </Link>
+        </>
+      )}
+      {invest.map((i, k) => (
+        <span key={i.currency} data-testid="net-worth-investments">
+          {(nwChange || k > 0) && <span aria-hidden>· </span>}
+          {rich(t.analysis.investLine, {
+            change: <Money minor={i.changeMinor!} currency={i.currency} sign="signed" showCode={invest.length > 1} className="text-foreground" />,
+          })}
+          {/* Without deposits the whole change is the market's: no split to show. */}
+          {i.netDepositsMinor !== 0 &&
+            rich(i.marketMinor == null ? t.analysis.investDeposits : t.analysis.investSplit, {
+              market: i.marketMinor != null && <Money minor={i.marketMinor} currency={i.currency} sign="signed" />,
+              deposits: <Money minor={i.netDepositsMinor} currency={i.currency} />,
+            })}
+        </span>
+      ))}
     </p>
   );
 
   return (
     <div>
       {header}
+      {nwLine}
+      <PartialCurrencies ctx={ctx} className="mb-6 flex flex-col gap-2" />
       {!hasData ? (
         <EmptyState
           icon={ChartColumnIcon}
@@ -159,15 +175,16 @@ export default async function AnalysisPage({ searchParams }: PageProps<"/analysi
               data={c}
               period={period}
               days={report.days}
+              inProgress={report.inProgress}
+              previousLabel={previousLabel(range.from, range.to, report.lengthDays, t)}
               month={report.month}
               showCode={ordered.length > 1}
               anyTarget={anyTarget}
-              insights={kind !== "range" ? <CurrencyInsights c={c} ctx={ctx} /> : undefined}
+              multiYear={range.from.slice(0, 4) !== range.to.slice(0, 4)}
+              insights={<CurrencyInsights c={c} ctx={ctx} />}
               showTrend={kind !== "week"}
             />
           ))}
-          {kind !== "range" && <PeriodExtras ctx={ctx} />}
-          {nwLine}
         </div>
       )}
     </div>

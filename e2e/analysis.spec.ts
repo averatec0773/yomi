@@ -38,15 +38,21 @@ test("analysis: Day opens on yesterday, steps to today (so far) and stops there;
   await expect(page.getByRole("form", { name: "Custom range" })).toHaveCount(0);
 });
 
-test("analysis: Week is Monday to Sunday so far, steps by seven days; Month has Insights above the full numbers", async ({ page }) => {
-  await page.setViewportSize({ width: 1280, height: 900 });
+test("analysis: Week is Monday to Sunday so far, steps by seven days; Month keeps Insights inside the summary card", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/analysis?preset=this_week");
   const bar = page.getByRole("navigation", { name: "Period" });
   await expect(bar).toContainText("Sep 28 – Oct 4, 2026 · so far");
-  await expect(page.getByTestId("insights-USD").getByTestId("insight-previous")).toContainText("a day");
+  await expect(page.getByRole("region", { name: "USD stats" })).toContainText(/a day (more|less) than last week/);
   // Sep 28 to Oct 4 touches two months, but a week shows no monthly trend.
   await expect(page.getByRole("heading", { name: /Monthly spending/ })).toHaveCount(0);
-  await expect(page.getByTestId("insights-CNY").getByTestId("insights-merchants")).toContainText("滴滴出行");
+  // The right-hand card starts on the largest rows; Top merchants switches in place.
+  const cnyList = page.getByRole("region", { name: "CNY stats" }).getByTestId("largest-card");
+  await expect(cnyList.getByRole("radio", { name: "Largest" })).toHaveAttribute("aria-checked", "true");
+  await cnyList.getByRole("radio", { name: "Top merchants" }).click();
+  await expect(cnyList.getByRole("radio", { name: "Top merchants" })).toHaveAttribute("aria-checked", "true");
+  await expect(cnyList).toContainText("滴滴出行");
+  await expect(page).toHaveURL(/preset=this_week$/);
   await bar.getByRole("link", { name: "Previous period" }).click();
   await expect(page).toHaveURL(/preset=last_week/);
   await expect(bar).toContainText("Sep 21 – 27, 2026");
@@ -57,42 +63,55 @@ test("analysis: Week is Monday to Sunday so far, steps by seven days; Month has 
   await page.getByRole("navigation", { name: "View by" }).getByRole("link", { name: "Month" }).click();
   await expect(page).toHaveURL(/preset=this_month/);
   await expect(bar).toContainText("September 2026 · so far");
+  // One line under the header: net worth, then investments.
+  await expect(page.getByTestId("stats-net-worth")).toContainText(/^Net worth change in this period: [+−].*Investments [+−]/);
+  await expect(page.getByTestId("insights-investments")).toHaveCount(0);
+  const usdSection = page.getByRole("region", { name: "USD stats" });
+  const cnySection = page.getByRole("region", { name: "CNY stats" });
   const usd = page.getByTestId("insights-USD");
   const cny = page.getByTestId("insights-CNY");
-  await expect(usd.getByTestId("insight-target")).toContainText("Over the monthly target by");
-  await expect(usd).toContainText("First time at Bright Screens Electronics");
-  await expect(usd.getByTestId("insights-largest")).toContainText("Bright Screens Electronics");
+  await expect(usdSection).toContainText(/a day (more|less) than last month/);
   await expect(usd.getByTestId("insight-partial")).toHaveCount(0);
+  await expect(usd).toContainText("First time at Bright Screens Electronics");
+  // The target editor shows the gap; Insights do not repeat it.
+  await expect(usdSection).toContainText("Over by");
+  await expect(usd).not.toContainText("target");
+  // At most three lines until "+N more" expands the rest in place.
+  await expect(usd.getByRole("listitem")).toHaveCount(3);
+  const more = usd.getByRole("button", { name: /^\+\d+ more$/ });
+  await expect(more).toHaveAttribute("aria-expanded", "false");
+  await more.click();
+  await expect(usd.getByRole("button", { name: "Show less" })).toHaveAttribute("aria-expanded", "true");
+  await expect(usd.getByRole("listitem")).not.toHaveCount(3);
+  // The summary card, Insights included, fits the first screen at 1280×800.
+  await page.getByRole("button", { name: "Show less" }).click();
+  await page.evaluate(() => window.scrollTo(0, 0));
+  const card = await usd.evaluate((el) => el.closest(".rounded-xl")!.getBoundingClientRect().bottom);
+  expect(card).toBeLessThanOrEqual(800);
+  await expect(usdSection.getByTestId("largest-card")).toContainText("Bright Screens Electronics");
+  // A partial currency leads with the partial line and hides its comparison.
   await expect(cny.getByTestId("insight-partial")).toContainText("Partial: WeChat through Sep 24");
-  await expect(cny.getByTestId("insight-previous")).toHaveCount(0);
+  await expect(cnySection).not.toContainText("than last month");
   await expect(cny).toContainText("Possible duplicate at 喜茶");
-  await expect(page.getByTestId("insights-investments")).toContainText("Deposits");
-  // Top merchants show for every currency, partial or not.
-  await expect(usd.getByTestId("insights-merchants").getByRole("listitem")).not.toHaveCount(0);
-  await expect(cny.getByTestId("insights-merchants").getByRole("listitem")).not.toHaveCount(0);
-  // The summary card comes first, then Insights, then the full numbers; no monthly trend inside one month.
-  const usdSection = page.getByRole("region", { name: "USD stats" });
+  // Summary card (hero, then Insights) before the categories and the largest rows; no monthly trend inside one month.
   const order = await usdSection.evaluate((el) => {
     const pos = (sel: string) => [...el.querySelectorAll("*")].findIndex((n) => n.matches(sel));
-    return [pos(".text-hero"), pos("[data-testid=insights-USD]"), pos("[data-testid=insights-merchants]")];
+    return [pos(".text-hero"), pos("[data-testid=insights-USD]"), pos("[data-testid=largest-card]")];
   });
   expect(order[0]).toBeLessThan(order[1]!);
   expect(order[1]).toBeLessThan(order[2]!);
-  // The neutral numbers below no longer repeat the comparison or the largest rows.
-  const usdNumbers = page.getByRole("region", { name: "USD stats" });
-  await expect(usdNumbers).toContainText("USD spending");
-  await expect(usdNumbers.getByRole("heading", { name: /Monthly spending/ })).toHaveCount(0);
+  await expect(usdSection.getByRole("heading", { name: /Monthly spending/ })).toHaveCount(0);
 
   await bar.getByRole("link", { name: "Previous period" }).click();
   await expect(page).toHaveURL(/preset=last_month/);
   await expect(bar).toContainText("August 2026");
   await expect(page.getByTestId("insights-CNY").getByTestId("insight-partial")).toHaveCount(0);
 
-  // A custom range keeps the full numbers only.
+  // A custom range keeps the comparison and the full numbers, without Insights.
   await page.goto("/analysis?from=2026-09-05&to=2026-09-20");
-  await expect(page.getByRole("region", { name: "USD stats" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "USD stats" })).toContainText("the previous 16 days");
   await expect(page.getByTestId("insights-USD")).toHaveCount(0);
-  await expect(page.getByTestId("insights-merchants")).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "USD stats" }).getByTestId("largest-card")).toBeVisible();
 });
 
 test("analysis: Sources lists how far each source reaches; phones keep four tabs", async ({ page }) => {
@@ -113,4 +132,19 @@ test("analysis: Sources lists how far each source reaches; phones keep four tabs
   await expect(page.getByTestId("day-CNY")).toBeVisible();
   const width = await page.evaluate(() => document.documentElement.scrollWidth);
   expect(width).toBeLessThanOrEqual(375);
+
+  // Month on a phone: one column, and the list switch and "+N more" keep 44px targets.
+  await page.goto("/analysis?preset=this_month");
+  const usd = page.getByTestId("insights-USD");
+  await expect(usd).toBeVisible();
+  const hits = await page.evaluate(() => {
+    const els = [...document.querySelectorAll("[data-testid=insights-USD] button, [data-testid=largest-card] [role=radio]")];
+    return els.map((el) => {
+      const after = getComputedStyle(el, "::after");
+      return Math.min(parseFloat(after.width), parseFloat(after.height));
+    });
+  });
+  expect(hits.length).toBeGreaterThan(2);
+  for (const h of hits) expect(h).toBeGreaterThanOrEqual(44);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
 });

@@ -1,19 +1,49 @@
-import { CalendarDaysIcon, ChartCandlestickIcon, FileInputIcon, HourglassIcon, InboxIcon, ListIcon, ReceiptTextIcon } from "lucide-react";
+import type { AnalysisCurrency } from "@yomi/core";
+import {
+  CalendarDaysIcon,
+  ChartCandlestickIcon,
+  FileInputIcon,
+  InboxIcon,
+  ListIcon,
+  MinusIcon,
+  ReceiptTextIcon,
+  TrendingDownIcon,
+  TrendingUpIcon,
+} from "lucide-react";
 import Link from "next/link";
 import { categoryIcon } from "@/components/category-icon";
 import { Money } from "@/components/money";
 import { EmptyState } from "@/components/ui-kit/empty-state";
 import { ListCard } from "@/components/ui-kit/list-card";
 import { fmt, plural } from "@/i18n";
-import type { Dictionary } from "@/i18n/en";
 import { rich } from "@/i18n/rich";
 import { dayLabel } from "@/lib/month";
-import { AttentionCard, currencyInsightRows, type InsightContext, InsightRow, PartialLine } from "./insights";
+import { AttentionCard, currencyInsights, type Insight, type InsightContext, InsightRow, PartialCurrencies, sourceLabel } from "./insights";
 
 const link = "text-primary underline-offset-4 hover:underline";
 
-function sourceLabel(source: string, t: Dictionary): string {
-  return t.transactions.sources[source as keyof Dictionary["transactions"]["sources"]] ?? source;
+/** "$4.20 more than a typical day (last 28 days)": the day's spending against the 28-day daily average. */
+function typicalInsight(c: AnalysisCurrency, ctx: InsightContext): Insight | null {
+  if (!c.typical || c.partialSources.length > 0) return null;
+  const { t } = ctx;
+  const cmp = t.stats.compare;
+  const diff = c.spendingMinor - c.typical.dailyMinor;
+  const prev = fmt(t.analysis.typicalDay, { count: c.typical.periods });
+  return {
+    key: "typical",
+    icon: diff > 0 ? TrendingUpIcon : diff < 0 ? TrendingDownIcon : MinusIcon,
+    testId: "insight-typical",
+    content: diff === 0 ? fmt(cmp.same, { prev }) : rich(diff < 0 ? cmp.less : cmp.more, { prev, amount: <Money minor={Math.abs(diff)} currency={c.currency} /> }),
+  };
+}
+
+/** The Day view's observations: partial first, then the typical day, then the rest. */
+function dayInsights(c: AnalysisCurrency, ctx: InsightContext): Insight[] {
+  const all = currencyInsights(c, ctx);
+  const typical = typicalInsight(c, ctx);
+  if (!typical) return all;
+  const at = all[0]?.key === "partial" ? 1 : 0;
+  return [...all.slice(0, at), typical, ...all.slice(at)];
 }
 
 /**
@@ -25,7 +55,6 @@ export function DayView({ ctx, categoryNames }: { ctx: InsightContext; categoryN
   const a = t.analysis;
   const day = report.from;
   const dayText = dayLabel(day, locale, { weekday: true });
-  const extra = Object.keys(report.partial).filter((cur) => !report.currencies.some((c) => c.currency === cur));
   // The newest day any investment source reaches: a weekday after it has no close yet.
   const investThrough = report.freshness.filter((f) => f.kind === "investments" && f.through).map((f) => f.through!).sort().at(-1) ?? null;
 
@@ -43,18 +72,11 @@ export function DayView({ ctx, categoryNames }: { ctx: InsightContext; categoryN
           {report.future ? a.empty.future : fmt(a.empty.day, { date: dayText })}
         </EmptyState>
       )}
-      {extra.map((cur) => (
-        <p key={cur} className="flex items-start gap-2 text-meta text-2" data-testid="insight-partial">
-          <HourglassIcon aria-hidden className="mt-0.5 size-3.5 shrink-0" />
-          <span>
-            {cur}: <PartialLine keys={report.partial[cur]!} ctx={ctx} />
-          </span>
-        </p>
-      ))}
+      <PartialCurrencies ctx={ctx} className="flex flex-col gap-2" />
 
       {report.currencies.map((c) => {
         const cur = c.currency;
-        const insights = currencyInsightRows(c, ctx, { comparePrevious: false });
+        const insights = dayInsights(c, ctx);
         const rows = c.dayRows ?? [];
         const more = c.transactionCount - rows.length;
         return (
@@ -73,7 +95,12 @@ export function DayView({ ctx, categoryNames }: { ctx: InsightContext; categoryN
             </div>
             {insights.length > 0 && (
               <ul className="divide-y divide-line-soft border-t border-line-soft" aria-label={fmt(a.insightsFor, { currency: cur })} data-testid="insights">
-                {insights}
+                {insights.map((i) => (
+                  <InsightRow key={i.key} icon={i.icon} testId={i.testId}>
+                    {i.content}
+                    {i.hint && <span className="block text-meta text-2">{i.hint}</span>}
+                  </InsightRow>
+                ))}
               </ul>
             )}
             <div className="border-t border-line-soft" data-testid="day-rows">
