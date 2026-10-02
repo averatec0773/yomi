@@ -30,6 +30,8 @@ export interface Insight {
 }
 
 const link = "text-primary underline-offset-4 hover:underline";
+/** An insight that opens its rows: a colour change on hover, no underline (it would break around the amounts). */
+const rowLink = "transition-colors duration-[120ms] hover:text-primary";
 
 /** A source's name: the institution of a Plaid login, else the source's own name. */
 export function sourceName(f: Pick<SourceFreshness, "source" | "label">, t: Dictionary): string {
@@ -132,7 +134,7 @@ export function currencyInsights(c: AnalysisCurrency, ctx: InsightContext): Insi
       icon: u.kind === "possible_duplicate" ? CopyIcon : AlertCircleIcon,
       testId: "insight-unusual",
       content: (
-        <Link href={dayHref(u.occurredOn, u.merchant)} className="hover:underline">
+        <Link href={dayHref(u.occurredOn, u.merchant)} className={rowLink}>
           {text}
         </Link>
       ),
@@ -142,7 +144,7 @@ export function currencyInsights(c: AnalysisCurrency, ctx: InsightContext): Insi
     const list = c.newMerchants.map((m, i) => (
       <span key={m.merchant}>
         {i > 0 && t.common.listSep}
-        <Link href={`/transactions?${new URLSearchParams({ from: report.from, to: report.to, q: m.merchant }).toString()}`} className="hover:underline">
+        <Link href={`/transactions?${new URLSearchParams({ from: report.from, to: report.to, q: m.merchant }).toString()}`} className={rowLink}>
           {m.merchant}
         </Link>{" "}
         <span className="text-2">
@@ -162,7 +164,7 @@ export function currencyInsights(c: AnalysisCurrency, ctx: InsightContext): Insi
       icon: categoryIcon(s.categoryId == null ? null : s.name),
       testId: "insight-shift",
       content: (
-        <Link href={`/transactions?${q.toString()}`} className="hover:underline">
+        <Link href={`/transactions?${q.toString()}`} className={rowLink}>
           {rich(s.deltaMinor > 0 ? a.shiftMore : a.shiftLess, { category: name, amount: <Money minor={Math.abs(s.deltaMinor)} currency={cur} /> })}
         </Link>
       ),
