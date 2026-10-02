@@ -17,9 +17,10 @@ export function investSyncSummary(r: InvestSyncResult, t: Dictionary): string {
 
 /** Toasts the outcome of POST /api/invest/sync: summary, a calm note for a statement not published yet, each failed pull by its code, warnings. */
 export function toastInvestSync(r: InvestSyncResult, t: Dictionary, locale: Locale): void {
-  if (r.results.length) toast.success(fmt(t.assets.synced, { summary: investSyncSummary(r, t) }));
-  for (const x of r.results) {
-    if (x.stale && x.expectedAsOf) toast.info(fmt(t.assets.ibkrStale, { date: dayLabel(x.expectedAsOf, locale) }), { duration: 10_000 });
+  // Stale notes go under the success line rather than into toasts of their own.
+  const stale = r.results.flatMap((x) => (x.stale && x.expectedAsOf ? [fmt(t.assets.ibkrStale, { date: dayLabel(x.expectedAsOf, locale) })] : []));
+  if (r.results.length) {
+    toast.success(fmt(t.assets.synced, { summary: investSyncSummary(r, t) }), stale.length ? { description: stale.join("\n"), duration: 10_000 } : undefined);
   }
   for (const e of r.errors) toast.error(errorText(e, t), { duration: 10_000 });
   const warnings = r.results.flatMap((x) => x.warnings);

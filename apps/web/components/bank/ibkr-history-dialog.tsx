@@ -61,8 +61,9 @@ function IbkrHistorySheet({ onDone }: { onDone: () => void }) {
             from: dayLabel(item.range.from, locale, { year: true }),
             to: dayLabel(item.range.to, locale, { year: true }),
           }),
+          // One toast per pull: the "not published yet" note rides along instead of stacking a second toast.
+          item.stale && item.expectedAsOf ? { description: fmt(t.assets.ibkrStale, { date: dayLabel(item.expectedAsOf, locale) }), duration: 10_000 } : undefined,
         );
-        if (item.stale && item.expectedAsOf) toast.info(fmt(t.assets.ibkrStale, { date: dayLabel(item.expectedAsOf, locale) }), { duration: 10_000 });
         if (item.warnings.length) toast.warning(item.warnings.map((w) => noticeText(w, t)).join("\n"));
       } else {
         toastInvestSync(r, t, locale);

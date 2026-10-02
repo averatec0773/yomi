@@ -53,7 +53,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
             </div>
             <ShellKeys />
             <ShortcutsSheet />
-            <Toaster position="bottom-center" mobileOffset={{ bottom: 100 }} />
+            <Toaster position="bottom-center" mobileOffset={{ bottom: 100 }} expand />
           </ShortcutsProvider>
           </TimeZoneProvider>
           </ThemeProvider>
