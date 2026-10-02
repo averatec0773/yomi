@@ -650,6 +650,8 @@ export const zhCN: Dictionary = {
       states: { current: "已是最新", behind: "落后", error: "需要处理", paused: "已暂停", never: "无数据" },
       reminder: "该导出新的{source}账单了。",
       none: "还没有数据来源。导入一份账单开始。",
+      count: "笔数",
+      amount: "金额",
       names: {
         alipay: "支付宝",
         wechat: "微信",

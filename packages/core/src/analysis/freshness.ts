@@ -2,6 +2,8 @@ import { bankAccounts, bankConnections, type Db, holdingSnapshots, importBatches
 import { and, count, eq, gte, inArray, isNotNull, lte, max, ne } from "@yomi/db/orm";
 import { ibkrStatus } from "../invest/status";
 import { lastCompletedTradingDay } from "../invest/time";
+import { countsAsIncome, countsAsSpending } from "../ledger/share";
+import type { SpendingRow } from "../ledger/transactions";
 import { clockNow } from "../time/clock";
 import { addDays, type DateRange, daysInclusive } from "../stats/period";
 import { localDate } from "../time/zone";
@@ -224,6 +226,15 @@ export async function loadSourceFacts(db: Db, user: CurrentUser, opts: { timeZon
   return out.sort((a, b) => SOURCE_ORDER.indexOf(a.source) - SOURCE_ORDER.indexOf(b.source) || a.key.localeCompare(b.key));
 }
 
+/** Ledger account id → `plaid:<connection id>` of the Plaid login the account is linked to. */
+export async function loadPlaidLogins(db: Db, user: CurrentUser): Promise<Map<number, string>> {
+  const rows = await db
+    .select({ accountId: bankAccounts.accountId, connectionId: bankAccounts.connectionId })
+    .from(bankAccounts)
+    .where(and(eq(bankAccounts.userId, user.id), isNotNull(bankAccounts.accountId)));
+  return new Map(rows.map((a) => [a.accountId!, `plaid:${a.connectionId}`]));
+}
+
 /**
  * Which sources have rows of which currency in the period's activity window (90 days before through its end). Plaid
  * rows count for the login their account is linked to.
@@ -235,18 +246,49 @@ export async function loadSourceActivity(db: Db, user: CurrentUser, r: DateRange
     .from(transactions)
     .where(and(eq(transactions.userId, user.id), gte(transactions.occurredOn, w.from), lte(transactions.occurredOn, w.to)))
     .groupBy(transactions.source, transactions.accountId, transactions.currency);
-  const plaidAccounts = await db
-    .select({ accountId: bankAccounts.accountId, connectionId: bankAccounts.connectionId })
-    .from(bankAccounts)
-    .where(and(eq(bankAccounts.userId, user.id), isNotNull(bankAccounts.accountId)));
+  const logins = await loadPlaidLogins(db, user);
   const out = new Map<string, SourceActivity>();
   for (const row of rows) {
-    const key =
-      row.source === "plaid" ? (() => {
-        const link = plaidAccounts.find((a) => a.accountId === row.accountId);
-        return link ? `plaid:${link.connectionId}` : null;
-      })() : row.source;
+    const key = row.source === "plaid" ? (row.accountId != null ? logins.get(row.accountId) : undefined) : row.source;
     if (key) out.set(`${key}|${row.currency}`, { key, currency: row.currency });
   }
   return [...out.values()];
+}
+
+/** One source's part of a period's numbers in one currency, by the summary card's rules (ledger/share.ts). */
+export interface SourceTotal {
+  /** The freshness key (`plaid:<connection id>` for a linked Plaid account), else the ledger source ("manual"). */
+  key: string;
+  source: string;
+  currency: string;
+  /** Rows counted as spending; a linked pair counts once, on the row the ledger keeps. */
+  count: number;
+  /** Σ my share of those rows. */
+  spendingMinor: number;
+  incomeCount: number;
+  incomeMinor: number;
+}
+
+/**
+ * Per source and currency, the rows the summary card counts. Linked duplicates never count, so the counts and
+ * spending add up to the card's transaction count and spending per currency. `logins` from loadPlaidLogins.
+ */
+export function sourceTotals(rows: readonly SpendingRow[], logins: ReadonlyMap<number, string>): SourceTotal[] {
+  const out = new Map<string, SourceTotal>();
+  for (const r of rows) {
+    const spends = countsAsSpending(r);
+    if (!spends && !countsAsIncome(r)) continue;
+    const key = (r.source === "plaid" && r.accountId != null ? logins.get(r.accountId) : undefined) ?? r.source;
+    const id = `${key}|${r.currency}`;
+    const t = out.get(id) ?? { key, source: r.source, currency: r.currency, count: 0, spendingMinor: 0, incomeCount: 0, incomeMinor: 0 };
+    if (spends) {
+      t.count += 1;
+      t.spendingMinor += r.myShareMinor;
+    } else {
+      t.incomeCount += 1;
+      t.incomeMinor += r.amountMinor;
+    }
+    out.set(id, t);
+  }
+  return [...out.values()].sort((a, b) => a.key.localeCompare(b.key) || a.currency.localeCompare(b.currency));
 }

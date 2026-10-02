@@ -114,17 +114,39 @@ test("analysis: Week is Monday to Sunday so far, steps by seven days; Month keep
   await expect(page.getByRole("region", { name: "USD stats" }).getByTestId("largest-card")).toBeVisible();
 });
 
-test("analysis: Sources lists how far each source reaches; phones keep four tabs", async ({ page }) => {
+test("analysis: Sources lists how far each source reaches and what it adds to the period; phones keep four tabs", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/analysis?preset=this_week");
   await page.getByTestId("sources-button").click();
   const list = page.getByTestId("sources-list");
-  await expect(list.getByRole("listitem").filter({ hasText: "WeChat" })).toContainText(/Behind\s*Through Sep 24/);
-  await expect(list.getByRole("listitem").filter({ hasText: "Alipay" })).toContainText(/Up to date\s*Through Sep 29/);
+  const line = (name: string) => list.getByRole("listitem").filter({ hasText: name });
+  await expect(line("WeChat")).toContainText("Through Sep 24 · Behind");
+  await expect(line("Alipay")).toContainText("Through Sep 29 · Up to date");
+  // This week's rows per source, by the summary card's rules: they add up to its count and spending.
+  await expect(page.getByRole("dialog", { name: "Data sources" })).toContainText(/Data sources\s*Rows\s*Amount/);
+  await expect(line("ICBC credit card").getByTestId("source-count")).toHaveText("3");
+  await expect(line("ICBC credit card").getByTestId("source-amount")).toHaveText("$120.82USD");
+  await expect(line("Alipay").getByTestId("source-count")).toHaveText("1");
+  await expect(line("Alipay").getByTestId("source-amount")).toHaveText("¥30.60CNY");
+  await expect(page.getByRole("region", { name: "USD stats" })).toContainText("$120.82");
+  // No rows this week: a dash. Holdings sources have no rows to count.
+  await expect(line("WeChat").getByTestId("source-amount")).toHaveText("—");
+  await expect(line("Interactive Brokers").getByTestId("source-amount")).toHaveText("");
+  await expect(line("Interactive Brokers").getByTestId("source-count")).toHaveText("");
   await page.keyboard.press("Escape");
   await expect(list).toBeHidden();
 
+  // On a phone the popover keeps a 16px margin and the page does not scroll sideways.
   await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto("/analysis?preset=this_month");
+  await page.getByTestId("sources-button").click();
+  await expect(line("Added by hand").getByTestId("source-amount")).toContainText("$");
+  const box = (await page.getByRole("dialog", { name: "Data sources" }).boundingBox())!;
+  expect(box.x).toBeGreaterThanOrEqual(16);
+  expect(box.x + box.width).toBeLessThanOrEqual(375 - 16);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
+  await page.keyboard.press("Escape");
+
   await page.goto("/analysis?preset=yesterday");
   const tabs = page.getByRole("navigation", { name: "Main navigation" }).last();
   await expect(tabs.getByRole("link")).toHaveText(["Transactions", "Analysis", "Assets", "Tools"]);

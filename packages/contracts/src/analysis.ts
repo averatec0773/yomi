@@ -121,6 +121,21 @@ export const SourceFreshness = z.object({
 });
 export type SourceFreshness = z.infer<typeof SourceFreshness>;
 
+/** One source's part of the period's summary numbers in one currency (linked duplicates count once, on the kept row). */
+export const SourceTotal = z.object({
+  /** A freshness key, or the ledger source for rows no listed source covers ("manual"). */
+  key: z.string(),
+  source: z.string(),
+  currency: CurrencyCode,
+  /** Rows counted as spending. */
+  count: z.int().nonnegative(),
+  /** My share of those rows. */
+  spendingMinor: z.int(),
+  incomeCount: z.int().nonnegative(),
+  incomeMinor: z.int(),
+});
+export type SourceTotal = z.infer<typeof SourceTotal>;
+
 export const Attention = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("plaid"), key: z.string(), label: z.string().nullable(), errorCode: z.string().nullable() }),
   z.object({
@@ -155,6 +170,7 @@ export const AnalysisReport = z.object({
   close: z.object({ marketDay: z.boolean(), previousClose: DateString }).nullable(),
   attention: z.array(Attention),
   freshness: z.array(SourceFreshness),
+  sourceTotals: z.array(SourceTotal),
 });
 export type AnalysisReport = z.infer<typeof AnalysisReport>;
 

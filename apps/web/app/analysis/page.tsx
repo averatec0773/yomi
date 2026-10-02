@@ -2,7 +2,7 @@ import { analysisReport, getCurrentUser, getTimeZone, listCategories, netWorthCh
 import { ArrowRightIcon, ChartColumnIcon } from "lucide-react";
 import Link from "next/link";
 import { DayView } from "@/components/analysis/day-view";
-import { CurrencyInsights, type InsightContext, PartialCurrencies, sourceName } from "@/components/analysis/insights";
+import { CurrencyInsights, type InsightContext, PartialCurrencies, sourceLabel, sourceName } from "@/components/analysis/insights";
 import { type SourceLine, SourcesPopover } from "@/components/analysis/sources-popover";
 import { CsvLink } from "@/components/csv-link";
 import { Money } from "@/components/money";
@@ -44,6 +44,23 @@ export default async function AnalysisPage({ searchParams }: PageProps<"/analysi
 
   const baseLabel = kind === "day" ? dayLabel(range.from, locale, { weekday: true, year: true }) : rangeLabel(range.from, range.to, locale);
   const label = report?.inProgress ? fmt(t.analysis.soFar, { label: baseLabel }) : baseLabel;
+  const sourceTotals = report?.sourceTotals ?? [];
+  // A source's rows in the period: its spending per currency, else its income, else none ("—").
+  const totalsOf = (key: string): SourceLine["totals"] => {
+    const mine = sourceTotals.filter((s) => s.key === key);
+    const spend = mine.filter((s) => s.count > 0);
+    const income = spend.length === 0 ? mine.filter((s) => s.incomeCount > 0) : [];
+    return {
+      count: spend.reduce((a, s) => a + s.count, 0) + income.reduce((a, s) => a + s.incomeCount, 0),
+      amounts: spend.length > 0 ? spend.map((s) => ({ minor: s.spendingMinor, currency: s.currency })) : income.map((s) => ({ minor: s.incomeMinor, currency: s.currency })),
+      income: income.length > 0,
+    };
+  };
+  const listed = new Set(report?.freshness.map((f) => f.key));
+  // Rows no listed source covers (added by hand) still add to the page's numbers, so they get a line too.
+  const unlisted = [...new Map(sourceTotals.filter((s) => !listed.has(s.key)).map((s) => [s.key, s.source])).entries()].map(
+    ([key, source]): SourceLine => ({ key, name: sourceLabel(source, t), detail: null, state: null, reminder: null, totals: totalsOf(key) }),
+  );
   const sources: SourceLine[] = (report?.freshness ?? []).map((f) => ({
     key: f.key,
     name: sourceName(f, t),
@@ -57,7 +74,9 @@ export default async function AnalysisPage({ searchParams }: PageProps<"/analysi
           : t.analysis.sources.never,
     state: f.state,
     reminder: f.exportReminder ? fmt(t.analysis.sources.reminder, { source: sourceName(f, t) }) : null,
+    totals: f.kind === "investments" ? null : totalsOf(f.key),
   }));
+  sources.push(...unlisted);
 
   const header = (
     <PageHeader

@@ -13,11 +13,14 @@ import type { CurrentUser } from "../user";
 import {
   attentionItems,
   type Attention,
+  loadPlaidLogins,
   loadSourceActivity,
   loadSourceFacts,
   periodCompleteness,
   type SourceFreshness,
   sourceFreshness,
+  type SourceTotal,
+  sourceTotals,
 } from "./freshness";
 import {
   type CategoryAmount,
@@ -106,6 +109,8 @@ export interface AnalysisReport {
   close: MarketClose | null;
   attention: Attention[];
   freshness: SourceFreshness[];
+  /** What each source adds to the period's counts and totals, per currency (sources without rows absent). */
+  sourceTotals: SourceTotal[];
 }
 
 /** Day rows: all of them when 8 or fewer, else the largest 5. */
@@ -286,5 +291,6 @@ export async function analysisReport(
     close: kind === "day" ? marketClose(range.from) : null,
     attention: attentionItems(freshness),
     freshness,
+    sourceTotals: sourceTotals(inPeriod, await loadPlaidLogins(db, user)),
   };
 }

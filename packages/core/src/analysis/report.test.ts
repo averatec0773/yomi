@@ -113,6 +113,32 @@ describe("analysisReport", () => {
     expect(r.currencies.every((c) => c.typical === null)).toBe(true);
   });
 
+  it("source totals add up to the summary numbers; a linked pair counts once, on the kept row", async () => {
+    const db = await ledger();
+    const checking = (await db.select({ id: bankAccounts.accountId }).from(bankAccounts))[0]!.id!;
+    // A card charge linked to the Alipay payment it funded: the ledger keeps the Alipay row.
+    const wallet = await addTx(db, { amountMinor: -2000, currency: "USD", source: "alipay", merchant: "Pine Market", occurredAt: cn("2026-09-15") });
+    await addTx(db, { amountMinor: -2000, currency: "USD", source: "plaid", accountId: checking, merchant: "ALIPAY PINE MARKET", occurredAt: us("2026-09-15"), duplicateOfId: wallet });
+    await addTx(db, { amountMinor: 250000, currency: "USD", source: "plaid", accountId: checking, merchant: "Payroll", occurredAt: us("2026-09-15") });
+    await addTx(db, { amountMinor: -1800, source: "manual", merchant: "Street market", occurredAt: cn("2026-09-20") });
+    await addTx(db, { amountMinor: -900, source: "wechat", merchant: "Closed order", occurredAt: cn("2026-09-21"), status: "closed" });
+
+    const r = await analysisReport(db, user, { from: "2026-09-01", to: "2026-09-30" }, opts);
+    for (const c of r.currencies) {
+      const mine = r.sourceTotals.filter((t) => t.currency === c.currency);
+      expect([c.currency, mine.reduce((a, t) => a + t.count, 0)]).toEqual([c.currency, c.transactionCount]);
+      expect([c.currency, mine.reduce((a, t) => a + t.spendingMinor, 0)]).toEqual([c.currency, c.spendingMinor]);
+      expect([c.currency, mine.reduce((a, t) => a + t.incomeMinor, 0)]).toEqual([c.currency, c.incomeMinor]);
+    }
+    const plaidKey = r.freshness.find((f) => f.source === "plaid")!.key;
+    const byKey = (key: string, currency: string) => r.sourceTotals.find((t) => t.key === key && t.currency === currency);
+    expect(byKey("alipay", "USD")).toMatchObject({ source: "alipay", count: 1, spendingMinor: 2000 });
+    // Saturdays Sep 5 to 26 (cafe and groceries, 8), Sep 28, three rows on Sep 29, Sep 30: 13; the linked charge left out.
+    expect(byKey(plaidKey, "USD")).toMatchObject({ source: "plaid", count: 13, incomeCount: 1, incomeMinor: 250000 });
+    expect(byKey("manual", "CNY")).toMatchObject({ source: "manual", count: 1, spendingMinor: 1800 });
+    expect(byKey("wechat", "CNY")).toMatchObject({ count: 1, spendingMinor: 1500 });
+  });
+
   it("investments: holdings change split into deposits and market; weekend has no close", async () => {
     const db = await ledger();
     const statement = (asOf: string, cash: string, txns: InvestStatement["transactions"] = []): InvestStatement => ({

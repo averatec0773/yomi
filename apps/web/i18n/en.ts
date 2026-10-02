@@ -723,6 +723,8 @@ export const en = {
       states: { current: "Up to date", behind: "Behind", error: "Needs attention", paused: "Paused", never: "No data" },
       reminder: "Time for a new {source} export.",
       none: "No sources yet. Import a statement to start.",
+      count: "Rows",
+      amount: "Amount",
       names: {
         alipay: "Alipay",
         wechat: "WeChat",
