@@ -44,6 +44,9 @@ test("analysis: Week is Monday to Sunday so far, steps by seven days; Month has 
   const bar = page.getByRole("navigation", { name: "Period" });
   await expect(bar).toContainText("Sep 28 – Oct 4, 2026 · so far");
   await expect(page.getByTestId("insights-USD").getByTestId("insight-previous")).toContainText("a day");
+  // Sep 28 to Oct 4 touches two months, but a week shows no monthly trend.
+  await expect(page.getByRole("heading", { name: /Monthly spending/ })).toHaveCount(0);
+  await expect(page.getByTestId("insights-CNY").getByTestId("insights-merchants")).toContainText("滴滴出行");
   await bar.getByRole("link", { name: "Previous period" }).click();
   await expect(page).toHaveURL(/preset=last_week/);
   await expect(bar).toContainText("Sep 21 – 27, 2026");
@@ -54,7 +57,6 @@ test("analysis: Week is Monday to Sunday so far, steps by seven days; Month has 
   await page.getByRole("navigation", { name: "View by" }).getByRole("link", { name: "Month" }).click();
   await expect(page).toHaveURL(/preset=this_month/);
   await expect(bar).toContainText("September 2026 · so far");
-  const insights = page.getByTestId("insights");
   const usd = page.getByTestId("insights-USD");
   const cny = page.getByTestId("insights-CNY");
   await expect(usd.getByTestId("insight-target")).toContainText("Over the monthly target by");
@@ -64,12 +66,22 @@ test("analysis: Week is Monday to Sunday so far, steps by seven days; Month has 
   await expect(cny.getByTestId("insight-partial")).toContainText("Partial: WeChat through Sep 24");
   await expect(cny.getByTestId("insight-previous")).toHaveCount(0);
   await expect(cny).toContainText("Possible duplicate at 喜茶");
-  await expect(insights.getByTestId("insights-investments")).toContainText("Deposits");
+  await expect(page.getByTestId("insights-investments")).toContainText("Deposits");
+  // Top merchants show for every currency, partial or not.
+  await expect(usd.getByTestId("insights-merchants").getByRole("listitem")).not.toHaveCount(0);
+  await expect(cny.getByTestId("insights-merchants").getByRole("listitem")).not.toHaveCount(0);
+  // The summary card comes first, then Insights, then the full numbers; no monthly trend inside one month.
+  const usdSection = page.getByRole("region", { name: "USD stats" });
+  const order = await usdSection.evaluate((el) => {
+    const pos = (sel: string) => [...el.querySelectorAll("*")].findIndex((n) => n.matches(sel));
+    return [pos(".text-hero"), pos("[data-testid=insights-USD]"), pos("[data-testid=insights-merchants]")];
+  });
+  expect(order[0]).toBeLessThan(order[1]!);
+  expect(order[1]).toBeLessThan(order[2]!);
   // The neutral numbers below no longer repeat the comparison or the largest rows.
   const usdNumbers = page.getByRole("region", { name: "USD stats" });
   await expect(usdNumbers).toContainText("USD spending");
-  await expect(usdNumbers).not.toContainText("than last month");
-  await expect(usdNumbers.getByRole("heading", { name: /Largest/ })).toHaveCount(0);
+  await expect(usdNumbers.getByRole("heading", { name: /Monthly spending/ })).toHaveCount(0);
 
   await bar.getByRole("link", { name: "Previous period" }).click();
   await expect(page).toHaveURL(/preset=last_month/);
@@ -79,7 +91,8 @@ test("analysis: Week is Monday to Sunday so far, steps by seven days; Month has 
   // A custom range keeps the full numbers only.
   await page.goto("/analysis?from=2026-09-05&to=2026-09-20");
   await expect(page.getByRole("region", { name: "USD stats" })).toBeVisible();
-  await expect(page.getByTestId("insights")).toHaveCount(0);
+  await expect(page.getByTestId("insights-USD")).toHaveCount(0);
+  await expect(page.getByTestId("insights-merchants")).toHaveCount(0);
 });
 
 test("analysis: Sources lists how far each source reaches; phones keep four tabs", async ({ page }) => {

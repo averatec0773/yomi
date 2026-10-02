@@ -697,6 +697,7 @@ export const en = {
     possibleDuplicate: "Possible duplicate at {merchant}: {amount} from {source} and {other} on {date}",
     newMerchants: { one: "New merchant: {list}", other: "New merchants: {list}" },
     largest: "Largest",
+    topMerchants: "Top merchants",
     dayRows: "Spending that day",
     seeAll: { one: "See it in Transactions", other: "See all {count} in Transactions" },
     spentOn: "{currency} spent on {date}",

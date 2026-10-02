@@ -1,6 +1,7 @@
 import type { RangeCurrencyOverview } from "@yomi/core";
 import { ChartColumnIcon, TagIcon } from "lucide-react";
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { Money } from "@/components/money";
 import { ListCard } from "@/components/ui-kit/list-card";
 import { fmt, plural } from "@/i18n";
@@ -22,6 +23,10 @@ export interface CurrencySectionProps {
   showCode: boolean;
   /** Some currency on this month has the target. */
   anyTarget: boolean;
+  /** Analysis Insights for this currency, placed right after the summary card. */
+  insights?: ReactNode;
+  /** The monthly trend; off for weeks (a month or two of bars says nothing about seven days). */
+  showTrend?: boolean;
 }
 
 /** Separator between facts; phones put one fact per line instead. */
@@ -37,7 +42,7 @@ function Dot() {
  * One currency over the period, the neutral full numbers: summary card, monthly trend, categories, small payments.
  * Comparisons and the largest rows live in Insights on Analysis.
  */
-export async function CurrencySection({ data, period, days, month, showCode, anyTarget }: CurrencySectionProps) {
+export async function CurrencySection({ data, period, days, month, showCode, anyTarget, insights, showTrend = true }: CurrencySectionProps) {
   const { t } = await getI18n();
   const cur = data.currency;
   const code = showCode && <span className="ml-2 text-meta font-normal text-3">{cur}</span>;
@@ -91,7 +96,9 @@ export async function CurrencySection({ data, period, days, month, showCode, any
         )}
       </div>
 
-      {data.monthly && (
+      {insights}
+
+      {showTrend && data.monthly && (
         <div className="flex flex-col gap-4">
           <h2 className="flex items-center gap-2 text-title font-semibold">
             <ChartColumnIcon className="size-[18px] text-2" aria-hidden />

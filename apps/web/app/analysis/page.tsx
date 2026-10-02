@@ -2,7 +2,7 @@ import { analysisReport, getCurrentUser, getTimeZone, listCategories, netWorthCh
 import { ArrowRightIcon, ChartColumnIcon } from "lucide-react";
 import Link from "next/link";
 import { DayView } from "@/components/analysis/day-view";
-import { type InsightContext, PeriodInsights, sourceName } from "@/components/analysis/insights";
+import { CurrencyInsights, type InsightContext, PeriodExtras, sourceName } from "@/components/analysis/insights";
 import { type SourceLine, SourcesPopover } from "@/components/analysis/sources-popover";
 import { CsvLink } from "@/components/csv-link";
 import { Money } from "@/components/money";
@@ -113,7 +113,7 @@ export default async function AnalysisPage({ searchParams }: PageProps<"/analysi
   // Stocks next to flows: how net worth moved over the same days (only when account balances exist).
   const nwChange = report.future ? null : await netWorthChange(db, user, { from: range.from, to: range.to < today ? range.to : today, currency: "USD" });
   const nwLine = nwChange && (
-    <p className="mb-6 flex flex-wrap items-center gap-x-1.5 text-body text-2" data-testid="stats-net-worth">
+    <p className="flex flex-wrap items-center gap-x-1.5 text-body text-2" data-testid="stats-net-worth">
       <span>
         {rich(t.stats.netWorthChange, {
           amount: nwChange.converted ? (
@@ -140,8 +140,6 @@ export default async function AnalysisPage({ searchParams }: PageProps<"/analysi
   return (
     <div>
       {header}
-      {kind !== "range" && hasData && <PeriodInsights ctx={ctx} />}
-      {nwLine}
       {!hasData ? (
         <EmptyState
           icon={ChartColumnIcon}
@@ -156,8 +154,20 @@ export default async function AnalysisPage({ searchParams }: PageProps<"/analysi
       ) : (
         <div className="flex flex-col gap-12">
           {ordered.map((c) => (
-            <CurrencySection key={c.currency} data={c} period={period} days={report.days} month={report.month} showCode={ordered.length > 1} anyTarget={anyTarget} />
+            <CurrencySection
+              key={c.currency}
+              data={c}
+              period={period}
+              days={report.days}
+              month={report.month}
+              showCode={ordered.length > 1}
+              anyTarget={anyTarget}
+              insights={kind !== "range" ? <CurrencyInsights c={c} ctx={ctx} /> : undefined}
+              showTrend={kind !== "week"}
+            />
           ))}
+          {kind !== "range" && <PeriodExtras ctx={ctx} />}
+          {nwLine}
         </div>
       )}
     </div>

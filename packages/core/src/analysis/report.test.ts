@@ -71,6 +71,8 @@ describe("analysisReport", () => {
     expect(usd.typical).toEqual({ periods: 28, perPeriodMinor: Math.round((4 * 4650 + 9000) / 28), dailyMinor: Math.round((4 * 4650 + 9000) / 28) });
     expect(usd.unusual).toEqual([expect.objectContaining({ kind: "larger_than_usual", merchant: "Corner Cafe", minor: 2600, usualMinor: 650 })]);
     expect(cny).toMatchObject({ spendingMinor: 3800, partialSources: ["wechat"] });
+    // Top merchants are not a comparison: a partial currency still has them.
+    expect(cny.topMerchants).toEqual([{ merchant: "Maple Noodles", minor: 3800, count: 1, share: 10000 }]);
     expect(r.partial).toEqual({ CNY: ["wechat"] });
     expect(r.arrivals).toEqual([
       { source: "plaid", count: 3 },

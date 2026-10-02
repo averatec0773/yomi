@@ -6,7 +6,6 @@ import {
   HourglassIcon,
   InboxIcon,
   LightbulbIcon,
-  ListIcon,
   type LucideIcon,
   MinusIcon,
   StoreIcon,
@@ -293,35 +292,67 @@ export function AttentionCard({ ctx }: { ctx: InsightContext }) {
   );
 }
 
+/** Where the money went, by merchant: shown whatever the data's completeness (it is not a comparison). */
+export function TopMerchantsCard({ c, ctx }: { c: AnalysisCurrency; ctx: InsightContext }) {
+  const { t, report } = ctx;
+  const code = ctx.showCode && <span className="ml-2 text-meta font-normal text-3">{c.currency}</span>;
+  return (
+    <ListCard icon={StoreIcon} title={<>{t.analysis.topMerchants}{code}</>} data-testid="insights-merchants">
+      {c.topMerchants.length === 0 ? (
+        <p className="px-4 py-4 text-body text-2 md:px-5">{t.stats.noSpending}</p>
+      ) : (
+        <ol className="divide-y divide-line-soft">
+          {c.topMerchants.map((m) => (
+            <li key={m.merchant}>
+              <Link
+                href={`/transactions?${new URLSearchParams({ from: report.from, to: report.to, q: m.merchant }).toString()}`}
+                className="flex h-12 items-center gap-3 px-4 transition-colors duration-[120ms] hover:bg-sunken md:px-5"
+              >
+                <span className="min-w-0 flex-1 truncate">{m.merchant}</span>
+                <span className="num shrink-0 text-meta text-3">{plural(t.stats.categoryCount, m.count)}</span>
+                <span className="num w-10 shrink-0 text-right text-meta text-2">{m.share > 0 && m.share < 100 ? "<1%" : `${Math.round(m.share / 100)}%`}</span>
+                <Money minor={m.minor} currency={c.currency} />
+              </Link>
+            </li>
+          ))}
+        </ol>
+      )}
+    </ListCard>
+  );
+}
+
 /**
- * Insights for a week, month or year: per currency the observations next to the largest rows, then investments and
- * anything that needs attention. Fixed periods only; a custom range shows the neutral numbers alone.
+ * Insights for one currency of a week, month or year (between its summary card and the full numbers): the
+ * observations next to the largest rows and the top merchants.
  */
-export function PeriodInsights({ ctx }: { ctx: InsightContext }) {
+export function CurrencyInsights({ c, ctx }: { c: AnalysisCurrency; ctx: InsightContext }) {
+  const a = ctx.t.analysis;
+  const rows = currencyInsightRows(c, ctx, { comparePrevious: true });
+  return (
+    <div className="grid items-start gap-6 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]" data-testid={`insights-${c.currency}`}>
+      <ListCard icon={LightbulbIcon} title={fmt(a.insightsFor, { currency: c.currency })}>
+        <ul className="divide-y divide-line-soft">
+          {rows.length > 0 ? rows : <InsightRow icon={InboxIcon}>{<span className="text-2">{a.nothingStandsOut}</span>}</InsightRow>}
+        </ul>
+      </ListCard>
+      <div className="flex min-w-0 flex-col gap-6">
+        <LargestCard c={c} ctx={ctx} />
+        <TopMerchantsCard c={c} ctx={ctx} />
+      </div>
+    </div>
+  );
+}
+
+/** After the currencies: partial currencies without rows, investments and anything that needs attention. */
+export function PeriodExtras({ ctx }: { ctx: InsightContext }) {
   const { report, t } = ctx;
   const a = t.analysis;
   const extra = Object.keys(report.partial).filter((cur) => !report.currencies.some((c) => c.currency === cur));
+  if (extra.length === 0 && !report.investments && report.attention.length === 0) return null;
   return (
-    <section aria-label={a.insights} data-testid="insights" className="mb-12 flex flex-col gap-6">
-      <h2 className="flex items-center gap-2 text-title font-semibold">
-        <LightbulbIcon className="size-[18px] text-2" aria-hidden />
-        {a.insights}
-      </h2>
-      {report.currencies.map((c) => {
-        const rows = currencyInsightRows(c, ctx, { comparePrevious: true });
-        return (
-          <div key={c.currency} className="grid items-start gap-6 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]" data-testid={`insights-${c.currency}`}>
-            <ListCard icon={ListIcon} title={fmt(a.insightsFor, { currency: c.currency })}>
-              <ul className="divide-y divide-line-soft">
-                {rows.length > 0 ? rows : <InsightRow icon={InboxIcon}>{<span className="text-2">{a.nothingStandsOut}</span>}</InsightRow>}
-              </ul>
-            </ListCard>
-            <LargestCard c={c} ctx={ctx} />
-          </div>
-        );
-      })}
+    <section aria-label={a.insights} data-testid="insights-extras" className="flex flex-col gap-6">
       {extra.map((cur) => (
-        <ListCard key={cur} icon={ListIcon} title={fmt(a.insightsFor, { currency: cur })} data-testid={`insights-${cur}`}>
+        <ListCard key={cur} icon={LightbulbIcon} title={fmt(a.insightsFor, { currency: cur })} data-testid={`insights-${cur}`}>
           <ul>
             <InsightRow icon={HourglassIcon} testId="insight-partial">
               <PartialLine keys={report.partial[cur]!} ctx={ctx} />

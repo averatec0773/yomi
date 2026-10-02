@@ -624,6 +624,7 @@ export const zhCN: Dictionary = {
     possibleDuplicate: "{merchant}可能重复：{date} {source}和{other}各有一笔 {amount}",
     newMerchants: { one: "新商户：{list}", other: "新商户：{list}" },
     largest: "最大的几笔",
+    topMerchants: "常去的商户",
     dayRows: "当天支出",
     seeAll: { one: "在交易中查看", other: "在交易中查看全部 {count} 笔" },
     spentOn: "{date} {currency} 支出",
