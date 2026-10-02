@@ -58,9 +58,10 @@ Press ⌘K (Ctrl+K) anywhere. Word order does not matter, and English and Chines
 
 Dates: `today`, `yesterday`, weekday names (`mon`, `last fri`), `9/28`, `2026-09-28`, `今天`, `昨天`, `前天`, `周一`, `9月28日`. Currency: `$`, `usd`, `dollars` for USD; `¥`, `rmb`, `yuan`, `元`, `块` for CNY. Pasting an ICBC card SMS alert adds that charge.
 
-## Stats and assets
+## Analysis and assets
 
-- **Stats** covers any period: spending by category, the largest items, a monthly target, small payments and net worth change. Links of the form `/stats?month=YYYY-MM` and `/transactions?month=YYYY-MM` open that month.
+- **Analysis** covers any period. Pick Day, Week, Month or Year (weeks start on Monday; Day opens on yesterday, and today reads "so far"), or a preset or custom range from the period menu. For a day, week, month or year, Insights on top compare with the previous period and with a typical one, and list category shifts, unusual and largest items, new merchants, the monthly target and how investments moved (deposits apart from the market). Below are the full numbers: spending by category, small payments, the monthly trend and net worth change. Links of the form `/analysis?month=YYYY-MM` and `/transactions?month=YYYY-MM` open that month.
+- **Data freshness:** the Sources button lists how far each source reaches (the last day of each imported file, or the last bank sync). When a source ends before the period does, that currency reads "Partial" and its comparisons wait until the data is complete; other currencies are not affected.
 - **Assets** shows net worth across currencies, cash and card balances, and brokerage holdings with unrealized gains.
 
 ## Update yomi

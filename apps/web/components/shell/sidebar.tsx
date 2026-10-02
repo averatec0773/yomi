@@ -65,7 +65,7 @@ const tone = (active: boolean) => (active ? "bg-primary-soft font-medium text-fo
 
 /**
  * Desktop navigation (md and up): 232px, collapsible to a 64px icon rail (state in localStorage, applied before paint
- * through html[data-sidebar]). Transactions, Stats, Assets, then the "Tools" group: a small label linking to /tools and
+ * through html[data-sidebar]). Transactions, Analysis, Assets, then the "Tools" group: a small label linking to /tools and
  * the sub-items Split and settle, Import, Rules (36px, indented). The group's open state is remembered through
  * html[data-tools]; the rail always shows the sub-item icons. Items show their second key only while the leader is held;
  * the active one uses the soft accent. No balances here.

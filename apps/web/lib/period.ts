@@ -55,8 +55,13 @@ export function rangeLabel(from: string, to: string, locale: Locale): string {
   return `${ymd(from)} 至 ${sameYear ? md(to) : ymd(to)}`;
 }
 
-/** How the previous period reads in a comparison: "last month", "last year", "the previous 3 months", "the previous 10 days". */
+/**
+ * How the previous period reads in a comparison: "the day before", "last week" (seven days from a Monday), "last month",
+ * "last year", "the previous 3 months", "the previous 10 days".
+ */
 export function previousLabel(from: string, to: string, lengthDays: number, t: Dictionary): string {
+  if (from === to) return t.stats.previous.day;
+  if (lengthDays === 7 && utcDate(from).getUTCDay() === 1) return t.stats.previous.week;
   const months = wholeMonthCount(from, to);
   if (months === 1) return t.stats.previous.month;
   if (months === 12 && from.slice(5, 7) === "01") return t.stats.previous.year;

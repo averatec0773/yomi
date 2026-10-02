@@ -20,7 +20,7 @@ A self-hosted personal ledger for people whose money lives in both the US and Ch
 - **CNY and USD side by side.** Amounts keep their own currency and are never summed across currencies without a stated rate.
 - **Split and settle.** Tag rows with the people who share them, see what is open per person and currency, and send a clean statement as PDF, image or text with your payment QR codes.
 - **Bank and brokerage sync** through Plaid (with your own keys) and Interactive Brokers Flex.
-- **Stats and assets:** spending by category for any period, monthly targets, net worth and holdings.
+- **Analysis and assets:** daily, weekly, monthly and yearly insights (vs typical, unusual items, data freshness), spending by category for any period, monthly targets, net worth and holdings.
 - **Quick entry and a bilingual UI:** press ⌘K and type `lunch 35 @Alex`; English and Simplified Chinese, light and dark themes.
 
 ## Quick start

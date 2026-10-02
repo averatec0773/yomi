@@ -1,7 +1,7 @@
 import { CardSkeleton, HeaderSkeleton, Skeleton } from "@/components/skeleton";
 import { getI18n } from "@/i18n/server";
 
-/** Shown while /stats loads or changes period: summary card, trend and category rows as placeholders. */
+/** Shown while /analysis loads or changes period: summary card, trend and category rows as placeholders. */
 export default async function Loading() {
   const { t } = await getI18n();
   return (

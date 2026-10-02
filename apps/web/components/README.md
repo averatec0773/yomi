@@ -46,7 +46,7 @@ Use these instead of the raw shadcn primitives in `components/ui/`.
 |-----------|------------|
 | `Button`, `buttonClass` | The one button: variants primary, soft, outline (default), ghost, quiet, danger; sizes `md` 40 px and `sm` 32 px |
 | `PageHeader` | Title, page controls (the `PeriodBar`), actions, an optional meta line; adds the "Tools" crumb on Tools pages |
-| `PeriodBar`, `periodHref` | Previous / label / next plus presets and a custom range, written to the URL |
+| `PeriodBar`, `periodHref` | Previous / label / next plus presets and a custom range, written to the URL; `presets="analysis"` adds the day and week presets, `notAfter` stops next at a day |
 | `StatCard` | Summary numbers |
 | `ListCard` | A bordered list of records with a title, icon, count and aside |
 | `EmptyState` | Icon tile, one sentence, at most one action |
@@ -61,7 +61,7 @@ Use these instead of the raw shadcn primitives in `components/ui/`.
 
 Other shared pieces: `Money` (every amount renders from integer minor units through it), `CategoryPill`, `CategoryTile` and `sourceIcon`, `CsvLink`, the skeletons in `skeleton.tsx`, and `Guide` from `components/bank/secret-form.tsx` (numbered how-to steps with external links and a "Last checked" line, used in Settings > Connections and on the Import page).
 
-Feature folders (`transactions/`, `split/`, `stats/`, `assets/`, `bank/`, `import/`, `payment/`, `tools/`, `shell/`) hold components used by one area; read the file header comments there.
+Feature folders (`transactions/`, `split/`, `stats/` (the neutral numbers on Analysis), `analysis/` (Insights, the Day view, Sources), `assets/`, `bank/`, `import/`, `payment/`, `tools/`, `shell/`) hold components used by one area; read the file header comments there.
 
 ## Helpers (`lib/`)
 

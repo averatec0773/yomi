@@ -20,7 +20,8 @@ export interface PeriodBarData {
   label: string;
   presets: { value: string; label: string; href: string; active: boolean }[];
   prevHref: string;
-  nextHref: string;
+  /** Null: there is no next period yet (Analysis stops at today). */
+  nextHref: string | null;
   /** The custom range GET form: action path, params to carry, prefilled dates. */
   custom: { action: string; keep: [string, string][]; from: string; to: string; open: boolean; error?: string | null; active: boolean };
 }
@@ -66,9 +67,15 @@ export function PeriodBarClient({ label, presets, prevHref, nextHref, custom }: 
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        <Link href={nextHref} aria-label={tp.next} className={arrow} scroll={false}>
-          <ChevronRightIcon aria-hidden />
-        </Link>
+        {nextHref ? (
+          <Link href={nextHref} aria-label={tp.next} className={arrow} scroll={false}>
+            <ChevronRightIcon aria-hidden />
+          </Link>
+        ) : (
+          <span role="link" aria-label={tp.next} aria-disabled="true" className={cn(arrow, "pointer-events-none opacity-40")}>
+            <ChevronRightIcon aria-hidden />
+          </span>
+        )}
       </nav>
       {open && (
         <form action={custom.action} method="get" aria-label={tp.customForm} className="flex basis-full flex-wrap items-center gap-2 text-body">

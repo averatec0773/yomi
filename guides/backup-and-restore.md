@@ -70,7 +70,7 @@ If one import went wrong, you do not need a full restore: open **Import**, find 
 
 ## Export as CSV
 
-CSV export is for spreadsheets, not for restoring. It is available on Transactions, Stats (any period) and each statement on Split and settle, as UTF-8 with a byte order mark so Excel opens Chinese text correctly.
+CSV export is for spreadsheets, not for restoring. It is available on Transactions, Analysis (any period) and each statement on Split and settle, as UTF-8 with a byte order mark so Excel opens Chinese text correctly.
 
 ## Troubleshooting
 
