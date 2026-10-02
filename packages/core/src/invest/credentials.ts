@@ -1,4 +1,4 @@
-import { createFlexClient, type FlexClientOptions, FlexError, type FlexRange, FLEX_SECTION_IDS, type FlexSectionId, mapFlexStatement } from "@yomi/importers";
+import { createFlexClient, type FlexClientOptions, FlexError, type FlexRange, mapFlexStatement } from "@yomi/importers";
 import type { Db } from "@yomi/db";
 import {
   auditSecretChange,
@@ -18,6 +18,7 @@ import { getTimeZone } from "../settings/time-zone";
 import { clockNow, todayIn } from "../time/zone";
 import type { CurrentUser } from "../user";
 import { IBKR_QUERY_ENV, IBKR_TOKEN_ENV, type IbkrConfig, type IbkrSource, toInvestError } from "./ibkr";
+import { type IbkrSectionItem, ibkrQueryKey, nextSectionsRecord, recordIbkrSections } from "./sections";
 import { lastCompletedTradingDay, previousWeekday } from "./time";
 
 /** user_settings keys (per user). Token and query id are sealed (`enc:v1:`); the expiry date is plain. */
@@ -43,7 +44,10 @@ export async function resolveIbkrCredentials(q: Q, user: CurrentUser, env: NodeJ
 
 /** configured + the names of what is missing (env variable names, which also name the Settings fields). */
 export async function resolveIbkrConfig(q: Q, user: CurrentUser, env: NodeJS.ProcessEnv = process.env): Promise<IbkrConfig> {
-  const c = await resolveIbkrCredentials(q, user, env);
+  return ibkrConfigOf(await resolveIbkrCredentials(q, user, env));
+}
+
+export function ibkrConfigOf(c: IbkrCredentials): IbkrConfig {
   const missing = [c.token.value ? null : IBKR_TOKEN_ENV, c.queryId.value ? null : IBKR_QUERY_ENV].filter((x): x is string => x != null);
   return { configured: missing.length === 0, missing };
 }
@@ -63,6 +67,7 @@ export const FLEX_UNPUBLISHED_CODES = new Set(["1003", "1020"]);
 export function ibkrSourceFor(token: string, queryId: string, opts: FlexOptions = {}): IbkrSource {
   const client = createFlexClient({ ...opts, token: token.trim(), queryId: queryId.trim() });
   return {
+    queryKey: ibkrQueryKey(queryId),
     async fetchStatement(range?: FlexRange) {
       try {
         try {
@@ -95,25 +100,36 @@ export interface IbkrTestResult {
   /** Positions (not cash) in the statement. */
   positions: number;
   accounts: number;
-  /** The query sections yomi reads, in a fixed order, and whether the statement had each one (empty ones count). */
-  sections: { id: FlexSectionId; present: boolean }[];
+  /**
+   * The query sections yomi reads, in a fixed order: present, missing, or unknown (Trades and Cash Transactions
+   * absent on this one-day window, which proves nothing). With `record`, earlier pulls of the same query count too.
+   */
+  sections: IbkrSectionItem[];
 }
 
 /**
  * "Test connection": pulls the query once through the real flow (for the last completed trading day only) and
- * reports the statement date, positions and which of the sections yomi reads the query has.
- * Stores nothing. Throws InvestError (token expired, invalid, query invalid, rate limited, …).
+ * reports the statement date, positions and which of the sections yomi reads the query has. Stores nothing but,
+ * with `record` (the test ran on the saved query), the sections this pull had. Throws InvestError (token expired,
+ * invalid, query invalid, rate limited, …).
  */
-export async function testIbkrCredentials(token: string, queryId: string, opts: FlexOptions = {}, now: Date = clockNow()): Promise<IbkrTestResult> {
+export async function testIbkrCredentials(
+  token: string,
+  queryId: string,
+  opts: FlexOptions = {},
+  now: Date = clockNow(),
+  record?: { q: Q; user: CurrentUser },
+): Promise<IbkrTestResult> {
   // One day is enough to check the token and the query, whatever period the query has saved.
   const day = lastCompletedTradingDay(now);
   const s = await ibkrSourceFor(token, queryId, { maxWaitMs: 2 * 60 * 1000, ...opts }).fetchStatement({ from: day, to: day });
-  const present = new Set(s.sections ?? []);
+  const pull = { at: new Date().toISOString(), from: day, to: day, present: s.sections ?? [], query: ibkrQueryKey(queryId) };
+  const sections = (record ? await recordIbkrSections(record.q, record.user, pull) : nextSectionsRecord(null, pull)).sections;
   return {
     statementDate: s.asOf,
     positions: s.holdings.filter((h) => h.securityExternalId != null).length,
     accounts: s.accounts.length,
-    sections: FLEX_SECTION_IDS.map((id) => ({ id, present: present.has(id) })),
+    sections,
   };
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2Icon, PlugZapIcon, SaveIcon, Trash2Icon, TriangleAlertIcon } from "lucide-react";
+import { PlugZapIcon, SaveIcon, Trash2Icon } from "lucide-react";
 import type { IbkrSaveInput, IbkrTestResult, SecretsView } from "@yomi/contracts";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -8,13 +8,11 @@ import { toast } from "sonner";
 import { Sheet, TextInput } from "@/components/split/ui";
 import { Button } from "@/components/ui-kit/button";
 import { Dialog, DialogClose } from "@/components/ui/dialog";
-import { plural } from "@/i18n";
-import { useLocale, useT } from "@/i18n/client";
+import { useT } from "@/i18n/client";
 import { errorText } from "@/i18n/errors";
 import { apiFetch } from "@/lib/api";
-import { dayLabel } from "@/lib/month";
 import { ConfirmRemove } from "./confirm-remove";
-import { missingSectionNotes } from "./ibkr-sections";
+import { IbkrTestReport, type IbkrTestState } from "./ibkr-test-dialog";
 import { Guide, KeyNote, SecretInput, UntestedToggle } from "./secret-form";
 
 /** IBKR pages the steps link to (checked on IBKR_GUIDE_CHECKED_ON). */
@@ -26,8 +24,6 @@ const IBKR_LINKS = {
 };
 /** When the IBKR steps were last compared with the pages above (update with the copy). */
 const IBKR_GUIDE_CHECKED_ON = "2026-10-01";
-
-type TestState = { kind: "idle" } | { kind: "testing" } | { kind: "ok"; result: IbkrTestResult } | { kind: "error"; text: string };
 
 /**
  * Settings > Connections > Interactive Brokers: "Set up" / "Replace token" (md dialog). Guide, Flex query ID
@@ -55,7 +51,6 @@ export function IbkrSetupDialog({
 
 function IbkrSetupSheet({ ibkr, keyInfo, onDone }: { ibkr: SecretsView["ibkr"]; keyInfo: SecretsView["key"]; onDone: () => void }) {
   const t = useT();
-  const locale = useLocale();
   const router = useRouter();
   const s = t.secrets;
   const i = s.ibkr;
@@ -63,7 +58,7 @@ function IbkrSetupSheet({ ibkr, keyInfo, onDone }: { ibkr: SecretsView["ibkr"]; 
   const savedQueryId = ibkr.queryId.source === "settings" ? (ibkr.queryId.value ?? "") : "";
   const [queryId, setQueryId] = useState(savedQueryId);
   const [expiresOn, setExpiresOn] = useState(ibkr.expiresOn ?? "");
-  const [test, setTest] = useState<TestState>({ kind: "idle" });
+  const [test, setTest] = useState<IbkrTestState>({ kind: "idle" });
   const [untested, setUntested] = useState(false);
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState(false);
@@ -91,6 +86,9 @@ function IbkrSetupSheet({ ibkr, keyInfo, onDone }: { ibkr: SecretsView["ibkr"]; 
       setTest({ kind: "ok", result });
     } catch (e) {
       setTest({ kind: "error", text: errorText(e, t) });
+    } finally {
+      // A test on the saved query updates the section note on the row.
+      router.refresh();
     }
   }
 
@@ -183,19 +181,7 @@ function IbkrSetupSheet({ ibkr, keyInfo, onDone }: { ibkr: SecretsView["ibkr"]; 
             <PlugZapIcon aria-hidden />
             {test.kind === "testing" ? s.testing : s.test}
           </Button>
-          <div role="status" className="flex flex-col gap-1 text-meta text-2" data-testid="ibkr-test-result">
-            {test.kind === "testing" && <span>{s.testSlow}</span>}
-            {test.kind === "ok" && (
-              <>
-                <span className="inline-flex items-center gap-1.5 text-foreground">
-                  <CheckCircle2Icon className="size-3.5 text-2" aria-hidden />
-                  {plural(i.testOk, test.result.positions, { date: dayLabel(test.result.statementDate, locale, { year: true }) })}
-                </span>
-                <SectionsReport sections={test.result.sections} />
-              </>
-            )}
-            {test.kind === "error" && <span className="text-foreground">{test.text}</span>}
-          </div>
+          <IbkrTestReport test={test} />
         </div>
         <KeyNote keyInfo={keyInfo} />
       </div>
@@ -210,28 +196,5 @@ function IbkrSetupSheet({ ibkr, keyInfo, onDone }: { ibkr: SecretsView["ibkr"]; 
         testId="ibkr-remove-dialog"
       />
     </Sheet>
-  );
-}
-
-/** After a successful test: all six sections there, or each missing one with what yomi will lack. */
-function SectionsReport({ sections }: { sections: IbkrTestResult["sections"] }) {
-  const t = useT();
-  const i = t.secrets.ibkr;
-  const notes = missingSectionNotes(sections, t);
-  if (!notes) return <span data-testid="ibkr-test-sections">{i.sectionsAll}</span>;
-  return (
-    <div className="flex flex-col gap-1" data-testid="ibkr-test-sections">
-      <span className="inline-flex items-center gap-1.5 text-foreground">
-        <TriangleAlertIcon className="size-3.5 text-2" aria-hidden />
-        {i.sectionsMissing}
-      </span>
-      <ul className="flex list-disc flex-col gap-0.5 pl-5">
-        {notes.map((n) => (
-          <li key={n.id}>
-            <span className="font-medium text-foreground">{n.name}</span>: {n.effect}
-          </li>
-        ))}
-      </ul>
-    </div>
   );
 }

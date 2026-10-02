@@ -114,11 +114,15 @@ export function secretsRoutes(deps: SecretsDeps): Hono {
   r.post("/ibkr/test", async (c) => {
     assertSecure(c);
     const body = await readJson(c, IbkrTestInput);
-    const current = await resolveIbkrCredentials(await deps.getDb(), getCurrentUser(), env());
+    const db = await deps.getDb();
+    const user = getCurrentUser();
+    const current = await resolveIbkrCredentials(db, user, env());
     const token = body.token ?? current.token.value;
     const queryId = body.queryId ?? current.queryId.value;
     if (!token || !queryId) throw new BadRequest("secrets_ibkr_incomplete", "Enter the Flex token and the query ID first");
-    const out = await testIbkrCredentials(token, queryId, deps.ibkrFlex);
+    // On the saved query the sections it had are recorded (the row shows them); a query being tried out is not.
+    const saved = queryId.trim() === current.queryId.value?.trim();
+    const out = await testIbkrCredentials(token, queryId, deps.ibkrFlex, undefined, saved ? { q: db, user } : undefined);
     return c.json({ ok: true, ...out } satisfies IbkrTestResult);
   });
 

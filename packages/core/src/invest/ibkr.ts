@@ -22,6 +22,8 @@ export function ibkrConfig(env: NodeJS.ProcessEnv = process.env): IbkrConfig {
 export interface IbkrSource {
   /** `range` overrides the period saved in the query (SendRequest `p`, or `fd`/`td`). */
   fetchStatement(range?: FlexRange): Promise<InvestStatement>;
+  /** `ibkrQueryKey` of the query, so the sections each pull had are recorded for it (absent on injected sources). */
+  queryKey?: string;
 }
 
 /** The longest window yomi asks for: IBKR's limit for a SendRequest override. */

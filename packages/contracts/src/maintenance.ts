@@ -2,6 +2,7 @@ import { z } from "zod";
 import { Locale } from "./common";
 import { DateString } from "./ledger";
 import { optionalEmail, optionalPhone } from "./payment";
+import { IbkrSectionItem } from "./secrets";
 
 export const BackupResult = z.object({ path: z.string(), fileName: z.string() });
 export type BackupResult = z.infer<typeof BackupResult>;
@@ -80,6 +81,8 @@ export const SettingsStatus = z.object({
     positions: z.int().nonnegative(),
     expectedAsOf: z.string(),
     errorCode: z.string().nullable(),
+    /** Flex sections of the current query as of its latest pull (`at`, window `from`..`to`), null before the first. */
+    sectionCheck: z.object({ at: z.string(), from: DateString, to: DateString, sections: z.array(IbkrSectionItem) }).nullable(),
   }),
   security: z.object({
     key: z.enum(["present", "missing", "malformed"]),

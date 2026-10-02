@@ -1690,6 +1690,14 @@ export const zhCN: Dictionary = {
         one: "IBKR {from} 至 {to} 的记录：新增 1 笔",
         other: "IBKR {from} 至 {to} 的记录：新增 {count} 笔",
       },
+      testTitle: "测试 IBKR 连接",
+      testDescription: "用 yomi 当前使用的令牌和查询 ID 拉取最近一个交易日。持仓和记录不会改动。",
+      testAgain: "再测一次",
+      sectionMissingRow: "Flex 查询里没有 {name}，yomi 将看不到{effect}。",
+      sectionsFix: {
+        one: "请在 Client Portal 的 Flex Queries 里把它加进查询，下次拉取时会再检查。",
+        other: "请在 Client Portal 的 Flex Queries 里把它们加进查询，下次拉取时会再检查。",
+      },
     },
   },
   secrets: {
@@ -1745,6 +1753,8 @@ export const zhCN: Dictionary = {
       testOk: { one: "已连接。{date} 的结算单，1 个持仓。", other: "已连接。{date} 的结算单，{count} 个持仓。" },
       sectionsAll: "yomi 需要的 6 个部分都在查询里。",
       sectionsMissing: "结算单里没有这些部分，yomi 将看不到：",
+      sectionsRest: "yomi 需要的其他部分都在查询里。",
+      sectionsUnknown: "这一天没有相关活动，暂时无法确认：{names}。同步或拉取 30 天及以上的历史时会再检查。",
       sections: {
         accountInformation: "Account Information",
         openPositions: "Open Positions",

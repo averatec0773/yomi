@@ -40,7 +40,10 @@ normalized `InvestStatement` (`../invest.ts`). Storage, scheduling and FX live i
   last row. Core stores them in `investment_daily_nav` (upsert per account and day) and uses them on days
   without holding snapshots.
 - **Sections present** `statement.sections` lists which of the six sections yomi reads appear as elements
-  (`FLEX_SECTIONS`, empty ones included); Test connection reports the missing ones.
+  (`FLEX_SECTIONS`, empty ones included). Core records them on every pull of the saved query (scheduled, Sync
+  now, Pull history, Test connection; `core/invest/sections.ts`) and the Settings row names the missing ones.
+  IBKR may leave Trades and Cash Transactions out of a statement whose window had no such activity (not yet
+  confirmed on a real statement), so their absence counts as missing only on a window of 30 days or more.
 - **Period override** `fetchStatement(range)` sends `p` for `{ days }` or `fd`/`td` for `{ from, to }`
   (YYYY-MM-DD in, yyyymmdd out), never both. Where the docs are silent yomi is conservative: both ends count as
   inclusive, so a span may cover at most 365 calendar days; days must be a whole number 1 to 365; invalid input

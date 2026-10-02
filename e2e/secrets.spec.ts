@@ -102,6 +102,23 @@ test("IBKR: set up with a tested token, sync, replace and remove; the token neve
   await expect(page.getByText(/^Synced: Interactive Brokers, 5 positions/)).toBeVisible({ timeout: 20_000 });
   await expect(meta).toContainText(/Synced (just now|\d+ (second|minute)s? ago)/);
   expect(await page.content()).not.toContain(TOKEN);
+  // The sync recorded the query's sections: the row names the missing one without any test.
+  const note = ibkr.getByTestId("ibkr-sections-note");
+  await expect(note).toContainText("Net Asset Value (NAV) in Base is not in the Flex query, so yomi misses earlier history");
+  await expect(note).toContainText("Add it to the query in Client Portal under Flex Queries");
+  await expect(note).not.toContainText("Trades");
+
+  // Test connection from the menu: the saved token and query, no form; the result stays in a small dialog.
+  await ibkr.getByRole("button", { name: "More actions for Interactive Brokers" }).click();
+  await page.getByRole("menuitem", { name: "Test connection" }).click();
+  const testDialog = page.getByRole("dialog", { name: "Test the IBKR connection" });
+  await expect(testDialog.getByTestId("ibkr-test-result")).toContainText("Connected. Statement for Sep 28, 2026, 3 positions.", { timeout: 20_000 });
+  await expect(testDialog.getByTestId("ibkr-test-sections").getByRole("listitem")).toHaveCount(1);
+  await expect(testDialog.getByTestId("ibkr-test-sections")).toContainText("Net Asset Value (NAV) in Base: earlier history");
+  await expect(testDialog.getByLabel("Flex token")).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(testDialog).toBeHidden();
+  await expect(note).toContainText("Net Asset Value (NAV) in Base");
 
   // Pull history: a number of days within IBKR's 365-day limit, ending on the last trading day (Tuesday 09-29 at
   // the pinned clock); a second pull within 10 minutes is refused with the reason, in the dialog.

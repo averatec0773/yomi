@@ -1767,6 +1767,14 @@ export const en = {
         one: "IBKR activity from {from} to {to}: 1 new transaction",
         other: "IBKR activity from {from} to {to}: {count} new transactions",
       },
+      testTitle: "Test the IBKR connection",
+      testDescription: "Pulls the last trading day with the token and query ID yomi uses now. Holdings and activity stay as they are.",
+      testAgain: "Test again",
+      sectionMissingRow: "{name} is not in the Flex query, so yomi misses {effect}.",
+      sectionsFix: {
+        one: "Add it to the query in Client Portal under Flex Queries; the next pull checks again.",
+        other: "Add them to the query in Client Portal under Flex Queries; the next pull checks again.",
+      },
     },
   },
   secrets: {
@@ -1822,6 +1830,8 @@ export const en = {
       testOk: { one: "Connected. Statement for {date}, 1 position.", other: "Connected. Statement for {date}, {count} positions." },
       sectionsAll: "All 6 sections yomi reads are in the query.",
       sectionsMissing: "Not in the statement, so yomi will miss:",
+      sectionsRest: "The other sections yomi reads are in the query.",
+      sectionsUnknown: "No activity on this day, so not checked yet: {names}. A sync or history pull of 30 days or more checks them.",
       sections: {
         accountInformation: "Account Information",
         openPositions: "Open Positions",

@@ -7,6 +7,7 @@ import { BankProviderError, type BankProvider } from "../sync/provider";
 import type { CurrentUser } from "../user";
 import { InvestError } from "./errors";
 import { ibkrWindow, type IbkrSource } from "./ibkr";
+import { recordIbkrSections } from "./sections";
 import { latestSnapshotDate, writeStatement, type WriteStatementResult } from "./store";
 import { clockNow } from "../time/clock";
 import { addDays, lastCompletedTradingDay, marketClock } from "./time";
@@ -68,8 +69,9 @@ const text = (e: unknown) => (e instanceof Error ? e.message : String(e));
  * re-running on the same day overwrites that day. IBKR: the configured Activity Flex Query for the window
  * of `ibkrWindow` (365 days on the first pull, from shortly before the last stored statement afterwards,
  * `ibkrHistoryDays` when the user asks for history), always ending on the expected trading day, dated by
- * its statement `toDate`. Plaid: every active brokerage connection, dated by today's New York date,
- * with a per-connection cursor (last pull's end date) that bounds the transactions window.
+ * its statement `toDate`, recording which Flex sections the statement had (`recordIbkrSections`). Plaid: every
+ * active brokerage connection, dated by today's New York date, with a per-connection cursor (last pull's end
+ * date) that bounds the transactions window.
  * A single named provider that is not configured throws InvestError; "all" skips it. Failures of
  * individual pulls are collected, never partially written.
  */
@@ -94,7 +96,9 @@ export async function syncHoldings(
         const expectedAsOf = lastCompletedTradingDay(now());
         const range = ibkrWindow(expectedAsOf, await latestSnapshotDate(db, user, "ibkr"), opts.ibkrHistoryDays);
         const st = await deps.ibkr.fetchStatement(range);
-        out.results.push({ provider: "ibkr", connectionId: null, expectedAsOf, stale: st.asOf < expectedAsOf, range, ...(await writeStatement(db, user, st)) });
+        const written = await writeStatement(db, user, st);
+        if (st.sections) await recordIbkrSections(db, user, { at: new Date().toISOString(), ...range, present: st.sections, query: deps.ibkr.queryKey ?? null });
+        out.results.push({ provider: "ibkr", connectionId: null, expectedAsOf, stale: st.asOf < expectedAsOf, range, ...written });
       } catch (e) {
         if (opts.provider === "ibkr") throw e;
         out.errors.push({ provider: "ibkr", connectionId: null, ...investErrorOf(e, "ibkr") });

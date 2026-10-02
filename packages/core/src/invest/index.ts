@@ -8,3 +8,4 @@ export * from "./overview";
 export * from "./job";
 export * from "./status";
 export * from "./credentials";
+export * from "./sections";

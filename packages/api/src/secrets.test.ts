@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { IbkrTestResult, InvestConfig, InvestSyncResult, SecretsView } from "@yomi/contracts";
+import { IbkrTestResult, InvestConfig, InvestSyncResult, SecretsView, SettingsStatus } from "@yomi/contracts";
 import { configureKeyFile, seed } from "@yomi/core";
 import { userSettings } from "@yomi/db";
 import { testDb } from "@yomi/db/testing";
@@ -116,11 +116,13 @@ describe("/api/settings/secrets", () => {
     const ok = await req("POST", "/settings/secrets/ibkr/test", { token: TOKEN, queryId: QUERY });
     const body = await ok.json();
     expect(body).toMatchObject({ ok: true, statementDate: "2026-09-28", positions: 4, accounts: 1 });
-    expect(IbkrTestResult.parse(body).sections.filter((x) => !x.present).map((x) => x.id)).toEqual(["nav"]);
+    expect(IbkrTestResult.parse(body).sections.filter((x) => x.state !== "present").map((x) => x.id)).toEqual(["nav"]);
     expect(flexCalls).toEqual(["SendRequest", "SendRequest", "GetStatement"]);
 
     await req("PUT", "/settings/secrets/ibkr", { token: TOKEN, queryId: QUERY });
     expect(InvestConfig.parse(await (await req("GET", "/invest/config")).json()).ibkr.configured).toBe(true);
+    // The test above ran before the query was saved: nothing recorded for the row.
+    expect(SettingsStatus.parse(await (await req("GET", "/settings/status")).json()).ibkr.sectionCheck).toBeNull();
     const sync = InvestSyncResult.parse(await (await req("POST", "/invest/sync", { provider: "ibkr" })).json());
     expect(sync.results[0]).toMatchObject({ provider: "ibkr", asOf: "2026-09-28", positions: 4 });
     expect(lines.filter((l) => l.includes("audit")).map((l) => l.replace(/ at .*$/, ""))).toEqual([
@@ -131,6 +133,41 @@ describe("/api/settings/secrets", () => {
     const removed = SecretsView.parse(await (await req("DELETE", "/settings/secrets/ibkr")).json());
     expect(removed.ibkr.token.configured).toBe(false);
     expect(InvestConfig.parse(await (await req("GET", "/invest/config")).json()).ibkr.configured).toBe(false);
+  });
+
+  it("Test connection with no fields tests the saved token and query and records the sections for the row", async () => {
+    const { req, flexCalls } = await setup();
+    expect((await req("POST", "/settings/secrets/ibkr/test", {})).status).toBe(400);
+    expect(flexCalls).toEqual([]);
+    await req("PUT", "/settings/secrets/ibkr", { token: TOKEN, queryId: QUERY });
+    const status = async () => SettingsStatus.parse(await (await req("GET", "/settings/status")).json()).ibkr;
+    expect((await status()).sectionCheck).toBeNull();
+
+    const res = await req("POST", "/settings/secrets/ibkr/test", {});
+    expect(res.status).toBe(200);
+    const body = IbkrTestResult.parse(await res.json());
+    expect(body).toMatchObject({ statementDate: "2026-09-28", positions: 4 });
+    expect(body.sections.map((x) => [x.id, x.state])).toEqual([
+      ["accountInformation", "present"],
+      ["openPositions", "present"],
+      ["cashReport", "present"],
+      ["trades", "present"],
+      ["cashTransactions", "present"],
+      ["nav", "missing"],
+    ]);
+    const check = (await status()).sectionCheck!;
+    expect(check.from).toBe(check.to);
+    expect(check.sections).toEqual(body.sections);
+    expect(JSON.stringify(check)).not.toContain(QUERY);
+
+    // Trying another query ID leaves the saved query's record alone.
+    expect((await req("POST", "/settings/secrets/ibkr/test", { queryId: "999999" })).status).toBe(200);
+    expect((await status()).sectionCheck).toEqual(check);
+
+    // Sync now records too: the first sync is a 365-day window.
+    await req("POST", "/invest/sync", { provider: "ibkr" });
+    const synced = (await status()).sectionCheck!;
+    expect([synced.from < synced.to, synced.sections.find((x) => x.id === "nav")?.state]).toEqual([true, "missing"]);
   });
 
   it("env values win and cannot be overwritten", async () => {
