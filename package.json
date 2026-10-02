@@ -1,6 +1,6 @@
 {
   "name": "yomi",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Self-hosted personal ledger for people whose money lives in both the US and China: Alipay, WeChat Pay, ICBC and US bank imports, splitting with roommates, monthly stats.",
   "license": "AGPL-3.0-only",
   "repository": {
