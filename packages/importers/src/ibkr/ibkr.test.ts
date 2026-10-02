@@ -165,6 +165,38 @@ describe("Flex XML mapping", () => {
     expect(st.transactions[4]!.securityExternalId).toBeNull();
   });
 
+  it("has no daily values when the NAV in Base section is absent", () => {
+    expect(st.navs).toEqual([]);
+  });
+
+  it("lists the sections present, empty ones included, in a fixed order", () => {
+    expect(st.sections).toEqual(["accountInformation", "openPositions", "cashReport", "trades", "cashTransactions"]);
+    const nav = mapFlexStatement(readFileSync(new URL("../../test/fixtures/ibkr/flex-nav.xml", import.meta.url), "utf8"));
+    expect(nav.sections).toEqual(["accountInformation", "cashTransactions", "nav"]);
+    const empty = mapFlexStatement(
+      '<FlexQueryResponse><FlexStatements><FlexStatement accountId="U1" toDate="2026-09-28"><Trades /><EquitySummaryInBase /></FlexStatement></FlexStatements></FlexQueryResponse>',
+    );
+    expect(empty.sections).toEqual(["trades", "nav"]);
+    expect([empty.navs, empty.transactions]).toEqual([[], []]);
+  });
+
+  it("reads NAV in Base: one total per report day, currency from the row else the account, other accounts skipped", () => {
+    const nav = mapFlexStatement(readFileSync(new URL("../../test/fixtures/ibkr/flex-nav.xml", import.meta.url), "utf8"));
+    // Sep 24 has no total; Sep 25 appears twice (the later row wins); the "-" row is a consolidated roll-up.
+    expect(nav.navs!.map((n) => [n.accountExternalId, n.date, n.currency, n.total])).toEqual([
+      ["U0000002", "2026-09-21", "USD", "990.62"],
+      ["U0000002", "2026-09-22", "USD", "998.37"],
+      ["U0000002", "2026-09-23", "USD", "1995.1"],
+      ["U0000002", "2026-09-25", "USD", "2002.105"],
+    ]);
+    expect(nav.navs![0]!.raw).toMatchObject({ element: "EquitySummaryByReportDateInBase", cash: "250.10", stock: "740.5" });
+    // Deposits/Withdrawals cash transactions are transfers, signed as cash into the account.
+    expect(nav.transactions.map((t) => [t.date, t.type, t.amount, t.securityExternalId])).toEqual([
+      ["2026-09-23", "transfer", "1000", null],
+      ["2026-09-24", "transfer", "-50", null],
+    ]);
+  });
+
   it("parses the Flex date formats", () => {
     expect(flexDate("20260928")).toBe("2026-09-28");
     expect(flexDate("2026-09-28;160000")).toBe("2026-09-28");

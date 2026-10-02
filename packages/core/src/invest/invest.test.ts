@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { bankAccounts, bankConnections, type Db, holdingSnapshots, investmentAccounts, investmentTransactions, jobs, plaidLinkSessions, securities } from "@yomi/db";
+import { bankAccounts, bankConnections, type Db, holdingSnapshots, investmentAccounts, investmentDailyNav, investmentTransactions, jobs, plaidLinkSessions, securities } from "@yomi/db";
 import { createPlaidClient, type InvestStatement, mapFlexStatement } from "@yomi/importers";
 import { eq } from "@yomi/db/orm";
 import { describe, expect, it } from "vitest";
@@ -61,6 +61,29 @@ describe("writeStatement", () => {
     expect(await count(db, holdingSnapshots)).toBe(11);
     expect(await latestSnapshotDate(db, user, "ibkr")).toBe("2026-09-29");
     expect(await latestSnapshotDate(db, user, "plaid")).toBeNull();
+  });
+
+  it("stores NAV in Base as one total per account and day; a re-pull overwrites the same days", async () => {
+    const db = await freshDb();
+    const navXml = readFileSync(new URL("../../../importers/test/fixtures/ibkr/flex-nav.xml", import.meta.url), "utf8");
+    const r = await writeStatement(db, user, mapFlexStatement(navXml));
+    expect(r.navDays).toBe(4);
+    const rows = async () =>
+      (await db.select().from(investmentDailyNav).orderBy(investmentDailyNav.asOf)).map((n) => [n.asOf, n.totalMinor, n.currency]);
+    // 2002.105 rounds half away from zero to 200211.
+    expect(await rows()).toEqual([
+      ["2026-09-21", 99062, "USD"],
+      ["2026-09-22", 99837, "USD"],
+      ["2026-09-23", 199510, "USD"],
+      ["2026-09-25", 200211, "USD"],
+    ]);
+    const changed = mapFlexStatement(navXml.replace('total="998.37"', 'total="999.00"'));
+    expect((await writeStatement(db, user, changed)).navDays).toBe(4);
+    expect((await rows())[1]).toEqual(["2026-09-22", 99900, "USD"]);
+    expect(await rows()).toHaveLength(4);
+    // Without the section nothing is written.
+    expect((await writeStatement(db, user, flex())).navDays).toBe(0);
+    expect(await rows()).toHaveLength(4);
   });
 });
 

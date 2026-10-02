@@ -64,7 +64,29 @@ export const NetWorthView = z.object({
     fx: z.object({ source: z.literal("frankfurter"), date: z.string(), rates: z.array(z.object({ from: z.string(), rate: z.string(), inverse: z.string() })) }),
   }).nullable(),
   fxError: Notice.nullable(),
-  series: z.array(z.object({ date: IsoDate, byCurrency: z.record(z.string(), NetWorthPartsView), converted: NetWorthPartsView.nullable() })),
+  series: z.array(
+    z.object({
+      date: IsoDate,
+      byCurrency: z.record(z.string(), NetWorthPartsView),
+      converted: NetWorthPartsView.nullable(),
+      /** Per currency, the parts known that day; a part not listed is unknown, not zero. */
+      known: z.record(z.string(), z.array(z.enum(["cash", "cards", "holdings", "pnl"]))),
+      /** Accounts known later in the series but without a value yet that day (net worth partial). */
+      missing: z.array(z.object({ name: z.string(), kind: z.enum(["cash", "card", "investment"]), currencies: z.array(z.string()) })),
+    }),
+  ),
+  /** Trades, dividends and cash deposits or withdrawals of investment accounts over the series. */
+  flows: z.array(
+    z.object({
+      date: IsoDate,
+      type: z.enum(["buy", "sell", "dividend", "transfer"]),
+      symbol: z.string().nullable(),
+      amountMinor: z.int(),
+      currency: z.string(),
+      accountName: z.string(),
+      convertedMinor: z.int().nullable(),
+    }),
+  ),
   accounts: z.array(AccountBalanceView),
   hasBalances: z.boolean(),
 });

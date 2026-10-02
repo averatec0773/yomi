@@ -69,6 +69,8 @@ export const IbkrTestResult = z.object({
   statementDate: DateString,
   positions: z.int().nonnegative(),
   accounts: z.int().nonnegative(),
+  /** The Flex sections yomi reads and whether the test statement had each (an empty section counts as present). */
+  sections: z.array(z.object({ id: z.enum(["accountInformation", "openPositions", "cashReport", "trades", "cashTransactions", "nav"]), present: z.boolean() })),
 });
 export type IbkrTestResult = z.infer<typeof IbkrTestResult>;
 

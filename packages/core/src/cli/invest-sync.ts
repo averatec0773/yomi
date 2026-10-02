@@ -29,7 +29,7 @@ try {
     const conn = x.connectionId != null ? ` connection #${x.connectionId}` : "";
     console.log(
       `${x.provider}${conn} as of ${x.asOf}: ${x.accounts} accounts, ${x.positions} positions, ${x.cashBalances} cash balances, ` +
-        `${x.transactionsNew} new / ${x.transactionsUpdated} updated transactions; market value ${totals || "0"}` +
+        `${x.transactionsNew} new / ${x.transactionsUpdated} updated transactions, ${x.navDays} daily values; market value ${totals || "0"}` +
         (x.warnings.length ? `; ${x.warnings.length} warnings` : ""),
     );
     if (x.stale) console.log(`${x.provider}: stale, IBKR has not published the ${x.expectedAsOf} statement yet (received ${x.asOf}); the scheduler will retry`);

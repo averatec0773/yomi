@@ -154,7 +154,7 @@ describe("IBKR credentials", () => {
       return new Response(xml);
     }) as unknown as typeof globalThis.fetch;
     const out = await testIbkrCredentials(TOKEN, QUERY, { fetch, sleep: async () => {} });
-    expect(out).toEqual({ statementDate: "2026-09-28", positions: 4, accounts: 1 });
+    expect(out).toEqual({ statementDate: "2026-09-28", positions: 4, accounts: 1, sections: [{ id: "accountInformation", present: true }, { id: "openPositions", present: true }, { id: "cashReport", present: true }, { id: "trades", present: true }, { id: "cashTransactions", present: true }, { id: "nav", present: false }] });
     expect(calls).toEqual(["SendRequest q=123456", "GetStatement q=77", "GetStatement q=77"]);
     expect(mapFlexStatement(xml).asOf).toBe("2026-09-28");
 

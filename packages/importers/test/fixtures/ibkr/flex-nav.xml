@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Synthetic Activity Flex Query output with the "Net Asset Value (NAV) in Base" section (Exclude long and short
+     breakout), shaped like IBKR Flex v3 and csingley/ibflex's EquitySummaryByReportDateInBase. Not real data. -->
+<FlexQueryResponse queryName="yomi holdings" type="AF">
+<FlexStatements count="1">
+<FlexStatement accountId="U0000002" fromDate="20260921" toDate="20260925" period="" whenGenerated="20260925;203015">
+<AccountInformation accountId="U0000002" acctAlias="Test NAV" currency="USD" />
+<EquitySummaryInBase>
+<EquitySummaryByReportDateInBase accountId="U0000002" acctAlias="Test NAV" model="" currency="USD" reportDate="20260921" cash="250.10" stock="740.5" options="0" dividendAccruals="0" interestAccruals="0.02" total="990.62" />
+<EquitySummaryByReportDateInBase accountId="U0000002" acctAlias="Test NAV" model="" currency="USD" reportDate="20260922" cash="250.10" stock="748.25" total="998.37" />
+<EquitySummaryByReportDateInBase accountId="U0000002" acctAlias="Test NAV" model="" reportDate="20260923" cash="1250.10" stock="745" total="1995.10" />
+<EquitySummaryByReportDateInBase accountId="U0000002" acctAlias="Test NAV" model="" currency="USD" reportDate="20260924" cash="1250.10" stock="750" total="" />
+<EquitySummaryByReportDateInBase accountId="U0000002" acctAlias="Test NAV" model="" currency="USD" reportDate="20260925" cash="1250.10" stock="751" total="2001.10" />
+<EquitySummaryByReportDateInBase accountId="U0000002" acctAlias="Test NAV" model="" currency="USD" reportDate="20260925" cash="1250.10" stock="752" total="2002.105" />
+<EquitySummaryByReportDateInBase accountId="-" acctAlias="" model="" currency="USD" reportDate="20260925" cash="9999" stock="9999" total="19998" />
+</EquitySummaryInBase>
+<CashTransactions>
+<CashTransaction accountId="U0000002" currency="USD" assetCategory="CASH" description="CASH RECEIPTS / ELECTRONIC FUND TRANSFERS" conid="" dateTime="20260923;101500" amount="1000" type="Deposits/Withdrawals" transactionID="8100001" levelOfDetail="DETAIL" />
+<CashTransaction accountId="U0000002" currency="USD" assetCategory="CASH" description="DISBURSEMENT INITIATED BY Test Person" conid="" dateTime="20260924;101500" amount="-50" type="Deposits/Withdrawals" transactionID="8100002" levelOfDetail="DETAIL" />
+</CashTransactions>
+</FlexStatement>
+</FlexStatements>
+</FlexQueryResponse>

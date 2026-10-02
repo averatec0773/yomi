@@ -465,6 +465,33 @@ export const investmentTransactions = pgTable(
   ],
 );
 
+/**
+ * Net asset value of an investment account at the close of `as_of` (YYYY-MM-DD), in `currency` (the
+ * provider's base currency for the account): IBKR Flex "Net Asset Value (NAV) in Base" daily rows. It fills
+ * the investments history on days without holding snapshots (snapshots win on days that have both). A
+ * re-pull overwrites the same day. `raw` keeps the row's attributes as JSON.
+ */
+export const investmentDailyNav = pgTable(
+  "investment_daily_nav",
+  {
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
+    userId: integer("user_id").notNull(),
+    investmentAccountId: integer("investment_account_id")
+      .notNull()
+      .references(() => investmentAccounts.id),
+    asOf: text("as_of").notNull(),
+    totalMinor: bigint("total_minor", { mode: "number" }).notNull(),
+    currency: text("currency").notNull(),
+    raw: text("raw"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex("investment_daily_nav_account_as_of_uq").on(t.investmentAccountId, t.asOf),
+    index("investment_daily_nav_user_as_of_idx").on(t.userId, t.asOf),
+  ],
+);
+
 export const BALANCE_SOURCES = ["plaid", "statement", "derived", "manual"] as const;
 export type BalanceSource = (typeof BALANCE_SOURCES)[number];
 

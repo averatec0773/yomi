@@ -1,4 +1,4 @@
-import { createFlexClient, type FlexClientOptions, FlexError, type FlexRange, mapFlexStatement } from "@yomi/importers";
+import { createFlexClient, type FlexClientOptions, FlexError, type FlexRange, FLEX_SECTION_IDS, type FlexSectionId, mapFlexStatement } from "@yomi/importers";
 import type { Db } from "@yomi/db";
 import {
   auditSecretChange,
@@ -95,18 +95,26 @@ export interface IbkrTestResult {
   /** Positions (not cash) in the statement. */
   positions: number;
   accounts: number;
+  /** The query sections yomi reads, in a fixed order, and whether the statement had each one (empty ones count). */
+  sections: { id: FlexSectionId; present: boolean }[];
 }
 
 /**
  * "Test connection": pulls the query once through the real flow (for the last completed trading day only) and
- * reports the statement date and positions.
+ * reports the statement date, positions and which of the sections yomi reads the query has.
  * Stores nothing. Throws InvestError (token expired, invalid, query invalid, rate limited, …).
  */
 export async function testIbkrCredentials(token: string, queryId: string, opts: FlexOptions = {}, now: Date = clockNow()): Promise<IbkrTestResult> {
   // One day is enough to check the token and the query, whatever period the query has saved.
   const day = lastCompletedTradingDay(now);
   const s = await ibkrSourceFor(token, queryId, { maxWaitMs: 2 * 60 * 1000, ...opts }).fetchStatement({ from: day, to: day });
-  return { statementDate: s.asOf, positions: s.holdings.filter((h) => h.securityExternalId != null).length, accounts: s.accounts.length };
+  const present = new Set(s.sections ?? []);
+  return {
+    statementDate: s.asOf,
+    positions: s.holdings.filter((h) => h.securityExternalId != null).length,
+    accounts: s.accounts.length,
+    sections: FLEX_SECTION_IDS.map((id) => ({ id, present: present.has(id) })),
+  };
 }
 
 export type ExpiryState = "none" | "ok" | "soon" | "expired";

@@ -18,6 +18,7 @@ normalized `InvestStatement` (`../invest.ts`). Storage, scheduling and FX live i
 | `OpenPosition`: `accountId, currency, fxRateToBase, assetCategory (STK, OPT, FUT, CASH, BOND, …), symbol, description, conid, isin, cusip, multiplier, position, markPrice, positionValue, costBasisPrice, costBasisMoney, fifoPnlUnrealized, reportDate, side, levelOfDetail (SUMMARY or LOT)`. `positionValue` is position × markPrice × multiplier; short positions have negative `position`, `positionValue` and `costBasisMoney`. | same |
 | `CashReportCurrency`: `currency` (plus a `BASE_SUMMARY` roll-up row), `startingCash`, `endingCash`, and many MTD/YTD columns. | same |
 | `Trade`: `tradeID, transactionID, tradeDate, quantity, tradePrice, proceeds, ibCommission, netCash, buySell (BUY, SELL, "BUY (Ca.)", "SELL (Ca.)"), levelOfDetail (EXECUTION, ORDER, CLOSED_LOT)`. `CashTransaction.type`: Deposits & Withdrawals, Broker Interest Paid/Received, Withholding Tax, Bond Interest, Other Fees, Dividends, Payment In Lieu Of Dividends, Commission Adjustments, Advisor Fees. | same (enums.py) |
+| "Net Asset Value (NAV) in Base" (checked 2026-10-01): XML `EquitySummaryInBase > EquitySummaryByReportDateInBase(accountId, acctAlias, model, currency, reportDate, cash, stock, options, …, total)`, one row per report date, decimals as strings; `cash`/`stock`/`total` may carry `…Long`/`…Short` variants unless "Exclude long and short breakout" is ticked. Older output (ibflex's 2011 test row) has no `currency`. The Activity Statement reference describes the section as NAV per asset class converted to the base currency. | https://github.com/csingley/ibflex/blob/master/ibflex/Types.py (class `EquitySummaryByReportDateInBase`, "Wrapped in <EquitySummaryInBase>"), tests/test_types.py; https://www.ibkrguides.com/reportingreference/reportguide/netassetvalueinbasecurrency.htm |
 | Dates follow the query's date format setting (`2026-09-28`, `20260928`, `09/28/2026`); date-times use `;` (`2026-09-28;160000`). | same; mapper accepts all three |
 
 ## Decided here
@@ -34,6 +35,12 @@ normalized `InvestStatement` (`../invest.ts`). Storage, scheduling and FX live i
   CashReport per-currency `endingCash` as cash holdings; `BASE_SUMMARY` skipped. Trade EXECUTION rows
   (`netCash`, cash-in positive, as `trade:<transactionID>`). CashTransaction DETAIL rows
   (`cash:<transactionID>`). ChangeInDividendAccruals are accruals, not cash, and are not stored.
+  NAV in Base: one `total` per `reportDate` per account (`navs`), currency from the row else the account's
+  base currency; rows of another account id (a consolidated "-" row) are skipped, a repeated day keeps the
+  last row. Core stores them in `investment_daily_nav` (upsert per account and day) and uses them on days
+  without holding snapshots.
+- **Sections present** `statement.sections` lists which of the six sections yomi reads appear as elements
+  (`FLEX_SECTIONS`, empty ones included); Test connection reports the missing ones.
 - **Period override** `fetchStatement(range)` sends `p` for `{ days }` or `fd`/`td` for `{ from, to }`
   (YYYY-MM-DD in, yyyymmdd out), never both. Where the docs are silent yomi is conservative: both ends count as
   inclusive, so a span may cover at most 365 calendar days; days must be a whole number 1 to 365; invalid input
@@ -44,9 +51,10 @@ normalized `InvestStatement` (`../invest.ts`). Storage, scheduling and FX live i
   `positionValue` / `costBasisMoney` / `endingCash` into minor units with one rounding each.
 - **Config** `IBKR_FLEX_TOKEN` and `IBKR_FLEX_QUERY_ID` from the process env, else the token and query id
   saved per user in Settings > Connections (encrypted, resolved at use time by core `resolveIbkrSource`). The
-  query should be an Activity Flex Query with Account Information, Open Positions (Summary), Cash Report,
-  Trades (Execution) and Cash Transactions (Detail), format XML; Account Information with only Account ID, Account
-  Alias and Currency (Select All adds name, address and phone). Any period works because yomi overrides it. The in-app guide
+  query should be an Activity Flex Query with six sections, each with Select All and every option ticked
+  (the mapper keeps only the levels it needs): Account Information, Open Positions, Cash Report, Trades, Cash
+  Transactions and Net Asset Value (NAV) in Base, format XML. guides/ibkr.md lists a privacy-minimal field set.
+  Any period works because yomi overrides it. The in-app guide
   links https://www.ibkrguides.com/clientportal/performanceandstatements/activityflex.htm (query) and
   .../flex3.htm (token: Performance & Reports > Flex Queries > Flex Web Service Configuration, "Should Expire
   After", default 6 hours), checked 2026-09-30.

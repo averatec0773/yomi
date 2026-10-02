@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { InvestConfig, InvestSyncResult, SecretsView } from "@yomi/contracts";
+import { IbkrTestResult, InvestConfig, InvestSyncResult, SecretsView } from "@yomi/contracts";
 import { configureKeyFile, seed } from "@yomi/core";
 import { userSettings } from "@yomi/db";
 import { testDb } from "@yomi/db/testing";
@@ -114,7 +114,9 @@ describe("/api/settings/secrets", () => {
     expect(bad.status).toBe(409);
     expect(await bad.json()).toMatchObject({ code: "invest_ibkr_token_invalid" });
     const ok = await req("POST", "/settings/secrets/ibkr/test", { token: TOKEN, queryId: QUERY });
-    expect(await ok.json()).toEqual({ ok: true, statementDate: "2026-09-28", positions: 4, accounts: 1 });
+    const body = await ok.json();
+    expect(body).toMatchObject({ ok: true, statementDate: "2026-09-28", positions: 4, accounts: 1 });
+    expect(IbkrTestResult.parse(body).sections.filter((x) => !x.present).map((x) => x.id)).toEqual(["nav"]);
     expect(flexCalls).toEqual(["SendRequest", "SendRequest", "GetStatement"]);
 
     await req("PUT", "/settings/secrets/ibkr", { token: TOKEN, queryId: QUERY });

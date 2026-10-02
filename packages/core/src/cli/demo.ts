@@ -503,6 +503,45 @@ await writeStatement(db, user, {
 });
 await writeStatement(db, user, ibkrDay("2026-09-28", ["229.87", "301.12", "512.5"], ["5746.75", "12044.80", "51250"]));
 
+// A year of daily NAV in Base (USD) before the weekly closes, as an IBKR history pull leaves it, with the
+// deposits and the withdrawal that moved it. Walked back from the first weekly close (HKD at a fixed 0.1283);
+// returns are made up.
+const NAV_FLOWS = new Map([
+  ["2025-11-03", 5000],
+  ["2026-02-02", 3000],
+  ["2026-05-01", 2000],
+  ["2026-06-15", -1000],
+]);
+const navDays: string[] = [];
+for (let t = Date.UTC(2025, 8, 29); t < Date.UTC(2026, 6, 3); t += 86_400_000) {
+  const d = new Date(t);
+  if (d.getUTCDay() !== 0 && d.getUTCDay() !== 6) navDays.push(d.toISOString().slice(0, 10));
+}
+const first = FRIDAYS.map((_, i) => [drift(227.52, i, 0.02), drift(299.85, i, 0.012), drift(505, i, 0.03)])[0]!;
+let nav = 25 * Number(first[0]) + 40 * Number(first[1]) + 1234.56 + (100 * Number(first[2]) + 500) * 0.1283;
+const navRows: { accountExternalId: string; date: string; currency: string; total: string; raw: Record<string, unknown> }[] = [];
+for (let k = navDays.length - 1; k >= 0; k--) {
+  const day = navDays[k]!;
+  navRows.push({ accountExternalId: "U0000001", date: day, currency: "USD", total: nav.toFixed(2), raw: { demo: true } });
+  nav = (nav - (NAV_FLOWS.get(day) ?? 0)) / (1 + 0.0006 + Math.sin(k * 0.9) * 0.007);
+}
+await writeStatement(db, user, {
+  ...ibkrDay("2026-09-28", ["229.87", "301.12", "512.5"], ["5746.75", "12044.80", "51250"]),
+  navs: navRows.reverse(),
+  transactions: [...NAV_FLOWS].map(([date, amount], i) => ({
+    accountExternalId: "U0000001",
+    securityExternalId: null,
+    externalId: `demo-cash-${i + 1}`,
+    date,
+    type: "transfer" as const,
+    quantity: null,
+    amount: amount.toFixed(2),
+    currency: "USD",
+    description: amount > 0 ? "CASH RECEIPTS / ELECTRONIC FUND TRANSFERS" : "DISBURSEMENT",
+    raw: { demo: true },
+  })),
+});
+
 // A Plaid brokerage login as the "Connect a brokerage" flow leaves it (a made-up token in the Plaid format, so the Production pill shows; sync is never called on it).
 const brokerage = (await db
   .insert(bankConnections)

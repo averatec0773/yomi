@@ -1,6 +1,6 @@
 // Net worth at a point in time and its daily history: cash (bank accounts, wallets), cards (owed,
 // negative) and holdings market value, per currency; one converted total only with a stated FX rate.
-import { accountBalanceSnapshots, accounts, type BalanceSource, type Db, holdingSnapshots } from "@yomi/db";
+import { accountBalanceSnapshots, accounts, type BalanceSource, type Db, holdingSnapshots, investmentAccounts, investmentDailyNav } from "@yomi/db";
 import { and, asc, eq, lte, min } from "@yomi/db/orm";
 import { convertMinor, crossRate, type FxTable, getFxRates } from "../invest/fx";
 import { InvestError } from "../invest/errors";
@@ -9,6 +9,7 @@ import { addDays } from "../stats/period";
 import { clockNow, todayIn } from "../time/zone";
 import type { CurrentUser } from "../user";
 import { type BalanceClass, balanceTimeline } from "./balances";
+import { type InvestFlow, investmentFlows } from "./investments";
 
 export const NET_WORTH_RANGES = ["1m", "3m", "1y", "all"] as const;
 export type NetWorthRange = (typeof NET_WORTH_RANGES)[number];
@@ -34,11 +35,30 @@ export interface CurrencyNetWorth extends NetWorthParts {
   changeMinor: number | null;
 }
 
+/** A part of net worth that can be known or not on a day: cash, cards, holdings value, holdings P/L. */
+export type NetWorthPart = "cash" | "cards" | "holdings" | "pnl";
+
+/** An account with no value yet on a day although a later day of the series knows it. */
+export interface MissingAccount {
+  name: string;
+  /** A ledger account (cash or card) or an investment account. */
+  kind: "cash" | "card" | "investment";
+  /** Currencies the account has on the days of the series it is known. */
+  currencies: string[];
+}
+
 export interface NetWorthPoint {
   date: string;
   byCurrency: Record<string, NetWorthParts>;
   /** The same day in the converted currency (today's rate for every day); null without FX. */
   converted: NetWorthParts | null;
+  /**
+   * Per currency, the parts known that day; a part not listed is unknown, not zero. "pnl" only when every
+   * investment account's value that day comes with its positions (a daily NAV has no cost basis).
+   */
+  known: Record<string, NetWorthPart[]>;
+  /** Accounts known later in the series but not yet on this day: the day's net worth is partial. */
+  missing: MissingAccount[];
 }
 
 export interface AccountBalanceView {
@@ -80,6 +100,8 @@ export interface NetWorth {
   converted: ConvertedNetWorth | null;
   fxError: { code: string; params: Record<string, string | number>; message: string } | null;
   series: NetWorthPoint[];
+  /** Trades, dividends and cash deposits or withdrawals of investment accounts over the series (oldest first). */
+  flows: InvestFlow[];
   /** Every ledger account; those with nothing known have no balances. */
   accounts: AccountBalanceView[];
   /** Any account balance snapshot or starting balance exists (holdings alone do not count). */
@@ -92,13 +114,24 @@ async function earliestDate(db: Db, user: CurrentUser): Promise<string | null> {
   const a = (await db.select({ d: min(accountBalanceSnapshots.asOf) }).from(accountBalanceSnapshots).where(eq(accountBalanceSnapshots.userId, user.id)).limit(1))[0]?.d ?? null;
   const b = (await db.select({ d: min(accounts.startingBalanceOn) }).from(accounts).where(eq(accounts.userId, user.id)).limit(1))[0]?.d ?? null;
   const c = (await db.select({ d: min(holdingSnapshots.asOf) }).from(holdingSnapshots).where(eq(holdingSnapshots.userId, user.id)).limit(1))[0]?.d ?? null;
-  return [a, b, c].filter((d): d is string => d != null).sort()[0] ?? null;
+  const n = (await db.select({ d: min(investmentDailyNav.asOf) }).from(investmentDailyNav).where(eq(investmentDailyNav.userId, user.id)).limit(1))[0]?.d ?? null;
+  return [a, b, c, n].filter((d): d is string => d != null).sort()[0] ?? null;
 }
 
-/** Market value and P/L per currency per day: each investment account's latest snapshot on or before the day. */
-async function holdingsTimeline(db: Db, user: CurrentUser, days: string[]): Promise<Map<string, { mv: number[]; pnl: number[] }>> {
-  const out = new Map<string, { mv: number[]; pnl: number[] }>();
-  if (days.length === 0) return out;
+/** One investment account's value in one currency on a day; pnl null when the day's value is a NAV (no cost basis). */
+interface InvestValue {
+  mv: number;
+  pnl: number | null;
+}
+
+/**
+ * Value per investment account per day: the latest known day on or before it, carried forward. A day with
+ * holding snapshots uses them (market value, P/L of positions with a known cost); a day with only a daily NAV
+ * (IBKR NAV in Base) uses its total in the NAV's currency, without P/L. Null before anything is known.
+ */
+async function investmentTimeline(db: Db, user: CurrentUser, days: string[]): Promise<{ name: string; daily: (Map<string, InvestValue> | null)[] }[]> {
+  if (days.length === 0) return [];
+  const last = days[days.length - 1]!;
   const rows = await db
     .select({
       accountId: holdingSnapshots.investmentAccountId,
@@ -108,34 +141,64 @@ async function holdingsTimeline(db: Db, user: CurrentUser, days: string[]): Prom
       cost: holdingSnapshots.costBasisMinor,
     })
     .from(holdingSnapshots)
-    .where(and(eq(holdingSnapshots.userId, user.id), lte(holdingSnapshots.asOf, days[days.length - 1]!)))
+    .where(and(eq(holdingSnapshots.userId, user.id), lte(holdingSnapshots.asOf, last)))
     .orderBy(asc(holdingSnapshots.asOf));
-  // account → ordered dates → currency → totals
-  const byAccount = new Map<number, Map<string, Map<string, { mv: number; pnl: number }>>>();
+  const navs = await db
+    .select({ accountId: investmentDailyNav.investmentAccountId, asOf: investmentDailyNav.asOf, currency: investmentDailyNav.currency, total: investmentDailyNav.totalMinor })
+    .from(investmentDailyNav)
+    .where(and(eq(investmentDailyNav.userId, user.id), lte(investmentDailyNav.asOf, last)));
+  // account → date → currency → value
+  const byAccount = new Map<number, Map<string, Map<string, InvestValue>>>();
+  const datesOf = (id: number) => {
+    let m = byAccount.get(id);
+    if (!m) byAccount.set(id, (m = new Map()));
+    return m;
+  };
   for (const r of rows) {
-    const dates = byAccount.get(r.accountId) ?? new Map<string, Map<string, { mv: number; pnl: number }>>();
-    byAccount.set(r.accountId, dates);
-    const cur = dates.get(r.asOf) ?? new Map<string, { mv: number; pnl: number }>();
+    const dates = datesOf(r.accountId);
+    const cur = dates.get(r.asOf) ?? new Map<string, InvestValue>();
     dates.set(r.asOf, cur);
     const t = cur.get(r.currency) ?? { mv: 0, pnl: 0 };
     t.mv += r.mv;
-    if (r.cost != null) t.pnl += r.mv - r.cost;
+    if (r.cost != null) t.pnl = (t.pnl ?? 0) + r.mv - r.cost;
     cur.set(r.currency, t);
   }
-  for (const dates of byAccount.values()) {
-    const list = [...dates.entries()];
+  // Holding snapshots win on days that have both.
+  for (const n of navs) {
+    const dates = datesOf(n.accountId);
+    if (!dates.has(n.asOf)) dates.set(n.asOf, new Map([[n.currency, { mv: n.total, pnl: null }]]));
+  }
+  const names = new Map(
+    (await db.select({ id: investmentAccounts.id, name: investmentAccounts.name }).from(investmentAccounts).where(eq(investmentAccounts.userId, user.id))).map(
+      (a) => [a.id, a.name] as const,
+    ),
+  );
+  const out: { name: string; daily: (Map<string, InvestValue> | null)[] }[] = [];
+  for (const [id, dates] of [...byAccount].sort((x, y) => x[0] - y[0])) {
+    const list = [...dates.entries()].sort((x, y) => x[0].localeCompare(y[0]));
     let k = 0;
-    let cur: Map<string, { mv: number; pnl: number }> | null = null;
-    days.forEach((day, i) => {
+    let cur: Map<string, InvestValue> | null = null;
+    const daily = days.map((day) => {
       while (k < list.length && list[k]![0] <= day) cur = list[k++]![1];
-      if (!cur) return;
-      for (const [c, t] of cur) {
-        let s = out.get(c);
-        if (!s) out.set(c, (s = { mv: days.map(() => 0), pnl: days.map(() => 0) }));
-        s.mv[i]! += t.mv;
-        s.pnl[i]! += t.pnl;
-      }
+      return cur;
     });
+    out.push({ name: names.get(id) ?? String(id), daily });
+  }
+  return out;
+}
+
+/**
+ * Per day, the accounts with no value yet that a later day knows (`known[i]`: the account has a value on
+ * day i). Days before an account's first value are partial; days after it never are (values carry forward).
+ */
+export function missingAccounts(entries: (MissingAccount & { known: boolean[] })[], length: number): MissingAccount[][] {
+  const out: MissingAccount[][] = Array.from({ length }, () => []);
+  for (const e of entries) {
+    let later = false;
+    for (let i = length - 1; i >= 0; i--) {
+      if (e.known[i]) later = true;
+      else if (later) out[i]!.push({ name: e.name, kind: e.kind, currencies: e.currencies });
+    }
   }
   return out;
 }
@@ -152,7 +215,7 @@ export interface NetWorthOptions {
  * Net worth per currency on `asOf` (cash, cards, holdings), the change over 30 days, the daily history
  * for the range (gaps carried forward) and every account's balance. Pure reads, no FX.
  */
-export async function netWorthData(db: Db, user: CurrentUser, opts: { asOf: string; range: NetWorthRange; from?: string }): Promise<Omit<NetWorth, "converted" | "fxError">> {
+export async function netWorthData(db: Db, user: CurrentUser, opts: { asOf: string; range: NetWorthRange; from?: string }): Promise<NetWorthData> {
   const { asOf, range } = opts;
   const firstDate = await earliestDate(db, user);
   const from =
@@ -162,7 +225,7 @@ export async function netWorthData(db: Db, user: CurrentUser, opts: { asOf: stri
   const start = from < changeFrom ? from : changeFrom;
   const timeline = await balanceTimeline(db, user, { from: start, to: asOf });
   const days = timeline.days;
-  const holdings = await holdingsTimeline(db, user, days);
+  const invest = await investmentTimeline(db, user, days);
 
   // Per day, per currency parts.
   const perDay: Map<string, NetWorthParts>[] = days.map(() => new Map());
@@ -172,8 +235,19 @@ export async function netWorthData(db: Db, user: CurrentUser, opts: { asOf: stri
     if (!p) m.set(c, (p = zero()));
     return p;
   };
-  const known: Set<string>[] = days.map(() => new Set());
+  const known: Map<string, Set<NetWorthPart>>[] = days.map(() => new Map());
+  const mark = (i: number, c: string, part: NetWorthPart) => {
+    const m = known[i]!;
+    let k = m.get(c);
+    if (!k) m.set(c, (k = new Set()));
+    k.add(part);
+  };
+  const fromIdx = days.indexOf(from);
+  // Accounts with their known days, for the partial days of the series.
+  const entries: (MissingAccount & { known: boolean[] })[] = [];
   for (const a of timeline.accounts) {
+    const has = days.map(() => false);
+    const currencies = new Set<string>();
     for (const [c, s] of a.daily) {
       s.forEach((v, i) => {
         if (v == null) return;
@@ -181,20 +255,35 @@ export async function netWorthData(db: Db, user: CurrentUser, opts: { asOf: stri
         if (a.class === "card") p.cardsMinor += v;
         else p.cashMinor += v;
         p.totalMinor += v;
-        known[i]!.add(c);
+        mark(i, c, a.class === "card" ? "cards" : "cash");
+        has[i] = true;
+        if (i >= fromIdx) currencies.add(c);
       });
     }
+    entries.push({ name: a.account.name, kind: a.class, currencies: [...currencies].sort(), known: has });
   }
-  for (const [c, s] of holdings) {
-    s.mv.forEach((v, i) => {
-      if (v === 0 && s.pnl[i] === 0) return;
-      const p = partsAt(i, c);
-      p.holdingsMinor += v;
-      p.pnlMinor += s.pnl[i]!;
-      p.totalMinor += v;
-      known[i]!.add(c);
+  const navOnly: Set<string>[] = days.map(() => new Set());
+  for (const acct of invest) {
+    const has = days.map(() => false);
+    const currencies = new Set<string>();
+    acct.daily.forEach((m, i) => {
+      if (!m) return;
+      for (const [c, v] of m) {
+        const p = partsAt(i, c);
+        p.holdingsMinor += v.mv;
+        p.totalMinor += v.mv;
+        if (v.pnl == null) navOnly[i]!.add(c);
+        else p.pnlMinor += v.pnl;
+        mark(i, c, "holdings");
+        if (i >= fromIdx) currencies.add(c);
+      }
+      has[i] = true;
     });
+    entries.push({ name: acct.name, kind: "investment", currencies: [...currencies].sort(), known: has });
   }
+  known.forEach((m, i) => {
+    for (const [c, parts] of m) if (parts.has("holdings") && !navOnly[i]!.has(c)) parts.add("pnl");
+  });
 
   const last = days.length - 1;
   const changeIdx = days.indexOf(changeFrom);
@@ -206,8 +295,18 @@ export async function netWorthData(db: Db, user: CurrentUser, opts: { asOf: stri
     }))
     .sort((x, y) => x.currency.localeCompare(y.currency));
 
-  const fromIdx = days.indexOf(from);
-  const series: NetWorthPoint[] = days.slice(fromIdx).map((date, j) => ({ date, byCurrency: Object.fromEntries(perDay[fromIdx + j]!), converted: null }));
+  const missing = missingAccounts(
+    entries.map((e) => ({ ...e, known: e.known.slice(fromIdx) })),
+    days.length - fromIdx,
+  );
+  const order: NetWorthPart[] = ["cash", "cards", "holdings", "pnl"];
+  const series: NetWorthPoint[] = days.slice(fromIdx).map((date, j) => ({
+    date,
+    byCurrency: Object.fromEntries(perDay[fromIdx + j]!),
+    converted: null,
+    known: Object.fromEntries([...known[fromIdx + j]!].map(([c, parts]) => [c, order.filter((x) => parts.has(x))])),
+    missing: missing[j]!,
+  }));
 
   const accountViews: AccountBalanceView[] = timeline.accounts.map((a) => ({
     id: a.account.id,
@@ -236,6 +335,9 @@ export async function netWorthData(db: Db, user: CurrentUser, opts: { asOf: stri
   return { asOf, range, from, firstDate, currencies, series, accounts: accountViews, hasBalances };
 }
 
+/** What netWorthData reads: everything but the conversion and the investment flows. */
+export type NetWorthData = Omit<NetWorth, "converted" | "fxError" | "flows">;
+
 function convertParts(p: NetWorthParts, from: string, to: string, fx: FxTable): NetWorthParts {
   return {
     cashMinor: convertMinor(p.cashMinor, from, to, fx),
@@ -260,7 +362,7 @@ function addParts(a: NetWorthParts, b: NetWorthParts): NetWorthParts {
  * Adds the converted total, change and series in `currency` with one FX table (its rates and date are
  * stated). Each currency's parts are converted once, then added.
  */
-export function convertNetWorth(data: Omit<NetWorth, "converted" | "fxError">, currency: string, fx: FxTable): Pick<NetWorth, "converted" | "series"> {
+export function convertNetWorth(data: NetWorthData, currency: string, fx: FxTable): Pick<NetWorth, "converted" | "series"> {
   const to = currency.toUpperCase();
   const convertAll = (byCurrency: Record<string, NetWorthParts>) =>
     Object.entries(byCurrency).reduce((acc, [c, p]) => addParts(acc, convertParts(p, c, to, fx)), zero());
@@ -298,12 +400,15 @@ export async function netWorth(
 ): Promise<NetWorth> {
   const asOf = opts.asOf ?? todayIn(await getTimeZone(db, user), (deps.now ?? (() => clockNow()))());
   const data = await netWorthData(db, user, { asOf, range: opts.range ?? "3m" });
-  const out: NetWorth = { ...data, converted: null, fxError: null };
+  const flows = await investmentFlows(db, user, { from: data.from, to: asOf });
+  const out: NetWorth = { ...data, flows, converted: null, fxError: null };
   const currencies = netWorthCurrencies(data);
   if (!opts.currency || currencies.length === 0) return out;
   try {
-    const fx = await getFxRates(db, user, [...currencies, opts.currency], { fetch: deps.fetch, now: deps.now });
+    const fx = await getFxRates(db, user, [...new Set([...currencies, ...flows.map((f) => f.currency)]), opts.currency], { fetch: deps.fetch, now: deps.now });
     Object.assign(out, convertNetWorth(data, opts.currency, fx));
+    const to = opts.currency.toUpperCase();
+    out.flows = flows.map((f) => ({ ...f, convertedMinor: convertMinor(f.amountMinor, f.currency, to, fx) }));
   } catch (e) {
     if (!(e instanceof InvestError)) throw e;
     out.fxError = { code: e.code, params: e.params as Record<string, string | number>, message: e.message };

@@ -122,6 +122,8 @@ export const InvestSyncItemView = z.object({
   cashBalances: z.int(),
   transactionsNew: z.int(),
   transactionsUpdated: z.int(),
+  /** Daily account values (IBKR NAV in Base) written; 0 when the query has no NAV section. */
+  navDays: z.int(),
   totals: z.record(z.string(), z.int()),
   warnings: z.array(Notice),
   /** IBKR: the trading day whose statement should exist by now; null for Plaid. */
