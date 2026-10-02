@@ -29,6 +29,7 @@
     "secrets:gen-key": "tsx packages/core/src/cli/secrets.ts gen-key",
     "secrets:scrub-backups": "tsx packages/core/src/cli/secrets.ts scrub-backups",
     "e2e": "playwright test",
+    "e2e:build": "NEXT_DIST_DIR=.next-e2e pnpm --filter @yomi/web build",
     "hooks:install": "sh tools/hooks/install.sh",
     "guard": "sh tools/hooks/guard.sh tracked"
   },
