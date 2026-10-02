@@ -7,11 +7,11 @@ import {
   periodKindOf,
   periodOf,
   resolveAnalysisPeriod,
-  stepPeriod,
   typicalRanges,
   weekdayOf,
   weekOf,
 } from "./period";
+import { shiftRange } from "../stats/period";
 
 describe("weekOf", () => {
   it("starts on Monday by default, across month and year ends", () => {
@@ -67,9 +67,9 @@ describe("defaultPeriod and stepping", () => {
   });
 
   it("steps by a day, seven days or a calendar month", () => {
-    expect(stepPeriod({ from: "2026-09-29", to: "2026-09-29" }, 1)).toEqual({ from: "2026-09-30", to: "2026-09-30" });
-    expect(stepPeriod({ from: "2026-09-28", to: "2026-10-04" }, -1)).toEqual({ from: "2026-09-21", to: "2026-09-27" });
-    expect(stepPeriod({ from: "2026-03-01", to: "2026-03-31" }, -1)).toEqual({ from: "2026-02-01", to: "2026-02-28" });
+    expect(shiftRange({ from: "2026-09-29", to: "2026-09-29" }, 1)).toEqual({ from: "2026-09-30", to: "2026-09-30" });
+    expect(shiftRange({ from: "2026-09-28", to: "2026-10-04" }, -1)).toEqual({ from: "2026-09-21", to: "2026-09-27" });
+    expect(shiftRange({ from: "2026-03-01", to: "2026-03-31" }, -1)).toEqual({ from: "2026-02-01", to: "2026-02-28" });
   });
 
   it("resolves presets and period + date", () => {

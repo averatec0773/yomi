@@ -8,15 +8,13 @@ import {
   monthRangeOf,
   presetRange,
   previousRange,
-  shiftRange,
   STATS_PRESETS,
   wholeMonths,
 } from "../stats/period";
 
 // Day, week, month and year periods for Analysis, on 'YYYY-MM-DD' strings. Pure.
 
-export const PERIOD_KINDS = ["day", "week", "month", "year"] as const;
-export type PeriodKind = (typeof PERIOD_KINDS)[number];
+export type PeriodKind = "day" | "week" | "month" | "year";
 
 /** Analysis presets: the day and week ones, then the Stats presets (months, quarters, years). */
 export const ANALYSIS_PRESETS = ["yesterday", "today", "this_week", "last_week", ...STATS_PRESETS] as const;
@@ -27,10 +25,6 @@ export const DEFAULT_WEEK_START = 1;
 
 /** Complete periods of the same kind that make up "typical": 28 days, 4 weeks, 3 months, 3 years. */
 export const TYPICAL_PERIODS: Record<PeriodKind, number> = { day: 28, week: 4, month: 3, year: 3 };
-
-export function isPeriodKind(s: unknown): s is PeriodKind {
-  return typeof s === "string" && (PERIOD_KINDS as readonly string[]).includes(s);
-}
 
 export function isAnalysisPreset(s: unknown): s is AnalysisPreset {
   return typeof s === "string" && (ANALYSIS_PRESETS as readonly string[]).includes(s);
@@ -78,11 +72,6 @@ export function periodKindOf(r: DateRange, weekStart: number = DEFAULT_WEEK_STAR
  */
 export function defaultPeriod(kind: PeriodKind, today: string, weekStart: number = DEFAULT_WEEK_START): DateRange {
   return periodOf(kind, kind === "day" ? addDays(today, -1) : today, weekStart);
-}
-
-/** The period one step before (-1) or after (1): a day, seven days, a calendar month or year. */
-export function stepPeriod(r: DateRange, dir: -1 | 1): DateRange {
-  return shiftRange(r, dir);
 }
 
 export function analysisPresetRange(preset: AnalysisPreset, today: string, weekStart: number = DEFAULT_WEEK_START): DateRange {
