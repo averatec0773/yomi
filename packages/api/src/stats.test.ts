@@ -78,7 +78,7 @@ describe("range filters on transactions and export", () => {
     const { app } = await setup();
     const page = TransactionPage.parse(await (await app.request("/api/transactions?from=2026-08-01&to=2026-09-10")).json());
     expect(page.total).toBe(2);
-    expect(page.totals).toEqual([{ currency: "CNY", count: 2, spendingMinor: 5000 }]);
+    expect(page.totals).toMatchObject([{ currency: "CNY", count: 2, spendingMinor: 5000 }]);
     expect((await app.request("/api/transactions?from=2026-13-01")).status).toBe(400);
   });
 

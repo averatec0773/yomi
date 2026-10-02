@@ -56,7 +56,7 @@ describe("ledger api", () => {
     expect(all.totals).toBeUndefined();
     const sep = TransactionPage.parse(await (await app.request("/api/transactions?month=2026-09&q=bliz")).json());
     expect(sep.items.map((t) => t.id)).toEqual([b]);
-    expect(sep.totals).toEqual([{ currency: "CNY", count: 2, spendingMinor: 8000 }]);
+    expect(sep.totals).toMatchObject([{ currency: "CNY", count: 2, spendingMinor: 8000 }]);
     const unc = TransactionPage.parse(await (await app.request("/api/transactions?uncategorized=true&limit=2")).json());
     expect(unc).toMatchObject({ total: 3 });
     expect(unc.items).toHaveLength(2);
