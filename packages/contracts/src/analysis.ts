@@ -171,6 +171,8 @@ export const AnalysisReport = z.object({
   attention: z.array(Attention),
   freshness: z.array(SourceFreshness),
   sourceTotals: z.array(SourceTotal),
+  /** The newest day up to today with a row counted as spending or income; null without one. */
+  latestOn: DateString.nullable(),
 });
 export type AnalysisReport = z.infer<typeof AnalysisReport>;
 

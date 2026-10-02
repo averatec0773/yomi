@@ -1,5 +1,5 @@
 import { categories, type Db, transactions } from "@yomi/db";
-import { and, eq, gte, inArray, lt, min } from "@yomi/db/orm";
+import { and, eq, gte, inArray, isNull, lt, lte, max, min } from "@yomi/db/orm";
 import { investmentFlows } from "../assets/investments";
 import { netWorthData } from "../assets/net-worth";
 import { LedgerError } from "../ledger/errors";
@@ -111,6 +111,8 @@ export interface AnalysisReport {
   freshness: SourceFreshness[];
   /** What each source adds to the period's counts and totals, per currency (sources without rows absent). */
   sourceTotals: SourceTotal[];
+  /** The newest day up to today with a row counted as spending or income, in any currency; null without one. */
+  latestOn: string | null;
 }
 
 /** Day rows: all of them when 8 or fewer, else the largest 5. */
@@ -127,6 +129,23 @@ async function firstSpendingDays(db: Db, user: CurrentUser): Promise<Map<string,
     .where(and(eq(transactions.userId, user.id), inArray(transactions.kind, ["expense", "refund"]), eq(transactions.status, "ok")))
     .groupBy(transactions.currency);
   return new Map(rows.filter((r) => r.first != null).map((r) => [r.currency, r.first!]));
+}
+
+/** The newest day up to `today` with a row counted as spending or income (ledger/share.ts rules). */
+async function latestCountedDay(db: Db, user: CurrentUser, today: string): Promise<string | null> {
+  const rows = await db
+    .select({ last: max(transactions.occurredOn) })
+    .from(transactions)
+    .where(
+      and(
+        eq(transactions.userId, user.id),
+        inArray(transactions.kind, ["expense", "refund", "income"]),
+        eq(transactions.status, "ok"),
+        isNull(transactions.duplicateOfId),
+        lte(transactions.occurredOn, today),
+      ),
+    );
+  return rows[0]?.last ?? null;
 }
 
 /** Rows written during `day` in the user's zone, counted per source. */
@@ -292,5 +311,6 @@ export async function analysisReport(
     attention: attentionItems(freshness),
     freshness,
     sourceTotals: sourceTotals(inPeriod, await loadPlaidLogins(db, user)),
+    latestOn: await latestCountedDay(db, user, today),
   };
 }

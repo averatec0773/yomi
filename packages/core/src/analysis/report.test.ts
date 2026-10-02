@@ -170,6 +170,6 @@ describe("analysisReport", () => {
   it("a future period is empty and flagged", async () => {
     const db = await ledger();
     const r = await analysisReport(db, user, { from: "2026-10-05", to: "2026-10-05" }, opts);
-    expect(r).toMatchObject({ future: true, currencies: [], investments: null });
+    expect(r).toMatchObject({ future: true, currencies: [], investments: null, latestOn: TODAY });
   });
 });

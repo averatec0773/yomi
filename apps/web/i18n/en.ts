@@ -612,7 +612,6 @@ export const en = {
     title: "Analysis",
     netWorthChange: "Net worth change in this period: {amount}",
     netWorthLink: "Assets",
-    noData: "No data for {period} yet.",
     previous: {
       week: "last week",
       month: "last month",
@@ -735,10 +734,18 @@ export const en = {
         ibkr: "Interactive Brokers",
         plaid_investments: "Brokerage sync",
       },
+      /** A bank reached through both Plaid and a file import. */
+      viaPlaid: "{name} (Plaid)",
+      viaFile: { boa_csv: "Bank of America (CSV)", icbc_pdf: "ICBC credit card (PDF)" },
     },
     empty: {
-      day: "Nothing recorded on {date}.",
+      none: "No records for {period}.",
+      noneYet: "No records for {period} yet.",
       future: "This period has not started yet.",
+      latest: " The latest is from {date}.",
+      view: "View {period}",
+      reach: "Sources reach {from} to {to}.",
+      reachOne: "Sources reach {date}.",
     },
   },
   split: {

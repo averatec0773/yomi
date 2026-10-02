@@ -114,6 +114,28 @@ test("analysis: Week is Monday to Sunday so far, steps by seven days; Month keep
   await expect(page.getByRole("region", { name: "USD stats" }).getByTestId("largest-card")).toBeVisible();
 });
 
+test("analysis: an empty period stays selected and links to the period of the latest row", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/analysis?from=2026-05-01&to=2026-05-31");
+  const bar = page.getByRole("navigation", { name: "Period" });
+  await expect(bar).toContainText("May 2026");
+  await expect(page.getByText("No records for May 2026. The latest is from Sep 29.")).toBeVisible();
+  // Nothing in May is partial: no reach line.
+  await expect(page.getByTestId("empty-reach")).toHaveCount(0);
+  await page.getByRole("link", { name: "View September 2026" }).click();
+  await expect(page).toHaveURL(/from=2026-09-01&to=2026-09-30/);
+  await expect(page.getByRole("region", { name: "USD stats" })).toBeVisible();
+
+  // Today has nothing yet; WeChat ends on Sep 24, so one line says how far the sources reach instead of partial lines.
+  await page.goto("/analysis?preset=today");
+  await expect(page.getByTestId("day-view")).toContainText("No records for Wed, Sep 30 yet. The latest is from Sep 29.");
+  await expect(page.getByTestId("empty-reach")).toHaveText("Sources reach Sep 24 to Sep 29.");
+  await expect(page.getByTestId("insight-partial")).toHaveCount(0);
+  await page.getByRole("link", { name: "View Sep 29, 2026" }).click();
+  await expect(page).toHaveURL(/from=2026-09-29&to=2026-09-29/);
+  await expect(page.getByTestId("day-CNY")).toBeVisible();
+});
+
 test("analysis: Sources lists how far each source reaches and what it adds to the period; phones keep four tabs", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/analysis?preset=this_week");

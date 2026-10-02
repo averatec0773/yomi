@@ -540,7 +540,6 @@ export const zhCN: Dictionary = {
     title: "分析",
     netWorthChange: "本期净资产变化：{amount}",
     netWorthLink: "资产",
-    noData: "{period}还没有数据。",
     previous: {
       week: "上周",
       month: "上月",
@@ -662,10 +661,17 @@ export const zhCN: Dictionary = {
         ibkr: "盈透证券",
         plaid_investments: "券商同步",
       },
+      viaPlaid: "{name}（Plaid 同步）",
+      viaFile: { boa_csv: "美国银行（CSV 导入）", icbc_pdf: "工商银行信用卡（PDF 导入）" },
     },
     empty: {
-      day: "{date} 没有记录。",
+      none: "{period}没有记录。",
+      noneYet: "{period}还没有记录。",
       future: "这段时间还没开始。",
+      latest: "最近一笔在{date}。",
+      view: "查看{period}",
+      reach: "各数据来源截至 {from} 到 {to}。",
+      reachOne: "各数据来源截至 {date}。",
     },
   },
   split: {

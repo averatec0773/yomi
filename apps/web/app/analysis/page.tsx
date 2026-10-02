@@ -2,12 +2,12 @@ import { analysisReport, getCurrentUser, getTimeZone, listCategories, netWorthCh
 import { ArrowRightIcon, ChartColumnIcon } from "lucide-react";
 import Link from "next/link";
 import { DayView } from "@/components/analysis/day-view";
+import { EmptyPeriod } from "@/components/analysis/empty-period";
 import { CurrencyInsights, type InsightContext, PartialCurrencies, sourceLabel, sourceName } from "@/components/analysis/insights";
 import { type SourceLine, SourcesPopover } from "@/components/analysis/sources-popover";
 import { CsvLink } from "@/components/csv-link";
 import { Money } from "@/components/money";
 import { CurrencySection } from "@/components/stats/currency-section";
-import { EmptyState } from "@/components/ui-kit/empty-state";
 import { PageHeader } from "@/components/ui-kit/page-header";
 import { PeriodBar } from "@/components/ui-kit/period-bar";
 import { Segmented } from "@/components/ui-kit/segmented";
@@ -18,6 +18,7 @@ import { getDb } from "@/lib/db";
 import { dayLabel } from "@/lib/month";
 import { resolvePagePeriod } from "@/lib/page-period";
 import { previousLabel, rangeLabel } from "@/lib/period";
+import { distinctSourceNames } from "@/lib/source-names";
 
 export async function generateMetadata() {
   const { t } = await getI18n();
@@ -56,12 +57,14 @@ export default async function AnalysisPage({ searchParams }: PageProps<"/analysi
       income: income.length > 0,
     };
   };
-  const listed = new Set(report?.freshness.map((f) => f.key));
+  // A bank synced through Plaid and also imported from files gets a name for each.
+  const freshness = distinctSourceNames(report?.freshness ?? [], t);
+  const listed = new Set(freshness.map((f) => f.key));
   // Rows no listed source covers (added by hand) still add to the page's numbers, so they get a line too.
   const unlisted = [...new Map(sourceTotals.filter((s) => !listed.has(s.key)).map((s) => [s.key, s.source])).entries()].map(
     ([key, source]): SourceLine => ({ key, name: sourceLabel(source, t), detail: null, state: null, reminder: null, totals: totalsOf(key) }),
   );
-  const sources: SourceLine[] = (report?.freshness ?? []).map((f) => ({
+  const sources: SourceLine[] = freshness.map((f) => ({
     key: f.key,
     name: sourceName(f, t),
     detail:
@@ -107,7 +110,8 @@ export default async function AnalysisPage({ searchParams }: PageProps<"/analysi
 
   // Same order as the Transactions spend strip: the currency with the most rows first.
   const ordered = [...report.currencies].sort((a, b) => b.transactionCount - a.transactionCount || b.spendingMinor - a.spendingMinor);
-  const ctx: InsightContext = { report: { ...report, currencies: ordered }, locale, t };
+  const attention = report.attention.map((x) => (x.kind === "plaid" ? { ...x, label: freshness.find((f) => f.key === x.key)?.label ?? x.label } : x));
+  const ctx: InsightContext = { report: { ...report, currencies: ordered, freshness, attention }, locale, t };
 
   if (kind === "day") {
     const names = new Map((await listCategories(db, user)).map((c) => [c.id, c.name]));
@@ -124,9 +128,12 @@ export default async function AnalysisPage({ searchParams }: PageProps<"/analysi
   const anyTarget = ordered.some((c) => c.target != null);
   const period: Record<string, string> = report.month ? { month: report.month } : { from: range.from, to: range.to };
   // Stocks next to flows: how net worth moved over the same days (only when account balances exist).
-  const nwChange = report.future ? null : await netWorthChange(db, user, { from: range.from, to: range.to < today ? range.to : today, currency: "USD" });
+  const nwAll = report.future ? null : await netWorthChange(db, user, { from: range.from, to: range.to < today ? range.to : today, currency: "USD" });
+  // An empty period leaves out changes that are zero.
+  const nwChange =
+    nwAll && (hasData || (nwAll.converted ? nwAll.converted.changeMinor !== 0 : nwAll.currencies.some((c) => c.changeMinor !== 0))) ? nwAll : null;
   // The investments part of that change, deposits apart from the market (only with investment accounts).
-  const invest = (report.investments ?? []).filter((i) => i.changeMinor != null);
+  const invest = (report.investments ?? []).filter((i) => i.changeMinor != null && (hasData || i.changeMinor !== 0));
   const nwLine = (nwChange || invest.length > 0) && (
     <p className="mb-6 flex flex-wrap items-center gap-x-1.5 text-body text-2" data-testid="stats-net-worth">
       {nwChange && (
@@ -180,18 +187,10 @@ export default async function AnalysisPage({ searchParams }: PageProps<"/analysi
     <div>
       {header}
       {nwLine}
-      <PartialCurrencies ctx={ctx} className="mb-6 flex flex-col gap-2" />
+      {/* An empty period says how far the sources reach in its empty state instead. */}
+      {hasData && <PartialCurrencies ctx={ctx} className="mb-6 flex flex-col gap-2" />}
       {!hasData ? (
-        <EmptyState
-          icon={ChartColumnIcon}
-          action={
-            <Link href="/import" className="text-primary underline-offset-4 hover:underline">
-              {t.transactions.goImport}
-            </Link>
-          }
-        >
-          {report.future ? t.analysis.empty.future : fmt(t.stats.noData, { period: rangeLabel(range.from, range.to, locale) })}
-        </EmptyState>
+        <EmptyPeriod ctx={ctx} icon={ChartColumnIcon} period={baseLabel} />
       ) : (
         <div className="flex flex-col gap-12">
           {ordered.map((c) => (

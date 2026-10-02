@@ -13,11 +13,11 @@ import {
 import Link from "next/link";
 import { categoryIcon } from "@/components/category-icon";
 import { Money } from "@/components/money";
-import { EmptyState } from "@/components/ui-kit/empty-state";
 import { ListCard } from "@/components/ui-kit/list-card";
 import { fmt, plural } from "@/i18n";
 import { rich } from "@/i18n/rich";
 import { dayLabel } from "@/lib/month";
+import { EmptyPeriod } from "./empty-period";
 import { AttentionCard, currencyInsights, type Insight, type InsightContext, InsightRow, PartialCurrencies, sourceLabel } from "./insights";
 
 const link = "text-primary underline-offset-4 hover:underline";
@@ -60,19 +60,11 @@ export function DayView({ ctx, categoryNames }: { ctx: InsightContext; categoryN
 
   return (
     <div className="flex max-w-list flex-col gap-6" data-testid="day-view">
-      {report.currencies.length === 0 && (
-        <EmptyState
-          icon={CalendarDaysIcon}
-          action={
-            <Link href="/import" className={link}>
-              {t.transactions.goImport}
-            </Link>
-          }
-        >
-          {report.future ? a.empty.future : fmt(a.empty.day, { date: dayText })}
-        </EmptyState>
+      {report.currencies.length === 0 ? (
+        <EmptyPeriod ctx={ctx} icon={CalendarDaysIcon} period={dayText} />
+      ) : (
+        <PartialCurrencies ctx={ctx} className="flex flex-col gap-2" />
       )}
-      <PartialCurrencies ctx={ctx} className="flex flex-col gap-2" />
 
       {report.currencies.map((c) => {
         const cur = c.currency;
