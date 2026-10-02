@@ -21,7 +21,7 @@ const db = await openLedgerForCli();
 try {
   const user = getCurrentUser();
   // Env first, then the credentials saved in Settings (same resolvers as the web server).
-  const r = await syncHoldings(db, user, { provider: arg as InvestProviderChoice }, { ibkr: await resolveIbkrSource(db, user), plaid: await resolvePlaidProvider(db) });
+  const r = await syncHoldings(db, user, { provider: arg as InvestProviderChoice, ibkrPull: "cli" }, { ibkr: await resolveIbkrSource(db, user), plaid: await resolvePlaidProvider(db) });
   for (const x of r.results) {
     const totals = Object.entries(x.totals)
       .map(([cur, v]) => `${formatMinorDecimal(v, cur)} ${cur}`)

@@ -17,6 +17,7 @@ export type InvestErrorCode =
   | "invest_ibkr_pull_backoff"
   | "invest_ibkr_pull_running"
   | "invest_flex_in_progress_timeout"
+  | "invest_ibkr_test_timeout"
   | "invest_plaid_not_configured"
   | "invest_plaid_error"
   | "invest_fx_unavailable"

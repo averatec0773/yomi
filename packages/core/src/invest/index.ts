@@ -9,3 +9,4 @@ export * from "./job";
 export * from "./status";
 export * from "./credentials";
 export * from "./sections";
+export * from "./pull-log";

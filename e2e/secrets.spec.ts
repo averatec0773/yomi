@@ -83,11 +83,12 @@ test("IBKR: set up with a tested token, sync, replace and remove; the token neve
   await expect(dialog.getByRole("checkbox", { name: "Save without a successful test" })).toBeVisible();
   await dialog.getByRole("button", { name: "Test connection" }).click();
   await expect(dialog.getByTestId("ibkr-test-result")).toContainText("Connected. Statement for Sep 28, 2026, 3 positions.", { timeout: 20_000 });
-  // The fake statement has no NAV in Base: named with what yomi would miss, and nothing else.
+  // The fake statement has no NAV in Base: all six sections are listed, NAV as missing with what yomi would miss.
   const sections = dialog.getByTestId("ibkr-test-sections");
-  await expect(sections).toContainText("Not in the statement, so yomi will miss:");
-  await expect(sections.getByRole("listitem")).toHaveCount(1);
-  await expect(sections).toContainText("Net Asset Value (NAV) in Base: earlier history");
+  await expect(sections.getByTestId("ibkr-test-sections-summary")).toHaveText("Flex sections: 5 of 6 in the query, 1 missing");
+  await expect(sections.getByRole("listitem")).toHaveCount(6);
+  await expect(sections.locator('[data-state="present"]')).toHaveCount(5);
+  await expect(sections.locator('[data-section="nav"][data-state="missing"]')).toContainText("yomi misses earlier history");
   await dialog.getByTestId("ibkr-expires-on").fill(inDays(5));
   await expect(save).toBeEnabled();
   await save.click();
@@ -107,14 +108,22 @@ test("IBKR: set up with a tested token, sync, replace and remove; the token neve
   await expect(note).toContainText("Net Asset Value (NAV) in Base is not in the Flex query, so yomi misses earlier history");
   await expect(note).toContainText("Add it to the query in Client Portal under Flex Queries");
   await expect(note).not.toContainText("Trades");
+  // The Flex sections line: all six states from that pull, without a test.
+  const detail = ibkr.getByTestId("ibkr-sections-detail");
+  await expect(detail).toContainText(/Flex sections: 5 of 6 in the query, 1 missing · Checked (just now|\d+ (second|minute)s? ago)/);
+  await expect(detail.getByTestId("ibkr-section-list")).toBeHidden();
+  await detail.getByText("Flex sections").click();
+  await expect(detail.getByRole("listitem")).toHaveCount(6);
+  await expect(detail.locator('[data-section="nav"][data-state="missing"]')).toBeVisible();
+  await expect(detail.locator('[data-state="present"]')).toHaveCount(5);
 
   // Test connection from the menu: the saved token and query, no form; the result stays in a small dialog.
   await ibkr.getByRole("button", { name: "More actions for Interactive Brokers" }).click();
   await page.getByRole("menuitem", { name: "Test connection" }).click();
   const testDialog = page.getByRole("dialog", { name: "Test the IBKR connection" });
   await expect(testDialog.getByTestId("ibkr-test-result")).toContainText("Connected. Statement for Sep 28, 2026, 3 positions.", { timeout: 20_000 });
-  await expect(testDialog.getByTestId("ibkr-test-sections").getByRole("listitem")).toHaveCount(1);
-  await expect(testDialog.getByTestId("ibkr-test-sections")).toContainText("Net Asset Value (NAV) in Base: earlier history");
+  await expect(testDialog.getByTestId("ibkr-test-sections").getByRole("listitem")).toHaveCount(6);
+  await expect(testDialog.locator('[data-section="nav"][data-state="missing"]')).toContainText("yomi misses earlier history");
   await expect(testDialog.getByLabel("Flex token")).toHaveCount(0);
   await page.keyboard.press("Escape");
   await expect(testDialog).toBeHidden();

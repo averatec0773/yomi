@@ -1,7 +1,7 @@
 "use client";
 
-import { CheckCircle2Icon, PlugZapIcon, TriangleAlertIcon } from "lucide-react";
-import type { IbkrTestResult } from "@yomi/contracts";
+import { CheckCircle2Icon, CheckIcon, CircleDashedIcon, ListChecksIcon, PlugZapIcon, XIcon } from "lucide-react";
+import type { IbkrSectionItem, IbkrTestResult } from "@yomi/contracts";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Sheet } from "@/components/split/ui";
@@ -12,9 +12,27 @@ import { useLocale, useT } from "@/i18n/client";
 import { errorText } from "@/i18n/errors";
 import { apiFetch } from "@/lib/api";
 import { dayLabel } from "@/lib/month";
-import { missingSectionNotes, unknownSectionNames } from "./ibkr-sections";
+import { cn } from "@/lib/utils";
+import { sectionStatusRows, sectionsSummary, unknownSectionNames } from "./ibkr-sections";
 
 export type IbkrTestState = { kind: "idle" } | { kind: "testing" } | { kind: "ok"; result: IbkrTestResult } | { kind: "error"; text: string };
+
+/** Seconds since this mounted (a test running), ticking once a second. */
+function Elapsed() {
+  const t = useT();
+  const [seconds, setSeconds] = useState(0);
+  useEffect(() => {
+    const start = Date.now();
+    const timer = setInterval(() => setSeconds(Math.floor((Date.now() - start) / 1000)), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  return (
+    // Hidden from screen readers: inside the status region every tick would be announced.
+    <span className="tabular-nums text-foreground" aria-hidden data-testid="ibkr-test-elapsed">
+      {fmt(t.secrets.testElapsed, { seconds })}
+    </span>
+  );
+}
 
 /** The outcome of a Test connection (setup dialog and the row's own test): waiting, statement and sections, or the calm error. */
 export function IbkrTestReport({ test }: { test: IbkrTestState }) {
@@ -22,7 +40,12 @@ export function IbkrTestReport({ test }: { test: IbkrTestState }) {
   const locale = useLocale();
   return (
     <div role="status" className="flex flex-col gap-1 text-meta text-2" data-testid="ibkr-test-result">
-      {test.kind === "testing" && <span>{t.secrets.testSlow}</span>}
+      {test.kind === "testing" && (
+        <>
+          <Elapsed />
+          <span>{t.secrets.testSlow}</span>
+        </>
+      )}
       {test.kind === "ok" && (
         <>
           <span className="inline-flex items-center gap-1.5 text-foreground">
@@ -37,34 +60,52 @@ export function IbkrTestReport({ test }: { test: IbkrTestState }) {
   );
 }
 
-/** After a successful test: all six sections there, each missing one with what yomi will lack, and the ones a one-day test cannot settle. */
+const STATE_ICON = { present: CheckIcon, missing: XIcon, unknown: CircleDashedIcon } as const;
+
+/**
+ * The six Flex sections yomi reads, each with its state (In the query, Missing, Not checked yet) and, with
+ * `effects`, what yomi lacks without a missing one. Neutral icons: shape tells the states apart, never color.
+ */
+export function IbkrSectionList({ sections, effects = true }: { sections: IbkrSectionItem[]; effects?: boolean }) {
+  const t = useT();
+  return (
+    <ul className="flex flex-col gap-1 text-meta text-2" data-testid="ibkr-section-list">
+      {sectionStatusRows(sections, t).map((r) => {
+        const Icon = STATE_ICON[r.state];
+        return (
+          <li key={r.id} className="flex items-start gap-1.5" data-section={r.id} data-state={r.state}>
+            <Icon className="mt-[3px] size-3.5 shrink-0 text-2" aria-hidden />
+            <span className="min-w-0">
+              <span className="text-foreground">{r.name}</span>
+              <span className="text-3"> · </span>
+              <span className={cn(r.state === "missing" && "font-medium text-foreground")}>{r.label}</span>
+              {effects && r.effect && <span className="block">{r.effect}</span>}
+            </span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/** After a successful test: the six sections with their state, how to add missing ones, and why some are not checked yet. */
 function SectionsReport({ sections }: { sections: IbkrTestResult["sections"] }) {
   const t = useT();
   const locale = useLocale();
   const i = t.secrets.ibkr;
-  const notes = missingSectionNotes(sections, t);
+  const missing = sections.filter((s) => s.state === "missing").length;
   const unknown = unknownSectionNames(sections, t);
   return (
-    <div className="flex flex-col gap-1" data-testid="ibkr-test-sections">
-      {notes && (
-        <>
-          <span className="inline-flex items-center gap-1.5 text-foreground">
-            <TriangleAlertIcon className="size-3.5 text-2" aria-hidden />
-            {i.sectionsMissing}
-          </span>
-          <ul className="flex list-disc flex-col gap-0.5 pl-5">
-            {notes.map((n) => (
-              <li key={n.id}>
-                <span className="font-medium text-foreground">{n.name}</span>: {n.effect}
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
+    <div className="mt-1 flex flex-col gap-1.5" data-testid="ibkr-test-sections">
+      <span className="inline-flex items-center gap-1.5 font-medium text-foreground" data-testid="ibkr-test-sections-summary">
+        <ListChecksIcon className="size-3.5 text-2" aria-hidden />
+        {sectionsSummary(sections, t)}
+      </span>
+      <IbkrSectionList sections={sections} />
+      {missing > 0 && <span>{plural(t.connections.ibkr.sectionsFix, missing)}</span>}
       {unknown.length > 0 && (
         <span data-testid="ibkr-test-unknown">{fmt(i.sectionsUnknown, { names: new Intl.ListFormat(locale, { type: "conjunction" }).format(unknown) })}</span>
       )}
-      {!notes && <span>{unknown.length ? i.sectionsRest : i.sectionsAll}</span>}
     </div>
   );
 }

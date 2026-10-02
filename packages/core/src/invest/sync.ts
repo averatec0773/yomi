@@ -7,6 +7,7 @@ import { BankProviderError, type BankProvider } from "../sync/provider";
 import type { CurrentUser } from "../user";
 import { InvestError } from "./errors";
 import { ibkrWindow, type IbkrSource } from "./ibkr";
+import type { IbkrPullKind } from "./pull-log";
 import { recordIbkrSections } from "./sections";
 import { latestSnapshotDate, writeStatement, type WriteStatementResult } from "./store";
 import { clockNow } from "../time/clock";
@@ -78,7 +79,7 @@ const text = (e: unknown) => (e instanceof Error ? e.message : String(e));
 export async function syncHoldings(
   db: Db,
   user: CurrentUser,
-  opts: { provider: InvestProviderChoice; ibkrHistoryDays?: number },
+  opts: { provider: InvestProviderChoice; ibkrHistoryDays?: number; ibkrPull?: IbkrPullKind },
   deps: InvestSyncDeps,
 ): Promise<InvestSyncResult> {
   const out: InvestSyncResult = { results: [], errors: [], skipped: [] };
@@ -95,7 +96,7 @@ export async function syncHoldings(
       try {
         const expectedAsOf = lastCompletedTradingDay(now());
         const range = ibkrWindow(expectedAsOf, await latestSnapshotDate(db, user, "ibkr"), opts.ibkrHistoryDays);
-        const st = await deps.ibkr.fetchStatement(range);
+        const st = await deps.ibkr.fetchStatement(range, opts.ibkrPull ?? (opts.ibkrHistoryDays != null ? "history" : "sync"));
         const written = await writeStatement(db, user, st);
         if (st.sections) await recordIbkrSections(db, user, { at: new Date().toISOString(), ...range, present: st.sections, query: deps.ibkr.queryKey ?? null });
         out.results.push({ provider: "ibkr", connectionId: null, expectedAsOf, stale: st.asOf < expectedAsOf, range, ...written });

@@ -2,7 +2,7 @@ import { IbkrSectionItem } from "@yomi/contracts";
 import { describe, expect, it } from "vitest";
 import { en } from "../../i18n/en";
 import { zhCN } from "../../i18n/zh-CN";
-import { missingSectionNotes, unknownSectionNames } from "./ibkr-sections";
+import { missingSectionNotes, sectionStatusRows, sectionsSummary, unknownSectionNames } from "./ibkr-sections";
 
 const ids = IbkrSectionItem.shape.id.options;
 type State = IbkrSectionItem["state"];
@@ -26,6 +26,29 @@ describe("IBKR Flex sections", () => {
     const s = all({ trades: "unknown", cashTransactions: "unknown" });
     expect(missingSectionNotes(s, en)).toBeNull();
     expect(unknownSectionNames(s, en)).toEqual(["Trades", "Cash Transactions"]);
+  });
+
+  it("lists all six sections with their state, and what yomi misses only for a missing one", () => {
+    const rows = sectionStatusRows(all({ trades: "unknown", nav: "missing" }), en);
+    expect(rows.map((r) => [r.id, r.state, r.label])).toEqual([
+      ["accountInformation", "present", "In the query"],
+      ["openPositions", "present", "In the query"],
+      ["cashReport", "present", "In the query"],
+      ["trades", "unknown", "Not checked yet"],
+      ["cashTransactions", "present", "In the query"],
+      ["nav", "missing", "Missing"],
+    ]);
+    expect(rows.find((r) => r.id === "nav")!.effect).toBe("yomi misses earlier history: the investment chart starts on the first sync day instead of up to 365 days back");
+    expect(rows.filter((r) => r.effect != null).map((r) => r.id)).toEqual(["nav"]);
+  });
+
+  it("sums the states up in one line", () => {
+    expect(sectionsSummary(all(), en)).toBe("Flex sections: all 6 in the query");
+    expect(sectionsSummary(all({ nav: "missing" }), en)).toBe("Flex sections: 5 of 6 in the query, 1 missing");
+    expect(sectionsSummary(all({ nav: "missing", trades: "unknown", cashTransactions: "unknown" }), en)).toBe(
+      "Flex sections: 3 of 6 in the query, 1 missing, 2 not checked yet",
+    );
+    expect(sectionsSummary(all({ nav: "missing", trades: "unknown" }), zhCN)).toBe("Flex 部分：6 个中有 4 个在查询里，缺 1 个，1 个还没确认");
   });
 
   it("has a name and an effect for every section in both languages", () => {

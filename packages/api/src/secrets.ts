@@ -96,7 +96,17 @@ export function secretsRoutes(deps: SecretsDeps): Hono {
     if (err instanceof BadRequest) return c.json(errorBody(err), 400);
     if (err instanceof SecretSettingError) return c.json(errorBody(err), 409);
     if (err instanceof SecretKeyError) return c.json(errorBody(err), 409);
-    if (err instanceof InvestError) return c.json(errorBody(err), err.code === "invest_ibkr_rate_limited" ? 429 : err.code.startsWith("invest_ibkr_token") || err.code === "invest_ibkr_query_invalid" || err.code === "invest_ibkr_ip_restricted" ? 409 : 502);
+    if (err instanceof InvestError) {
+      const status =
+        err.code === "invest_ibkr_rate_limited"
+          ? 429
+          : err.code.startsWith("invest_ibkr_token") || err.code === "invest_ibkr_query_invalid" || err.code === "invest_ibkr_ip_restricted"
+            ? 409
+            : err.code === "invest_ibkr_test_timeout"
+              ? 504
+              : 502;
+      return c.json(errorBody(err), status);
+    }
     throw err;
   });
 

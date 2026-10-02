@@ -1,5 +1,6 @@
 import { FLEX_MAX_RANGE_DAYS, FlexError, type FlexRange, type InvestStatement } from "@yomi/importers";
 import { InvestError, type InvestErrorCode } from "./errors";
+import type { IbkrPullKind } from "./pull-log";
 import { addDays } from "./time";
 
 export const IBKR_TOKEN_ENV = "IBKR_FLEX_TOKEN";
@@ -20,8 +21,8 @@ export function ibkrConfig(env: NodeJS.ProcessEnv = process.env): IbkrConfig {
 
 /** Pulls the configured Activity Flex Query and maps it. Injected in tests. */
 export interface IbkrSource {
-  /** `range` overrides the period saved in the query (SendRequest `p`, or `fd`/`td`). */
-  fetchStatement(range?: FlexRange): Promise<InvestStatement>;
+  /** `range` overrides the period saved in the query (SendRequest `p`, or `fd`/`td`); `kind` names the pull in its log line. */
+  fetchStatement(range?: FlexRange, kind?: IbkrPullKind): Promise<InvestStatement>;
   /** `ibkrQueryKey` of the query, so the sections each pull had are recorded for it (absent on injected sources). */
   queryKey?: string;
 }

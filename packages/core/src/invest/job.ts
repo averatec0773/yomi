@@ -164,7 +164,7 @@ export async function runHoldingsSyncJob(
   for (const p of due) {
     let ok = false;
     try {
-      const r = await syncHoldings(db, user, { provider: p }, { ibkr: deps.ibkr, plaid: deps.plaid, now });
+      const r = await syncHoldings(db, user, { provider: p, ibkrPull: "scheduled" }, { ibkr: deps.ibkr, plaid: deps.plaid, now });
       result.results.push(...r.results);
       result.errors.push(...r.errors);
       ok = r.errors.length === 0;
@@ -248,7 +248,7 @@ export async function pullIbkrHistory(
   const expected = lastCompletedTradingDay(t0);
   const others = withoutIbkr(job.lastError);
   try {
-    const r = await syncHoldings(db, user, { provider: "ibkr", ibkrHistoryDays: opts.days }, { ibkr: deps.ibkr, now });
+    const r = await syncHoldings(db, user, { provider: "ibkr", ibkrHistoryDays: opts.days, ibkrPull: "history" }, { ibkr: deps.ibkr, now });
     const received = r.results.find((x) => x.provider === "ibkr")?.asOf ?? null;
     await db.update(jobs)
       .set({

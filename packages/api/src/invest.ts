@@ -66,6 +66,7 @@ const INVEST_ERROR_STATUS: Record<InvestErrorCode, ContentfulStatusCode> = {
   invest_ibkr_pull_backoff: 429,
   invest_ibkr_pull_running: 409,
   invest_flex_in_progress_timeout: 504,
+  invest_ibkr_test_timeout: 504,
   invest_plaid_not_configured: 409,
   invest_plaid_error: 502,
   invest_fx_unavailable: 502,

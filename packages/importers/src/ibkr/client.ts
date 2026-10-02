@@ -70,7 +70,10 @@ export interface FlexClientOptions {
   sleep?: (ms: number) => Promise<void>;
   /** Per HTTP request. Default 60 s. */
   timeoutMs?: number;
-  /** Longest total wait for a statement still being generated. Default 5 minutes. */
+  /**
+   * Longest total wait (the pauses between requests, SendRequest and GetStatement together) in one
+   * `fetchStatement`. Default 5 minutes.
+   */
   maxWaitMs?: number;
   /** First wait between polls; doubled per retry up to `maxDelayMs`. Defaults 5 s and 30 s. */
   initialDelayMs?: number;
@@ -119,12 +122,24 @@ export function flexRangeParams(range: FlexRange): Record<string, string> {
   return { fd: range.from.replaceAll("-", ""), td: range.to.replaceAll("-", "") };
 }
 
+/** One "not ready yet / busy" answer the client waited on: which request, IBKR's code, and the pause before asking again. */
+export interface FlexRetry {
+  stage: "send" | "get";
+  code: string;
+  waitMs: number;
+}
+
+export interface FlexFetchHooks {
+  /** Called before each pause on a retryable answer (the pull's log line lists them). */
+  onRetry?: (retry: FlexRetry) => void;
+}
+
 export interface FlexClient {
   /**
    * SendRequest, then GetStatement until the statement is ready. Returns the FlexQueryResponse XML. Without
    * `range` the period saved in the query applies.
    */
-  fetchStatement(range?: FlexRange): Promise<string>;
+  fetchStatement(range?: FlexRange, hooks?: FlexFetchHooks): Promise<string>;
 }
 
 type Step = { kind: "done"; xml: string } | { kind: "ref"; code: string; url: string | null } | { kind: "retry"; code: string; message: string };
@@ -194,33 +209,45 @@ export function createFlexClient(opts: FlexClientOptions): FlexClient {
     return text;
   }
 
-  /** Repeats `call` while it answers with a retryable code, sleeping with doubling delays; bounded by maxWait. */
-  async function withRetry(call: () => Promise<Step>): Promise<Exclude<Step, { kind: "retry" }>> {
-    let waited = 0;
+  /**
+   * Repeats `call` while it answers with a retryable code, sleeping with doubling delays. `budget` is shared by
+   * both requests of one fetch: the last pause is cut to what is left of maxWait, then the fetch gives up.
+   */
+  async function withRetry(
+    stage: FlexRetry["stage"],
+    call: () => Promise<Step>,
+    budget: { waited: number },
+    hooks: FlexFetchHooks,
+  ): Promise<Exclude<Step, { kind: "retry" }>> {
     let delay = firstDelay;
     for (;;) {
       const step = await call();
       if (step.kind !== "retry") return step;
-      const wait = step.code === FLEX_RATE_LIMIT_CODE ? Math.max(delay, 10_000) : delay;
-      if (waited + wait > maxWait) {
+      const left = maxWait - budget.waited;
+      if (left <= 0) {
         if (step.code === FLEX_RATE_LIMIT_CODE) throw new FlexError("rate_limited", step.code, `IBKR Flex rate limit: ${step.message}`);
-        throw new FlexError("in_progress_timeout", step.code, `IBKR Flex statement not ready after ${Math.round(waited / 1000)} s (${step.code}: ${step.message})`);
+        throw new FlexError("in_progress_timeout", step.code, `IBKR Flex statement not ready after ${Math.round(budget.waited / 1000)} s (${step.code}: ${step.message})`);
       }
+      const wait = Math.min(step.code === FLEX_RATE_LIMIT_CODE ? Math.max(delay, 10_000) : delay, left);
+      hooks.onRetry?.({ stage, code: step.code, waitMs: wait });
       await sleep(wait);
-      waited += wait;
+      budget.waited += wait;
       delay = Math.min(delay * 2, maxDelay);
     }
   }
 
   return {
-    async fetchStatement(range) {
+    async fetchStatement(range, hooks = {}) {
       const extra = range ? flexRangeParams(range) : {};
-      const sent = await withRetry(async () => readFlexAnswer(await get(FLEX_SEND_REQUEST_URL, opts.queryId, extra)));
+      const budget = { waited: 0 };
+      const sent = await withRetry("send", async () => readFlexAnswer(await get(FLEX_SEND_REQUEST_URL, opts.queryId, extra)), budget, hooks);
       if (sent.kind === "done") return sent.xml;
       const url = statementUrl(sent.url);
       // The statement is generated asynchronously: give it a moment before the first poll.
-      await sleep(Math.min(firstDelay, 5000));
-      const got = await withRetry(async () => readFlexAnswer(await get(url, sent.code)));
+      const pause = Math.min(firstDelay, 5000);
+      await sleep(pause);
+      budget.waited += pause;
+      const got = await withRetry("get", async () => readFlexAnswer(await get(url, sent.code)), budget, hooks);
       if (got.kind !== "done") throw new FlexError("unavailable", null, "GetStatement answered with a new reference code");
       return got.xml;
     },
