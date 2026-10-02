@@ -56,6 +56,17 @@ export interface InvestTxnRow {
   raw: Record<string, unknown>;
 }
 
+/** Net asset value of an account at the close of `date`, in the account's base currency (IBKR NAV in Base). */
+export interface InvestNavRow {
+  accountExternalId: string;
+  /** YYYY-MM-DD */
+  date: string;
+  currency: string;
+  /** Total net asset value, exact decimal string. */
+  total: string;
+  raw: Record<string, unknown>;
+}
+
 /** One provider pull: what the accounts held on `asOf` and the activity that came with it. */
 export interface InvestStatement {
   source: InvestSourceId;
@@ -65,5 +76,9 @@ export interface InvestStatement {
   securities: InvestSecurityRow[];
   holdings: InvestHoldingRow[];
   transactions: InvestTxnRow[];
+  /** Daily account values over the pulled window, when the source has them (IBKR NAV in Base). */
+  navs?: InvestNavRow[];
+  /** IBKR: ids of the Flex sections present in the statement (empty ones included), see ibkr/map.ts FLEX_SECTIONS. */
+  sections?: string[];
   warnings: Notice[];
 }

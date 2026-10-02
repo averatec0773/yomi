@@ -1,4 +1,4 @@
-import { type Db, holdingSnapshots, investmentAccounts, investmentTransactions, securities } from "@yomi/db";
+import { type Db, holdingSnapshots, investmentAccounts, investmentDailyNav, investmentTransactions, securities } from "@yomi/db";
 import { addDec, decimalToMinor, formatDec, type InvestStatement, type Notice, notice, parseDec } from "@yomi/importers";
 import { and, eq, max } from "@yomi/db/orm";
 import { minorDigits } from "../money";
@@ -11,6 +11,8 @@ export interface WriteStatementResult {
   cashBalances: number;
   transactionsNew: number;
   transactionsUpdated: number;
+  /** Daily account values (IBKR NAV in Base) written or overwritten. */
+  navDays: number;
   /** Market value per currency of what was written, minor units. */
   totals: Record<string, number>;
   warnings: Notice[];
@@ -22,7 +24,8 @@ export const positionKey = (securityId: number | null, currency: string) => (sec
  * Stores one provider pull in a single DB transaction. Accounts and securities are upserted by the
  * provider's id; each account's holdings for `statement.asOf` replace whatever that day already had
  * (a second run on the same day overwrites, a position sold since disappears); investment
- * transactions are upserted by (account, external id). Decimal strings become minor units here, with
+ * transactions are upserted by (account, external id); daily values (NAV) by (account, day), so a re-pull
+ * overwrites the same day. Decimal strings become minor units here, with
  * one rounding step each.
  */
 export async function writeStatement(db: Db, user: CurrentUser, statement: InvestStatement, opts: { bankConnectionId?: number | null } = {}): Promise<WriteStatementResult> {
@@ -34,6 +37,7 @@ export async function writeStatement(db: Db, user: CurrentUser, statement: Inves
     cashBalances: 0,
     transactionsNew: 0,
     transactionsUpdated: 0,
+    navDays: 0,
     totals: {},
     warnings: [...statement.warnings],
   };
@@ -139,6 +143,16 @@ export async function writeStatement(db: Db, user: CurrentUser, statement: Inves
         .onConflictDoUpdate({ target: [investmentTransactions.investmentAccountId, investmentTransactions.externalId], set: values });
       if (existed) out.transactionsUpdated += 1;
       else out.transactionsNew += 1;
+    }
+
+    for (const n of statement.navs ?? []) {
+      const accountId = accountIds.get(n.accountExternalId);
+      if (accountId == null) continue;
+      const values = { totalMinor: decimalToMinor(n.total, minorDigits(n.currency)), currency: n.currency, raw: JSON.stringify(n.raw), updatedAt: new Date().toISOString() };
+      await tx.insert(investmentDailyNav)
+        .values({ userId: user.id, investmentAccountId: accountId, asOf: n.date, ...values })
+        .onConflictDoUpdate({ target: [investmentDailyNav.investmentAccountId, investmentDailyNav.asOf], set: values });
+      out.navDays += 1;
     }
   });
   return out;

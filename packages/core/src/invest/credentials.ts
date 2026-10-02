@@ -1,4 +1,4 @@
-import { createFlexClient, type FlexClientOptions, mapFlexStatement } from "@yomi/importers";
+import { createFlexClient, type FlexClientOptions, FlexError, type FlexRange, type FlexRetry, type InvestStatement, mapFlexStatement } from "@yomi/importers";
 import type { Db } from "@yomi/db";
 import {
   auditSecretChange,
@@ -17,7 +17,11 @@ import { deleteSetting, type Q, readSetting, writeSetting } from "../settings/st
 import { getTimeZone } from "../settings/time-zone";
 import { clockNow, todayIn } from "../time/zone";
 import type { CurrentUser } from "../user";
+import { InvestError } from "./errors";
 import { IBKR_QUERY_ENV, IBKR_TOKEN_ENV, type IbkrConfig, type IbkrSource, toInvestError } from "./ibkr";
+import { type FlexPullLog, formatFlexPullLog, type IbkrPullKind } from "./pull-log";
+import { type IbkrSectionItem, ibkrQueryKey, nextSectionsRecord, recordIbkrSections } from "./sections";
+import { lastCompletedTradingDay, previousWeekday } from "./time";
 
 /** user_settings keys (per user). Token and query id are sealed (`enc:v1:`); the expiry date is plain. */
 export const IBKR_TOKEN_SETTING = "ibkr_flex_token";
@@ -42,22 +46,68 @@ export async function resolveIbkrCredentials(q: Q, user: CurrentUser, env: NodeJ
 
 /** configured + the names of what is missing (env variable names, which also name the Settings fields). */
 export async function resolveIbkrConfig(q: Q, user: CurrentUser, env: NodeJS.ProcessEnv = process.env): Promise<IbkrConfig> {
-  const c = await resolveIbkrCredentials(q, user, env);
+  return ibkrConfigOf(await resolveIbkrCredentials(q, user, env));
+}
+
+export function ibkrConfigOf(c: IbkrCredentials): IbkrConfig {
   const missing = [c.token.value ? null : IBKR_TOKEN_ENV, c.queryId.value ? null : IBKR_QUERY_ENV].filter((x): x is string => x != null);
   return { configured: missing.length === 0, missing };
 }
 
-export type FlexOptions = Pick<FlexClientOptions, "fetch" | "sleep" | "maxWaitMs" | "initialDelayMs" | "maxDelayMs" | "timeoutMs">;
+export type FlexOptions = Pick<FlexClientOptions, "fetch" | "sleep" | "maxWaitMs" | "initialDelayMs" | "maxDelayMs" | "timeoutMs"> & {
+  /** Where the one line per pull goes (`formatFlexPullLog`); default console.log. */
+  log?: (line: string) => void;
+};
 
-/** A Flex source for one token and query id (SendRequest, then GetStatement with the client's retry behavior). */
+/**
+ * Flex answers after which a `from`/`to` pull is asked once more with `to` one weekday earlier: 1003 "Statement
+ * is not available" and 1020 "Invalid request or unable to validate request". IBKR's docs do not say what
+ * SendRequest answers when `td` is a day whose statement is not published yet; these are the plausible codes,
+ * and the earlier `to` gives the same result the "Last Business Day" period did (the job sees a stale statement
+ * and retries overnight).
+ */
+export const FLEX_UNPUBLISHED_CODES = new Set(["1003", "1020"]);
+
+/**
+ * A Flex source for one token and query id (SendRequest, then GetStatement with the client's retry behavior).
+ * Each pull writes one log line (`formatFlexPullLog`): kind, window, retry codes and waits, fallback, statement
+ * date, sections, duration.
+ */
 export function ibkrSourceFor(token: string, queryId: string, opts: FlexOptions = {}): IbkrSource {
-  const client = createFlexClient({ ...opts, token: token.trim(), queryId: queryId.trim() });
+  const { log = (l: string) => console.log(l), ...clientOpts } = opts;
+  const client = createFlexClient({ ...clientOpts, token: token.trim(), queryId: queryId.trim() });
   return {
-    async fetchStatement() {
+    queryKey: ibkrQueryKey(queryId),
+    async fetchStatement(range?: FlexRange, kind: IbkrPullKind = "sync") {
+      const t0 = performance.now();
+      const retries: FlexRetry[] = [];
+      const hooks = { onRetry: (r: FlexRetry) => void retries.push(r) };
+      let fallback: FlexPullLog["fallback"] = null;
+      const entry = (rest: Pick<FlexPullLog, "statementDate" | "sections" | "error">): FlexPullLog => ({
+        kind,
+        range: range && "to" in range ? { from: range.from, to: range.to } : null,
+        retries,
+        fallback,
+        ms: performance.now() - t0,
+        ...rest,
+      });
       try {
-        return mapFlexStatement(await client.fetchStatement());
+        let st: InvestStatement;
+        try {
+          st = mapFlexStatement(await client.fetchStatement(range, hooks));
+        } catch (e) {
+          if (!range || !("to" in range) || !(e instanceof FlexError) || !e.flexCode || !FLEX_UNPUBLISHED_CODES.has(e.flexCode)) throw e;
+          const to = previousWeekday(range.to);
+          fallback = { to, code: e.flexCode };
+          st = mapFlexStatement(await client.fetchStatement({ from: range.from < to ? range.from : to, to }, hooks));
+        }
+        log(formatFlexPullLog(entry({ statementDate: st.asOf, sections: st.sections ?? null, error: null })));
+        return st;
       } catch (e) {
-        throw toInvestError(e);
+        const err = toInvestError(e);
+        const flexCode = typeof err.params.flexCode === "string" ? err.params.flexCode : null;
+        log(formatFlexPullLog(entry({ statementDate: null, sections: null, error: { code: err.code, flexCode } })));
+        throw err;
       }
     },
   };
@@ -79,15 +129,55 @@ export interface IbkrTestResult {
   /** Positions (not cash) in the statement. */
   positions: number;
   accounts: number;
+  /**
+   * The query sections yomi reads, in a fixed order: present, missing, or unknown (Trades and Cash Transactions
+   * absent on this one-day window, which proves nothing). With `record`, earlier pulls of the same query count too.
+   */
+  sections: IbkrSectionItem[];
+}
+
+/** Longest total wait of a Test connection for IBKR to prepare the statement. */
+export const IBKR_TEST_MAX_WAIT_MS = 60_000;
+
+/**
+ * The day Test connection asks for: the weekday before `lastCompletedTradingDay`, a statement IBKR has certainly
+ * published. After 18:00 New York the last completed trading day is today, which IBKR usually publishes only after
+ * midnight, so asking for it keeps the test polling for minutes.
+ */
+export function ibkrTestDay(now: Date): string {
+  return previousWeekday(lastCompletedTradingDay(now));
 }
 
 /**
- * "Test connection": pulls the query once through the real flow and reports the statement date and positions.
- * Stores nothing. Throws InvestError (token expired, invalid, query invalid, rate limited, …).
+ * "Test connection": pulls the query once through the real flow (one day, `ibkrTestDay`) and reports the statement
+ * date, positions and which of the sections yomi reads the query has. Waits about a minute at most, then throws
+ * `invest_ibkr_test_timeout`. Stores nothing but, with `record` (the test ran on the saved query), the sections this
+ * pull had. Throws InvestError (token expired, invalid, query invalid, rate limited, …).
  */
-export async function testIbkrCredentials(token: string, queryId: string, opts: FlexOptions = {}): Promise<IbkrTestResult> {
-  const s = await ibkrSourceFor(token, queryId, { maxWaitMs: 2 * 60 * 1000, ...opts }).fetchStatement();
-  return { statementDate: s.asOf, positions: s.holdings.filter((h) => h.securityExternalId != null).length, accounts: s.accounts.length };
+export async function testIbkrCredentials(
+  token: string,
+  queryId: string,
+  opts: FlexOptions = {},
+  now: Date = clockNow(),
+  record?: { q: Q; user: CurrentUser },
+): Promise<IbkrTestResult> {
+  // One day is enough to check the token and the query, whatever period the query has saved.
+  const day = ibkrTestDay(now);
+  let s: InvestStatement;
+  try {
+    s = await ibkrSourceFor(token, queryId, { maxWaitMs: IBKR_TEST_MAX_WAIT_MS, ...opts }).fetchStatement({ from: day, to: day }, "test");
+  } catch (e) {
+    if (!(e instanceof InvestError) || e.code !== "invest_flex_in_progress_timeout") throw e;
+    throw new InvestError("invest_ibkr_test_timeout", "IBKR was still preparing the statement after about a minute; try again in a few minutes", e.params);
+  }
+  const pull = { at: new Date().toISOString(), from: day, to: day, present: s.sections ?? [], query: ibkrQueryKey(queryId) };
+  const sections = (record ? await recordIbkrSections(record.q, record.user, pull) : nextSectionsRecord(null, pull)).sections;
+  return {
+    statementDate: s.asOf,
+    positions: s.holdings.filter((h) => h.securityExternalId != null).length,
+    accounts: s.accounts.length,
+    sections,
+  };
 }
 
 export type ExpiryState = "none" | "ok" | "soon" | "expired";

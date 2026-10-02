@@ -47,6 +47,7 @@ describe("migrations", () => {
       "holding_snapshots",
       "import_batches",
       "investment_accounts",
+      "investment_daily_nav",
       "investment_transactions",
       "jobs",
       "merchant_rules",
@@ -72,8 +73,8 @@ describe("migrations", () => {
   it("is idempotent: a second run applies nothing and logs one migration per journal entry", async () => {
     await migrate(db);
     const log = await queryRows<{ n: number }>(db, sql`select count(*)::int as n from drizzle.__drizzle_migrations`);
-    expect(log[0]!.n).toBe(1);
-    expect(await listTables(db)).toHaveLength(22);
+    expect(log[0]!.n).toBe(2);
+    expect(await listTables(db)).toHaveLength(23);
   });
 
   it("enforces foreign keys", async () => {

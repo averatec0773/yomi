@@ -28,7 +28,8 @@ function weekdayOf(date: string): number {
   return new Date(`${date}T00:00:00Z`).getUTCDay();
 }
 
-function previousWeekday(date: string): string {
+/** The weekday before `date` (Friday for a Monday or a weekend day). */
+export function previousWeekday(date: string): string {
   let d = addDays(date, -1);
   while (weekdayOf(d) === 0 || weekdayOf(d) === 6) d = addDays(d, -1);
   return d;

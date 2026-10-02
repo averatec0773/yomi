@@ -87,14 +87,6 @@ export function oneCurrency(nw: NetWorth): { currency: string; parts: NetWorthPa
   return null;
 }
 
-/** A daily series of one part (total, cash + cards, holdings or P/L) in the currency `oneCurrency` picked. */
-export function seriesOf(nw: NetWorth, currency: string, pick: (p: NetWorthParts) => number | null): { date: string; value: number | null }[] {
-  return nw.series.map((p) => {
-    const parts = nw.converted ? (Object.keys(p.byCurrency).length ? p.converted : null) : (p.byCurrency[currency] ?? null);
-    return { date: p.date, value: parts ? pick(parts) : null };
-  });
-}
-
 /** "Cash flow this period −$1,191.20 · Open Stats": income minus spending per currency, from Stats. */
 export function cashFlowText(flows: { currency: string; minor: number }[] | null, t: Dictionary) {
   if (!flows || flows.length === 0) return t.assets.cashFlowNone;

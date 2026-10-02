@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { bankAccounts, bankConnections, type Db, holdingSnapshots, investmentAccounts, investmentTransactions, jobs, plaidLinkSessions, securities } from "@yomi/db";
+import { bankAccounts, bankConnections, type Db, holdingSnapshots, investmentAccounts, investmentDailyNav, investmentTransactions, jobs, plaidLinkSessions, securities } from "@yomi/db";
 import { createPlaidClient, type InvestStatement, mapFlexStatement } from "@yomi/importers";
 import { eq } from "@yomi/db/orm";
 import { describe, expect, it } from "vitest";
@@ -8,8 +8,9 @@ import { createPlaidProvider } from "../sync/plaid";
 import { BankSyncError, connectWithPublicToken, createLinkToken, syncAll, syncConnection } from "../sync/sync";
 import { InvestError } from "./errors";
 import { convertMinor, crossRate, FX_JOB, type FxTable, getFxRates } from "./fx";
-import { toInvestError } from "./ibkr";
-import { holdingsDue, HOLDINGS_SYNC_JOB, ibkrDue, parseHoldingsState, runHoldingsSyncJob } from "./job";
+import { ibkrSourceFor } from "./credentials";
+import { ibkrWindow, toInvestError } from "./ibkr";
+import { holdingsDue, HOLDINGS_SYNC_JOB, ibkrDue, parseHoldingsState, pullIbkrHistory, runHoldingsSyncJob } from "./job";
 import { convertOverview, portfolioOverview } from "./overview";
 import { ibkrErrorCode, ibkrStatus } from "./status";
 import { latestSnapshotDate, writeStatement } from "./store";
@@ -60,6 +61,29 @@ describe("writeStatement", () => {
     expect(await count(db, holdingSnapshots)).toBe(11);
     expect(await latestSnapshotDate(db, user, "ibkr")).toBe("2026-09-29");
     expect(await latestSnapshotDate(db, user, "plaid")).toBeNull();
+  });
+
+  it("stores NAV in Base as one total per account and day; a re-pull overwrites the same days", async () => {
+    const db = await freshDb();
+    const navXml = readFileSync(new URL("../../../importers/test/fixtures/ibkr/flex-nav.xml", import.meta.url), "utf8");
+    const r = await writeStatement(db, user, mapFlexStatement(navXml));
+    expect(r.navDays).toBe(4);
+    const rows = async () =>
+      (await db.select().from(investmentDailyNav).orderBy(investmentDailyNav.asOf)).map((n) => [n.asOf, n.totalMinor, n.currency]);
+    // 2002.105 rounds half away from zero to 200211.
+    expect(await rows()).toEqual([
+      ["2026-09-21", 99062, "USD"],
+      ["2026-09-22", 99837, "USD"],
+      ["2026-09-23", 199510, "USD"],
+      ["2026-09-25", 200211, "USD"],
+    ]);
+    const changed = mapFlexStatement(navXml.replace('total="998.37"', 'total="999.00"'));
+    expect((await writeStatement(db, user, changed)).navDays).toBe(4);
+    expect((await rows())[1]).toEqual(["2026-09-22", 99900, "USD"]);
+    expect(await rows()).toHaveLength(4);
+    // Without the section nothing is written.
+    expect((await writeStatement(db, user, flex())).navDays).toBe(0);
+    expect(await rows()).toHaveLength(4);
   });
 });
 
@@ -510,5 +534,117 @@ describe("ibkrStatus", () => {
     expect(ibkrErrorCode(null)).toBeNull();
     expect(ibkrErrorCode("plaid #3: invest_plaid_error; ibkr: invest_ibkr_rate_limited")).toBe("invest_ibkr_rate_limited");
     expect(ibkrErrorCode("plaid: invest_plaid_error")).toBeNull();
+  });
+});
+
+describe("IBKR date window", () => {
+  // EDT is UTC-4. 2026-09-29 is a Tuesday, 2026-10-03 a Saturday, 2026-10-05 a Monday.
+  const ny = (date: string, hhmm: string) => {
+    const [h, m] = hhmm.split(":").map(Number) as [number, number];
+    return new Date(Date.parse(`${date}T00:00:00Z`) + ((h + 4) * 60 + m) * 60_000);
+  };
+
+  it("backfills 365 days first, then starts a week before the last statement, capped at 365 days", () => {
+    expect(ibkrWindow("2026-09-29", null)).toEqual({ from: "2025-09-30", to: "2026-09-29" });
+    expect(ibkrWindow("2026-09-29", "2026-09-28")).toEqual({ from: "2026-09-21", to: "2026-09-29" });
+    expect(ibkrWindow("2026-09-29", "2026-09-29")).toEqual({ from: "2026-09-22", to: "2026-09-29" });
+    // yomi was off since June: catch up from a week before the last statement.
+    expect(ibkrWindow("2026-09-29", "2026-06-01")).toEqual({ from: "2026-05-25", to: "2026-09-29" });
+    // Off for more than a year: IBKR's 365-day limit.
+    expect(ibkrWindow("2026-09-29", "2025-01-02")).toEqual({ from: "2025-09-30", to: "2026-09-29" });
+    // A stored statement after the target (clock moved back) still ends on the target.
+    expect(ibkrWindow("2026-09-29", "2026-10-02")).toEqual({ from: "2026-09-25", to: "2026-09-29" });
+    expect(ibkrWindow("2026-09-29", "2026-10-09")).toEqual({ from: "2026-09-22", to: "2026-09-29" });
+  });
+
+  it("history pulls the chosen number of days ending on the target", () => {
+    expect(ibkrWindow("2026-09-29", "2026-09-28", 30)).toEqual({ from: "2026-08-31", to: "2026-09-29" });
+    expect(ibkrWindow("2026-09-29", null, 1)).toEqual({ from: "2026-09-29", to: "2026-09-29" });
+    expect(ibkrWindow("2026-09-29", "2026-09-28", 365)).toEqual({ from: "2025-09-30", to: "2026-09-29" });
+  });
+
+  it("ends on the last completed trading day on weekends and Mondays; holdings stay dated by the statement", async () => {
+    const db = await freshDb();
+    const asked: unknown[] = [];
+    let serves: (to: string) => string = (to) => to;
+    const ibkr = {
+      fetchStatement: async (range?: { from: string; to: string } | { days: number }) => {
+        asked.push(range);
+        return nextDay(serves(range && "to" in range ? range.to : "2026-09-28"));
+      },
+    };
+    const pull = async (now: Date) => (await syncHoldings(db, user, { provider: "ibkr" }, { ibkr, now: () => now })).results[0]!;
+
+    // Saturday: Friday's statement, not stale.
+    expect(await pull(ny("2026-10-03", "12:00"))).toMatchObject({ asOf: "2026-10-02", expectedAsOf: "2026-10-02", stale: false, range: { from: "2025-10-03", to: "2026-10-02" } });
+    // Monday morning: still Friday; the window starts a week before Friday.
+    expect(await pull(ny("2026-10-05", "10:00"))).toMatchObject({ asOf: "2026-10-02", stale: false, range: { from: "2026-09-25", to: "2026-10-02" } });
+    // Monday 19:00: Monday is expected; IBKR answering with Friday's statement is stale, as before.
+    serves = () => "2026-10-02";
+    expect(await pull(ny("2026-10-05", "19:00"))).toMatchObject({ asOf: "2026-10-02", expectedAsOf: "2026-10-05", stale: true, range: { from: "2026-09-25", to: "2026-10-05" } });
+    serves = (to) => to;
+    expect(await pull(ny("2026-10-06", "02:00"))).toMatchObject({ asOf: "2026-10-05", stale: false });
+    expect(await latestSnapshotDate(db, user, "ibkr")).toBe("2026-10-05");
+    expect(asked.length).toBe(4);
+  });
+
+  it("asks once more with the previous weekday when IBKR says the statement for td is not available", async () => {
+    const sends: Record<string, string>[] = [];
+    let unavailable = "1003";
+    const fetch = (async (url: string) => {
+      const u = new URL(url);
+      if (u.pathname.endsWith("SendRequest")) {
+        sends.push(Object.fromEntries([...u.searchParams].filter(([k]) => k === "fd" || k === "td" || k === "p")));
+        if (u.searchParams.get("td") === "20260929") {
+          return new Response(`<FlexStatementResponse><Status>Fail</Status><ErrorCode>${unavailable}</ErrorCode><ErrorMessage>x</ErrorMessage></FlexStatementResponse>`);
+        }
+        return new Response("<FlexStatementResponse><Status>Success</Status><ReferenceCode>77</ReferenceCode></FlexStatementResponse>");
+      }
+      return new Response(flexXml);
+    }) as unknown as typeof globalThis.fetch;
+    const source = ibkrSourceFor("tok", "123", { fetch, sleep: async () => {} });
+
+    expect((await source.fetchStatement({ from: "2026-09-22", to: "2026-09-29" })).asOf).toBe("2026-09-28");
+    expect(sends).toEqual([{ fd: "20260922", td: "20260929" }, { fd: "20260922", td: "20260928" }]);
+    // A one-day window moves both ends.
+    sends.length = 0;
+    unavailable = "1020";
+    await source.fetchStatement({ from: "2026-09-29", to: "2026-09-29" });
+    expect(sends).toEqual([{ fd: "20260929", td: "20260929" }, { fd: "20260928", td: "20260928" }]);
+    // Other failures are not retried.
+    sends.length = 0;
+    unavailable = "1012";
+    await expect(source.fetchStatement({ from: "2026-09-22", to: "2026-09-29" })).rejects.toMatchObject({ code: "invest_ibkr_token_expired" });
+    expect(sends.length).toBe(1);
+  });
+
+  it("history pull is recorded like a scheduled pull and keeps another provider's failure", async () => {
+    const db = await freshDb();
+    const asked: unknown[] = [];
+    const ibkr = {
+      fetchStatement: async (range?: { from: string; to: string } | { days: number }) => {
+        asked.push(range);
+        return nextDay("2026-09-29");
+      },
+    };
+    const now = ny("2026-09-29", "20:00");
+    await db.insert(jobs).values({ userId: user.id, name: HOLDINGS_SYNC_JOB, status: "failed", lastError: "plaid #3: invest_plaid_error", attempts: 1 });
+    const r = await pullIbkrHistory(db, user, { days: 90 }, { ibkr, now: () => now });
+    expect(r.results[0]).toMatchObject({ asOf: "2026-09-29", stale: false, range: { from: "2026-07-02", to: "2026-09-29" } });
+    expect(asked).toEqual([{ from: "2026-07-02", to: "2026-09-29" }]);
+    const job = (await db.select().from(jobs).where(eq(jobs.name, HOLDINGS_SYNC_JOB)).limit(1))[0]!;
+    expect([job.status, job.lastError]).toEqual(["failed", "plaid #3: invest_plaid_error"]);
+    expect(parseHoldingsState(job.cursor).ibkr).toMatchObject({ expected: "2026-09-29", received: "2026-09-29", lastAttemptAt: now.toISOString() });
+    // The scheduler has nothing left to pull for IBKR today.
+    expect(ibkrDue(parseHoldingsState(job.cursor).ibkr, ny("2026-09-29", "22:00"), "2026-09-29")).toBe(false);
+    await expect(pullIbkrHistory(db, user, { days: 0 }, { ibkr, now: () => now })).rejects.toMatchObject({ code: "invest_ibkr_history_days_invalid" });
+    await expect(pullIbkrHistory(db, user, { days: 30 }, { ibkr, now: () => ny("2026-09-29", "20:04") })).rejects.toMatchObject({ code: "invest_ibkr_pull_too_soon", params: { minutes: 6 } });
+    expect(asked.length).toBe(1);
+    // After 10 minutes it runs again; a running job refuses.
+    await db.update(jobs).set({ status: "running" }).where(eq(jobs.name, HOLDINGS_SYNC_JOB));
+    await expect(pullIbkrHistory(db, user, { days: 30 }, { ibkr, now: () => ny("2026-09-29", "20:10") })).rejects.toMatchObject({ code: "invest_ibkr_pull_running" });
+    await db.update(jobs).set({ status: "idle" }).where(eq(jobs.name, HOLDINGS_SYNC_JOB));
+    await pullIbkrHistory(db, user, { days: 30 }, { ibkr, now: () => ny("2026-09-29", "20:10") });
+    expect(asked.length).toBe(2);
   });
 });

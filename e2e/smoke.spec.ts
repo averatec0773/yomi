@@ -544,6 +544,20 @@ test("assets: \\ a opens net worth with history; Cash, a starting balance, Inves
   await expect(page.getByTestId("assets-net-worth")).toBeVisible();
   await expect(page.getByRole("region", { name: "Net worth" })).toContainText(/in USD · CNY at [\d.]+ on|no exchange rate|not available/);
   await expect(page.getByRole("img", { name: /^Net worth from \w{3} \d{1,2}, 2026 to/ })).toBeVisible();
+  // One chart, four lines on a labelled scale; each line switches off from its chip, hover shows the visible ones.
+  const history = page.getByTestId("assets-history");
+  const legend = history.getByRole("group", { name: "Lines shown" });
+  await expect(legend.getByRole("button")).toHaveText(["Net worth", "Cash", "Investments", "Credit cards"]);
+  await expect(history).toContainText(/\$\d{1,3}(,\d{3})*(K|M)?/);
+  await legend.getByRole("button", { name: "Cash" }).click();
+  await expect(legend.getByRole("button", { name: "Cash" })).toHaveAttribute("aria-pressed", "false");
+  await history.getByRole("img").hover();
+  const tip = history.getByTestId("chart-tooltip");
+  await expect(tip).toContainText(/Net worth\s*\$[\d,.]+/);
+  await expect(tip).toContainText("Investments");
+  await expect(tip).not.toContainText("Cash");
+  await legend.getByRole("button", { name: "Cash" }).click();
+  await expect(legend.getByRole("button", { name: "Cash" })).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByTestId("assets-by-currency")).toContainText(/CNY[\s\S]*HKD[\s\S]*USD/);
   await expect(page.getByTestId("assets-cash-flow")).toHaveAttribute("href", /^\/stats\?from=\d{4}-\d{2}-\d{2}&to=/);
   const cash = page.getByTestId("assets-cash-card");
@@ -585,6 +599,14 @@ test("assets: \\ a opens net worth with history; Cash, a starting balance, Inves
   await expect(page.getByTestId("assets-allocation").getByTestId("assets-allocation-row").first()).toBeVisible();
   await expect(page.getByTestId("assets-activity")).toContainText(/Dividend VTI[\s\S]*\+\$35\.84/);
   await expect(page.getByTestId("assets-activity")).toContainText(/Buy VTI[\s\S]*−\$1,480\.25/);
+  // Value against net deposits since the first day shown; dividends as dots on the value line (the chart needs one
+  // currency, so it is there only when the exchange rate could be fetched).
+  const invest = page.getByTestId("assets-invest-history");
+  if (await page.getByTestId("assets-rate").count()) {
+    await expect(invest.getByRole("group", { name: "Lines shown" }).getByRole("button")).toHaveText(["Holdings value", /^Net deposits since \w{3} \d{1,2}, 2026$/]);
+    await expect(page.getByTestId("assets-deposits-hint")).toContainText("the gap between the two lines is market gain or loss");
+    await expect(invest.getByTestId("chart-marker").first()).toBeAttached();
+  }
   const chart = page.getByRole("navigation", { name: "History shows" });
   if (await chart.count()) {
     await chart.getByRole("link", { name: "P/L" }).click();

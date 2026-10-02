@@ -1,9 +1,24 @@
 // Activity Flex Query XML → normalized holdings, cash and transactions (see README.md for the shape).
-import type { InvestAccountRow, InvestHoldingRow, InvestSecurityRow, InvestStatement, InvestTxnKind, InvestTxnRow } from "../invest";
+import type { InvestAccountRow, InvestHoldingRow, InvestNavRow, InvestSecurityRow, InvestStatement, InvestTxnKind, InvestTxnRow } from "../invest";
 import { type Notice, notice } from "../errors";
 import { normalizeDecimal } from "../util/decimal";
 import { child, childrenNamed, parseXml, type XmlElement } from "../util/xml";
 import { FlexError } from "./client";
+
+/**
+ * The Activity Flex Query sections yomi reads, by id, with the XML element each one appears as inside a
+ * FlexStatement ("Net Asset Value (NAV) in Base" is EquitySummaryInBase).
+ */
+export const FLEX_SECTIONS = {
+  accountInformation: "AccountInformation",
+  openPositions: "OpenPositions",
+  cashReport: "CashReport",
+  trades: "Trades",
+  cashTransactions: "CashTransactions",
+  nav: "EquitySummaryInBase",
+} as const;
+export type FlexSectionId = keyof typeof FLEX_SECTIONS;
+export const FLEX_SECTION_IDS = Object.keys(FLEX_SECTIONS) as FlexSectionId[];
 
 /** "2026-09-28", "20260928", "2026-09-28;160000", "20260928;160000" or "09/28/2026" → "2026-09-28". */
 export function flexDate(v: string | undefined): string | null {
@@ -75,7 +90,9 @@ function attrsOf(el: XmlElement): Record<string, unknown> {
  * Holdings: OpenPositions (SUMMARY rows) and CashReport ending cash per currency (BASE_SUMMARY is a
  * base-currency roll-up and skipped). Transactions: Trades (EXECUTION rows) and CashTransactions
  * (dividends, withholding tax, interest, fees, deposits). ChangeInDividendAccruals are accruals, not
- * cash, and are not transactions. `asOf` is the latest statement `toDate`.
+ * cash, and are not transactions. Daily values: EquitySummaryInBase > EquitySummaryByReportDateInBase (the
+ * "Net Asset Value (NAV) in Base" section), one `total` per `reportDate` in the row's `currency` (else the
+ * account's base currency). `asOf` is the latest statement `toDate`.
  */
 export function mapFlexStatement(xml: string): InvestStatement {
   const root = parseXml(xml);
@@ -86,6 +103,8 @@ export function mapFlexStatement(xml: string): InvestStatement {
   const secs = new Map<string, InvestSecurityRow>();
   const holdings: InvestHoldingRow[] = [];
   const transactions: InvestTxnRow[] = [];
+  const navs: InvestNavRow[] = [];
+  const sections = new Set<FlexSectionId>();
   let asOf: string | null = null;
   // Positions carry the fullest description of a contract; later rows only fill gaps.
   const keep = (s: InvestSecurityRow) => {
@@ -100,14 +119,31 @@ export function mapFlexStatement(xml: string): InvestStatement {
       warnings.push(notice("invest_statement_without_account", "FlexStatement without accountId skipped"));
       continue;
     }
+    for (const id of FLEX_SECTION_IDS) if (child(st, FLEX_SECTIONS[id])) sections.add(id);
     const info = child(st, "AccountInformation");
     const to = flexDate(st.attrs.toDate) ?? flexDate(st.attrs.whenGenerated);
     if (to && (!asOf || to > asOf)) asOf = to;
+    const baseCurrency = (str(info?.attrs.currency) ?? "USD").toUpperCase();
     accounts.push({
       externalId: accountId,
       name: str(info?.attrs.acctAlias) ?? str(st.attrs.acctAlias) ?? `IBKR ${accountId}`,
-      currency: (str(info?.attrs.currency) ?? "USD").toUpperCase(),
+      currency: baseCurrency,
     });
+
+    // One row per day (a later row for the same day replaces an earlier one); rows of another account
+    // (a consolidated statement) are skipped.
+    const navByDay = new Map<string, InvestNavRow>();
+    for (const n of childrenNamed(child(st, "EquitySummaryInBase") ?? st, "EquitySummaryByReportDateInBase")) {
+      const rowAccount = str(n.attrs.accountId);
+      if (rowAccount && rowAccount !== accountId) continue;
+      const date = flexDate(n.attrs.reportDate);
+      const total = dec(n.attrs.total);
+      if (!date || total == null) continue;
+      const currency = (str(n.attrs.currency) ?? baseCurrency).toUpperCase();
+      if (!/^[A-Z]{3}$/.test(currency)) continue;
+      navByDay.set(date, { accountExternalId: accountId, date, currency, total, raw: attrsOf(n) });
+    }
+    navs.push(...[...navByDay.values()].sort((x, y) => x.date.localeCompare(y.date)));
 
     for (const p of childrenNamed(child(st, "OpenPositions") ?? st, "OpenPosition")) {
       if (!isSummary(p, ["SUMMARY"])) continue;
@@ -196,5 +232,5 @@ export function mapFlexStatement(xml: string): InvestStatement {
   }
 
   if (!asOf) throw new FlexError("other", null, "The Flex statement has no toDate");
-  return { source: "ibkr", asOf, accounts, securities: [...secs.values()], holdings, transactions, warnings };
+  return { source: "ibkr", asOf, accounts, securities: [...secs.values()], holdings, transactions, navs, sections: FLEX_SECTION_IDS.filter((id) => sections.has(id)), warnings };
 }

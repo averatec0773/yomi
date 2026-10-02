@@ -96,7 +96,17 @@ export function secretsRoutes(deps: SecretsDeps): Hono {
     if (err instanceof BadRequest) return c.json(errorBody(err), 400);
     if (err instanceof SecretSettingError) return c.json(errorBody(err), 409);
     if (err instanceof SecretKeyError) return c.json(errorBody(err), 409);
-    if (err instanceof InvestError) return c.json(errorBody(err), err.code === "invest_ibkr_rate_limited" ? 429 : err.code.startsWith("invest_ibkr_token") || err.code === "invest_ibkr_query_invalid" || err.code === "invest_ibkr_ip_restricted" ? 409 : 502);
+    if (err instanceof InvestError) {
+      const status =
+        err.code === "invest_ibkr_rate_limited"
+          ? 429
+          : err.code.startsWith("invest_ibkr_token") || err.code === "invest_ibkr_query_invalid" || err.code === "invest_ibkr_ip_restricted"
+            ? 409
+            : err.code === "invest_ibkr_test_timeout"
+              ? 504
+              : 502;
+      return c.json(errorBody(err), status);
+    }
     throw err;
   });
 
@@ -114,11 +124,15 @@ export function secretsRoutes(deps: SecretsDeps): Hono {
   r.post("/ibkr/test", async (c) => {
     assertSecure(c);
     const body = await readJson(c, IbkrTestInput);
-    const current = await resolveIbkrCredentials(await deps.getDb(), getCurrentUser(), env());
+    const db = await deps.getDb();
+    const user = getCurrentUser();
+    const current = await resolveIbkrCredentials(db, user, env());
     const token = body.token ?? current.token.value;
     const queryId = body.queryId ?? current.queryId.value;
     if (!token || !queryId) throw new BadRequest("secrets_ibkr_incomplete", "Enter the Flex token and the query ID first");
-    const out = await testIbkrCredentials(token, queryId, deps.ibkrFlex);
+    // On the saved query the sections it had are recorded (the row shows them); a query being tried out is not.
+    const saved = queryId.trim() === current.queryId.value?.trim();
+    const out = await testIbkrCredentials(token, queryId, deps.ibkrFlex, undefined, saved ? { q: db, user } : undefined);
     return c.json({ ok: true, ...out } satisfies IbkrTestResult);
   });
 

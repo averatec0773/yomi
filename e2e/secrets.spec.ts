@@ -30,9 +30,17 @@ test("IBKR: set up with a tested token, sync, replace and remove; the token neve
 
   const dialog = page.getByRole("dialog", { name: "Set up Interactive Brokers" });
   const guide = dialog.getByTestId("ibkr-guide");
-  await expect(guide.getByRole("listitem")).toHaveCount(5);
+  await expect(guide.locator("ol > li")).toHaveCount(6);
   await expect(guide.getByRole("link", { name: "Client Portal" })).toHaveAttribute("href", "https://www.interactivebrokers.com/portal/");
-  await expect(guide).toContainText("Period Last Business Day");
+  await expect(guide).toContainText("Period does not matter because yomi asks for its own dates");
+  await expect(guide).toContainText("Net Asset Value (NAV) in Base. In each one click Select All");
+  // The privacy-minimal fields are one click away.
+  const minimal = guide.getByTestId("ibkr-guide-more");
+  await expect(minimal).not.toHaveAttribute("open");
+  await minimal.getByText("Privacy-minimal setup (fewer fields)").click();
+  await expect(minimal).toContainText("Account Information: Account ID, Account Alias, Currency");
+  await expect(minimal).toContainText("Exclude long and short breakout");
+  await expect(guide.getByRole("link", { name: "IBKR API reference" })).toHaveAttribute("href", "https://www.interactivebrokers.com/docs/web-api/api-reference/send-request");
   await expect(dialog.getByTestId("secret-key-note")).toContainText("Saving creates a key file at");
   const save = dialog.getByRole("button", { name: "Save" });
   await expect(save).toBeDisabled();
@@ -75,6 +83,12 @@ test("IBKR: set up with a tested token, sync, replace and remove; the token neve
   await expect(dialog.getByRole("checkbox", { name: "Save without a successful test" })).toBeVisible();
   await dialog.getByRole("button", { name: "Test connection" }).click();
   await expect(dialog.getByTestId("ibkr-test-result")).toContainText("Connected. Statement for Sep 28, 2026, 3 positions.", { timeout: 20_000 });
+  // The fake statement has no NAV in Base: all six sections are listed, NAV as missing with what yomi would miss.
+  const sections = dialog.getByTestId("ibkr-test-sections");
+  await expect(sections.getByTestId("ibkr-test-sections-summary")).toHaveText("Flex sections: 5 of 6 in the query, 1 missing");
+  await expect(sections.getByRole("listitem")).toHaveCount(6);
+  await expect(sections.locator('[data-state="present"]')).toHaveCount(5);
+  await expect(sections.locator('[data-section="nav"][data-state="missing"]')).toContainText("yomi misses earlier history");
   await dialog.getByTestId("ibkr-expires-on").fill(inDays(5));
   await expect(save).toBeEnabled();
   await save.click();
@@ -89,6 +103,55 @@ test("IBKR: set up with a tested token, sync, replace and remove; the token neve
   await expect(page.getByText(/^Synced: Interactive Brokers, 5 positions/)).toBeVisible({ timeout: 20_000 });
   await expect(meta).toContainText(/Synced (just now|\d+ (second|minute)s? ago)/);
   expect(await page.content()).not.toContain(TOKEN);
+  // The sync recorded the query's sections: the row names the missing one without any test.
+  const note = ibkr.getByTestId("ibkr-sections-note");
+  await expect(note).toContainText("Net Asset Value (NAV) in Base is not in the Flex query, so yomi misses earlier history");
+  await expect(note).toContainText("Add it to the query in Client Portal under Flex Queries");
+  await expect(note).not.toContainText("Trades");
+  // The Flex sections line: all six states from that pull, without a test.
+  const detail = ibkr.getByTestId("ibkr-sections-detail");
+  await expect(detail).toContainText(/Flex sections: 5 of 6 in the query, 1 missing · Checked (just now|\d+ (second|minute)s? ago)/);
+  await expect(detail.getByTestId("ibkr-section-list")).toBeHidden();
+  await detail.getByText("Flex sections").click();
+  await expect(detail.getByRole("listitem")).toHaveCount(6);
+  await expect(detail.locator('[data-section="nav"][data-state="missing"]')).toBeVisible();
+  await expect(detail.locator('[data-state="present"]')).toHaveCount(5);
+
+  // Test connection from the menu: the saved token and query, no form; the result stays in a small dialog.
+  await ibkr.getByRole("button", { name: "More actions for Interactive Brokers" }).click();
+  await page.getByRole("menuitem", { name: "Test connection" }).click();
+  const testDialog = page.getByRole("dialog", { name: "Test the IBKR connection" });
+  await expect(testDialog.getByTestId("ibkr-test-result")).toContainText("Connected. Statement for Sep 28, 2026, 3 positions.", { timeout: 20_000 });
+  await expect(testDialog.getByTestId("ibkr-test-sections").getByRole("listitem")).toHaveCount(6);
+  await expect(testDialog.locator('[data-section="nav"][data-state="missing"]')).toContainText("yomi misses earlier history");
+  await expect(testDialog.getByLabel("Flex token")).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(testDialog).toBeHidden();
+  await expect(note).toContainText("Net Asset Value (NAV) in Base");
+
+  // Pull history: a number of days within IBKR's 365-day limit, ending on the last trading day (Tuesday 09-29 at
+  // the pinned clock); a second pull within 10 minutes is refused with the reason, in the dialog.
+  await ibkr.getByRole("button", { name: "More actions for Interactive Brokers" }).click();
+  await page.getByRole("menuitem", { name: "Pull history…" }).click();
+  const history = page.getByRole("dialog", { name: "Pull IBKR history" });
+  const days = history.getByLabel("Days of history");
+  await expect(days).toHaveValue("365");
+  await expect(history).toContainText("older activity can't be pulled through the Flex Web Service");
+  await days.fill("400");
+  await expect(history.getByTestId("ibkr-history-error")).toHaveText("Enter a whole number of days from 1 to 365.");
+  await expect(history.getByTestId("ibkr-history-pull")).toBeDisabled();
+  await days.fill("30");
+  await expect(history.getByTestId("ibkr-history-error")).toHaveText("");
+  await history.getByTestId("ibkr-history-pull").click();
+  await expect(page.getByText("IBKR activity from Aug 31, 2026 to Sep 29, 2026: 0 new transactions")).toBeVisible({ timeout: 20_000 });
+  await expect(history).toBeHidden();
+  await ibkr.getByRole("button", { name: "More actions for Interactive Brokers" }).click();
+  await page.getByRole("menuitem", { name: "Pull history…" }).click();
+  await history.getByTestId("ibkr-history-pull").click();
+  await expect(history.getByTestId("ibkr-history-error")).toContainText("IBKR was pulled less than 10 minutes ago");
+  await expect(history.getByTestId("ibkr-history-error")).toContainText("Try again in 10 min.");
+  await page.keyboard.press("Escape");
+  await expect(history).toBeHidden();
 
   // The master key was created on first need, outside the database, readable by the owner only.
   expect(existsSync(E2E_KEY_FILE)).toBe(true);

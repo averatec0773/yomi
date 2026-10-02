@@ -122,12 +122,16 @@ export const InvestSyncItemView = z.object({
   cashBalances: z.int(),
   transactionsNew: z.int(),
   transactionsUpdated: z.int(),
+  /** Daily account values (IBKR NAV in Base) written; 0 when the query has no NAV section. */
+  navDays: z.int(),
   totals: z.record(z.string(), z.int()),
   warnings: z.array(Notice),
   /** IBKR: the trading day whose statement should exist by now; null for Plaid. */
   expectedAsOf: IsoDate.nullable(),
   /** True when IBKR returned a statement older than expectedAsOf (not published yet, or a holiday). */
   stale: z.boolean(),
+  /** IBKR: the activity window asked for (both days inclusive); null for Plaid. */
+  range: z.object({ from: IsoDate, to: IsoDate }).nullable(),
 });
 export type InvestSyncItemView = z.infer<typeof InvestSyncItemView>;
 
@@ -138,3 +142,10 @@ export const InvestSyncResult = z.object({
   skipped: z.array(InvestProvider),
 });
 export type InvestSyncResult = z.infer<typeof InvestSyncResult>;
+
+/** IBKR Flex Web Service accepts a period override of at most 365 days, so older activity cannot be pulled. */
+export const IBKR_HISTORY_DAYS = { min: 1, max: 365, default: 365 } as const;
+
+/** POST /api/invest/ibkr/history: pull the last `days` days of IBKR activity (answers InvestSyncResult). */
+export const IbkrHistoryBody = z.object({ days: z.int().min(IBKR_HISTORY_DAYS.min).max(IBKR_HISTORY_DAYS.max) });
+export type IbkrHistoryBody = z.infer<typeof IbkrHistoryBody>;

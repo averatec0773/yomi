@@ -6,8 +6,10 @@ import { assertSecretsUsable } from "../secrets/tokens";
 import { BankProviderError, type BankProvider } from "../sync/provider";
 import type { CurrentUser } from "../user";
 import { InvestError } from "./errors";
-import type { IbkrSource } from "./ibkr";
-import { writeStatement, type WriteStatementResult } from "./store";
+import { ibkrWindow, type IbkrSource } from "./ibkr";
+import type { IbkrPullKind } from "./pull-log";
+import { recordIbkrSections } from "./sections";
+import { latestSnapshotDate, writeStatement, type WriteStatementResult } from "./store";
 import { clockNow } from "../time/clock";
 import { addDays, lastCompletedTradingDay, marketClock } from "./time";
 
@@ -29,6 +31,8 @@ export interface InvestSyncItem extends WriteStatementResult {
   expectedAsOf: string | null;
   /** IBKR returned a statement older than `expectedAsOf` (not published yet, or a market holiday). */
   stale: boolean;
+  /** IBKR: the activity window asked for (`fd`/`td`, both inclusive); null for Plaid. */
+  range: { from: string; to: string } | null;
 }
 
 export interface InvestSyncError {
@@ -63,16 +67,19 @@ const text = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 /**
  * Pulls holdings (and investment transactions) and stores one snapshot per account per `as_of` day;
- * re-running on the same day overwrites that day. IBKR: the configured Activity Flex Query, dated by
- * its statement `toDate`. Plaid: every active brokerage connection, dated by today's New York date,
- * with a per-connection cursor (last pull's end date) that bounds the transactions window.
+ * re-running on the same day overwrites that day. IBKR: the configured Activity Flex Query for the window
+ * of `ibkrWindow` (365 days on the first pull, from shortly before the last stored statement afterwards,
+ * `ibkrHistoryDays` when the user asks for history), always ending on the expected trading day, dated by
+ * its statement `toDate`, recording which Flex sections the statement had (`recordIbkrSections`). Plaid: every
+ * active brokerage connection, dated by today's New York date, with a per-connection cursor (last pull's end
+ * date) that bounds the transactions window.
  * A single named provider that is not configured throws InvestError; "all" skips it. Failures of
  * individual pulls are collected, never partially written.
  */
 export async function syncHoldings(
   db: Db,
   user: CurrentUser,
-  opts: { provider: InvestProviderChoice },
+  opts: { provider: InvestProviderChoice; ibkrHistoryDays?: number; ibkrPull?: IbkrPullKind },
   deps: InvestSyncDeps,
 ): Promise<InvestSyncResult> {
   const out: InvestSyncResult = { results: [], errors: [], skipped: [] };
@@ -87,9 +94,12 @@ export async function syncHoldings(
       out.skipped.push("ibkr");
     } else {
       try {
-        const st = await deps.ibkr.fetchStatement();
         const expectedAsOf = lastCompletedTradingDay(now());
-        out.results.push({ provider: "ibkr", connectionId: null, expectedAsOf, stale: st.asOf < expectedAsOf, ...(await writeStatement(db, user, st)) });
+        const range = ibkrWindow(expectedAsOf, await latestSnapshotDate(db, user, "ibkr"), opts.ibkrHistoryDays);
+        const st = await deps.ibkr.fetchStatement(range, opts.ibkrPull ?? (opts.ibkrHistoryDays != null ? "history" : "sync"));
+        const written = await writeStatement(db, user, st);
+        if (st.sections) await recordIbkrSections(db, user, { at: new Date().toISOString(), ...range, present: st.sections, query: deps.ibkr.queryKey ?? null });
+        out.results.push({ provider: "ibkr", connectionId: null, expectedAsOf, stale: st.asOf < expectedAsOf, range, ...written });
       } catch (e) {
         if (opts.provider === "ibkr") throw e;
         out.errors.push({ provider: "ibkr", connectionId: null, ...investErrorOf(e, "ibkr") });
@@ -132,7 +142,7 @@ async function syncPlaidBrokerages(db: Db, user: CurrentUser, provider: BankProv
       await db.update(bankConnections)
         .set({ cursor: asOf, lastSyncedAt: now().toISOString(), status: "active", lastError: null })
         .where(eq(bankConnections.id, c.id));
-      out.results.push({ provider: "plaid", connectionId: c.id, expectedAsOf: null, stale: false, ...r });
+      out.results.push({ provider: "plaid", connectionId: c.id, expectedAsOf: null, stale: false, range: null, ...r });
     } catch (e) {
       await db.update(bankConnections).set({ status: "error", lastError: text(e) }).where(eq(bankConnections.id, c.id));
       out.errors.push({ provider: "plaid", connectionId: c.id, ...investErrorOf(e, "plaid") });

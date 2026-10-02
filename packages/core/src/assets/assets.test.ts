@@ -317,6 +317,81 @@ describe("net worth", () => {
     expect(m.series[0]!.converted).toBeNull();
   });
 
+  it("each part is known from its own first day; missing accounts make earlier days partial", async () => {
+    const { db } = await ledger();
+    const n = await netWorthData(db, user, { asOf: "2026-09-29", range: "1m" });
+    const at = (d: string) => n.series.find((p) => p.date === d)!;
+    // Only checking (from Aug 20) is known on Aug 30; the wallet starts Sep 1, the card Sep 24, IBKR Sep 25.
+    expect(at("2026-08-30").known).toEqual({ USD: ["cash"] });
+    expect(at("2026-08-30").missing.map((m) => m.name)).toEqual(["Card", "支付宝余额", "IBKR U3141"]);
+    expect(at("2026-09-24").known).toEqual({ CNY: ["cash"], USD: ["cash", "cards"] });
+    expect(at("2026-09-24").missing).toEqual([{ name: "IBKR U3141", kind: "investment", currencies: ["USD"] }]);
+    expect(at("2026-09-25").known.USD).toEqual(["cash", "cards", "holdings", "pnl"]);
+    expect(at("2026-09-25").missing).toEqual([]);
+    expect(at("2026-09-29").missing).toEqual([]);
+    // Untracked has no value on any day: never missing.
+    expect(n.series.some((p) => p.missing.some((m) => m.name === "Untracked"))).toBe(false);
+  });
+
+  it("investments history uses daily NAV on days without holding snapshots; snapshots win, P/L unknown on NAV days", async () => {
+    const { db } = await ledger();
+    const nav = (date: string, total: string) => ({ accountExternalId: "U3141", date, currency: "USD", total, raw: {} });
+    await writeStatement(db, user, { ...ibkr("2026-09-25", "300"), navs: [nav("2026-09-10", "280"), nav("2026-09-11", "281.5"), nav("2026-09-25", "999")] });
+    const n = await netWorthData(db, user, { asOf: "2026-09-29", range: "1m" });
+    const at = (d: string) => n.series.find((p) => p.date === d)!;
+    expect(at("2026-09-09").known.USD).toEqual(["cash"]);
+    expect(at("2026-09-10").byCurrency.USD!.holdingsMinor).toBe(28000);
+    expect(at("2026-09-10").known.USD).toEqual(["cash", "holdings"]);
+    // Carried forward over the weekend gap, then the snapshot day wins over its NAV (300 + 10 cash).
+    expect(at("2026-09-20").byCurrency.USD!.holdingsMinor).toBe(28150);
+    expect(at("2026-09-25").byCurrency.USD!.holdingsMinor).toBe(31000);
+    expect(at("2026-09-25").known.USD).toContain("pnl");
+    expect(at("2026-09-09").missing.map((m) => m.name)).toContain("IBKR U3141");
+    expect(at("2026-09-10").missing.map((m) => m.name)).not.toContain("IBKR U3141");
+    // All starts at the earliest NAV when it is the first thing known.
+    const db2 = await freshDb();
+    await writeStatement(db2, user, { ...ibkr("2026-09-25", "300"), navs: [nav("2026-06-01", "200")] });
+    expect((await netWorthData(db2, user, { asOf: "2026-09-29", range: "all" })).from).toBe("2026-06-01");
+  });
+
+  it("lists trades, dividends and cash transfers (not security transfers) over the range, converted with the same rate", async () => {
+    const { db } = await ledger();
+    const tx = (externalId: string, date: string, type: "buy" | "dividend" | "transfer" | "fee", amount: string, security: string | null = null) => ({
+      accountExternalId: "U3141",
+      securityExternalId: security,
+      externalId,
+      date,
+      type,
+      quantity: null,
+      amount,
+      currency: "USD",
+      description: null,
+      raw: {},
+    });
+    await writeStatement(db, user, {
+      ...ibkr("2026-09-25", "300"),
+      transactions: [
+        tx("d1", "2026-07-01", "transfer", "500"),
+        tx("d2", "2026-09-02", "transfer", "1000"),
+        tx("d3", "2026-09-03", "buy", "-900", "1"),
+        tx("d4", "2026-09-04", "dividend", "2.5", "1"),
+        tx("d5", "2026-09-05", "fee", "-1"),
+        tx("d6", "2026-09-06", "transfer", "0", "1"),
+        tx("d7", "2026-09-07", "transfer", "-50"),
+      ],
+    });
+    const now = () => new Date("2026-09-29T20:00:00Z");
+    const n = await netWorth(db, user, { asOf: "2026-09-29", range: "1m", currency: "CNY" }, { fetch: fxFetch, now });
+    expect(n.flows.map((f) => [f.date, f.type, f.symbol, f.amountMinor, f.convertedMinor])).toEqual([
+      ["2026-09-02", "transfer", null, 100000, 710000],
+      ["2026-09-03", "buy", "VTI", -90000, -639000],
+      ["2026-09-04", "dividend", "VTI", 250, 1775],
+      ["2026-09-07", "transfer", null, -5000, -35500],
+    ]);
+    const plain = await netWorth(db, user, { asOf: "2026-09-29", range: "1m" });
+    expect(plain.flows.every((f) => f.convertedMinor === null)).toBe(true);
+  });
+
   it("change over a period for Stats", async () => {
     const { db } = await ledger();
     const c = await netWorthChange(db, user, { from: "2026-09-01", to: "2026-09-30" });

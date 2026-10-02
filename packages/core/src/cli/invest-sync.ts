@@ -21,7 +21,7 @@ const db = await openLedgerForCli();
 try {
   const user = getCurrentUser();
   // Env first, then the credentials saved in Settings (same resolvers as the web server).
-  const r = await syncHoldings(db, user, { provider: arg as InvestProviderChoice }, { ibkr: await resolveIbkrSource(db, user), plaid: await resolvePlaidProvider(db) });
+  const r = await syncHoldings(db, user, { provider: arg as InvestProviderChoice, ibkrPull: "cli" }, { ibkr: await resolveIbkrSource(db, user), plaid: await resolvePlaidProvider(db) });
   for (const x of r.results) {
     const totals = Object.entries(x.totals)
       .map(([cur, v]) => `${formatMinorDecimal(v, cur)} ${cur}`)
@@ -29,7 +29,7 @@ try {
     const conn = x.connectionId != null ? ` connection #${x.connectionId}` : "";
     console.log(
       `${x.provider}${conn} as of ${x.asOf}: ${x.accounts} accounts, ${x.positions} positions, ${x.cashBalances} cash balances, ` +
-        `${x.transactionsNew} new / ${x.transactionsUpdated} updated transactions; market value ${totals || "0"}` +
+        `${x.transactionsNew} new / ${x.transactionsUpdated} updated transactions, ${x.navDays} daily values; market value ${totals || "0"}` +
         (x.warnings.length ? `; ${x.warnings.length} warnings` : ""),
     );
     if (x.stale) console.log(`${x.provider}: stale, IBKR has not published the ${x.expectedAsOf} statement yet (received ${x.asOf}); the scheduler will retry`);

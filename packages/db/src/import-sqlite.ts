@@ -48,9 +48,13 @@ export function sqliteMigrationsFolder(): string {
   return path.join(findRepoRoot(), "packages", "db", "migrations-sqlite");
 }
 
+/** Tables added after v0.1: a v0.1 ledger has none of them, so the import leaves them empty. */
+const POSTGRES_ONLY_TABLES = new Set(["investment_daily_nav"]);
+
+/** The ledger tables a v0.1 ledger also has (Postgres-only tables left out). */
 function schemaTables(): Map<string, PgTable> {
   const m = new Map<string, PgTable>();
-  for (const v of Object.values(schema)) if (is(v, PgTable)) m.set(getTableName(v), v);
+  for (const v of Object.values(schema)) if (is(v, PgTable) && !POSTGRES_ONLY_TABLES.has(getTableName(v))) m.set(getTableName(v), v);
   return m;
 }
 
@@ -188,7 +192,7 @@ export async function importSqliteLedger(opts: {
     await migrate(opts.target, opts.migrationsFolder ?? migrationsFolder());
 
     const drizzleTables = schemaTables();
-    const targetTables = await listTables(opts.target);
+    const targetTables = (await listTables(opts.target)).filter((t) => !POSTGRES_ONLY_TABLES.has(t));
     const sourceTables = sqliteTables(src);
     const missingInTarget = sourceTables.filter((t) => !targetTables.includes(t));
     const missingInSource = targetTables.filter((t) => !sourceTables.includes(t));
@@ -330,7 +334,7 @@ async function verifyAgainstSource(src: Database.Database, db: Db): Promise<Omit
   const checks: ImportCheck[] = [];
   // Row counts per table.
   const srcNames = new Set(sqliteTables(src));
-  const dstNames = new Set(await listTables(db));
+  const dstNames = new Set((await listTables(db)).filter((t) => !POSTGRES_ONLY_TABLES.has(t)));
   const tables = [...new Set([...srcNames, ...dstNames])].sort();
   for (const t of tables) {
     const s = srcNames.has(t) ? String((src.prepare(`select count(*) as n from ${quoteIdent(t)}`).get() as { n: number }).n) : "absent";

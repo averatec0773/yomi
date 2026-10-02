@@ -1,8 +1,9 @@
 import { type Db, holdingSnapshots, investmentAccounts, jobs } from "@yomi/db";
 import { and, eq, isNotNull, max } from "@yomi/db/orm";
 import type { CurrentUser } from "../user";
-import { resolveIbkrConfig } from "./credentials";
+import { ibkrConfigOf, resolveIbkrCredentials } from "./credentials";
 import { HOLDINGS_SYNC_JOB, parseHoldingsState } from "./job";
+import { type IbkrSectionItem, ibkrQueryKey, ibkrSectionsRecord } from "./sections";
 import { latestSnapshotDate } from "./store";
 import { clockNow } from "../time/clock";
 import { lastCompletedTradingDay } from "./time";
@@ -29,6 +30,8 @@ export interface IbkrStatus {
   expectedAsOf: string;
   /** Stable code of the failed pull when `state` is `error`. */
   errorCode: string | null;
+  /** Which Flex sections the pulls of the current query had (latest pull and its window), or null before the first. */
+  sectionCheck: { at: string; from: string; to: string; sections: IbkrSectionItem[] } | null;
 }
 
 /** Code of the IBKR part of a `holdings-sync` last_error ("ibkr: invest_ibkr_token_expired; plaid #3: …"). */
@@ -43,7 +46,8 @@ export function ibkrErrorCode(lastError: string | null): string | null {
 
 /** Read-only IBKR status from env or Settings (names only), stored snapshots and the holdings-sync job row. */
 export async function ibkrStatus(db: Db, user: CurrentUser, env: NodeJS.ProcessEnv = process.env, now: Date = clockNow()): Promise<IbkrStatus> {
-  const cfg = await resolveIbkrConfig(db, user, env);
+  const creds = await resolveIbkrCredentials(db, user, env);
+  const cfg = ibkrConfigOf(creds);
   const lastStatementDate = await latestSnapshotDate(db, user, "ibkr");
   const expectedAsOf = lastCompletedTradingDay(now);
   let syncedAt: string | null = null;
@@ -87,5 +91,7 @@ export async function ibkrStatus(db: Db, user: CurrentUser, env: NodeJS.ProcessE
         : lastStatementDate < expectedAsOf
           ? "waiting"
           : "active";
-  return { configured: cfg.configured, missing: cfg.missing, state, lastStatementDate, syncedAt, positions, expectedAsOf, errorCode };
+  const record = cfg.configured ? await ibkrSectionsRecord(db, user, ibkrQueryKey(creds.queryId.value!)) : null;
+  const sectionCheck = record && { at: record.at, from: record.from, to: record.to, sections: record.sections };
+  return { configured: cfg.configured, missing: cfg.missing, state, lastStatementDate, syncedAt, positions, expectedAsOf, errorCode, sectionCheck };
 }

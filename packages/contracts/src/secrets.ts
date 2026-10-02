@@ -64,11 +64,23 @@ const secretValue = z.string().trim().min(1).max(512);
 /** POST /api/settings/secrets/ibkr/test: fields left out use the current (env or saved) value. */
 export const IbkrTestInput = z.object({ token: secretValue.optional(), queryId: secretValue.optional() });
 export type IbkrTestInput = z.infer<typeof IbkrTestInput>;
+/**
+ * One Flex section yomi reads and what the pulls say about it (an empty section counts as present). `unknown`:
+ * Trades or Cash Transactions absent only on windows shorter than 30 days, which IBKR leaves out without activity.
+ */
+export const IbkrSectionItem = z.object({
+  id: z.enum(["accountInformation", "openPositions", "cashReport", "trades", "cashTransactions", "nav"]),
+  state: z.enum(["present", "missing", "unknown"]),
+});
+export type IbkrSectionItem = z.infer<typeof IbkrSectionItem>;
+
 export const IbkrTestResult = z.object({
   ok: z.literal(true),
   statementDate: DateString,
   positions: z.int().nonnegative(),
   accounts: z.int().nonnegative(),
+  /** The six sections in reading order; a test on the saved query also counts its earlier pulls. */
+  sections: z.array(IbkrSectionItem),
 });
 export type IbkrTestResult = z.infer<typeof IbkrTestResult>;
 

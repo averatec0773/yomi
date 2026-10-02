@@ -15,6 +15,7 @@ export type FlexErrorKind =
   | "rate_limited"
   | "in_progress_timeout"
   | "unavailable"
+  | "range_invalid"
   | "other";
 
 /** Stable code per kind (the UI translates it); `flexCode` travels in params. */
@@ -26,6 +27,7 @@ export const FLEX_ERROR_CODES: Record<FlexErrorKind, string> = {
   rate_limited: "invest_ibkr_rate_limited",
   in_progress_timeout: "invest_flex_in_progress_timeout",
   unavailable: "invest_ibkr_unavailable",
+  range_invalid: "invest_ibkr_range_invalid",
   other: "invest_ibkr_error",
 };
 
@@ -68,16 +70,76 @@ export interface FlexClientOptions {
   sleep?: (ms: number) => Promise<void>;
   /** Per HTTP request. Default 60 s. */
   timeoutMs?: number;
-  /** Longest total wait for a statement still being generated. Default 5 minutes. */
+  /**
+   * Longest total wait (the pauses between requests, SendRequest and GetStatement together) in one
+   * `fetchStatement`. Default 5 minutes.
+   */
   maxWaitMs?: number;
   /** First wait between polls; doubled per retry up to `maxDelayMs`. Defaults 5 s and 30 s. */
   initialDelayMs?: number;
   maxDelayMs?: number;
 }
 
+/** IBKR: a SendRequest override may cover "up to 365 days" (`p` 1-365, or `fd`/`td`). */
+export const FLEX_MAX_RANGE_DAYS = 365;
+
+/**
+ * SendRequest period override, replacing the period saved in the query. `days`: `p`, "number of days from
+ * the current date". `from`/`to`: `fd`/`td` (YYYY-MM-DD here, sent as yyyymmdd), both required together; yomi
+ * treats both as inclusive, so the span from..to counts at most 365 calendar days.
+ */
+export type FlexRange = { days: number } | { from: string; to: string };
+
+const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+function validIsoDate(v: string): boolean {
+  const m = ISO_DATE.exec(v);
+  if (!m) return false;
+  const d = new Date(`${v}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
+}
+
+/** Calendar days from `from` to `to`, both counted (2026-10-01..2026-10-01 is 1). */
+export function inclusiveDays(from: string, to: string): number {
+  return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000) + 1;
+}
+
+const rangeError = (message: string, params: MessageParams = {}) =>
+  new FlexError("range_invalid", null, message, { max: FLEX_MAX_RANGE_DAYS, ...params });
+
+/** The SendRequest query parameters of a range (`p`, or `fd` + `td`); throws `range_invalid` before anything is sent. */
+export function flexRangeParams(range: FlexRange): Record<string, string> {
+  if ("days" in range) {
+    if (!Number.isInteger(range.days) || range.days < 1 || range.days > FLEX_MAX_RANGE_DAYS) {
+      throw rangeError(`Flex period must be 1 to ${FLEX_MAX_RANGE_DAYS} days, got ${String(range.days)}`, { days: String(range.days) });
+    }
+    return { p: String(range.days) };
+  }
+  if (!validIsoDate(range.from) || !validIsoDate(range.to)) throw rangeError(`Flex range dates must be YYYY-MM-DD, got ${range.from}..${range.to}`);
+  const span = inclusiveDays(range.from, range.to);
+  if (span < 1) throw rangeError(`Flex range starts after it ends: ${range.from}..${range.to}`);
+  if (span > FLEX_MAX_RANGE_DAYS) throw rangeError(`Flex range covers ${span} days, more than ${FLEX_MAX_RANGE_DAYS}`, { days: span });
+  return { fd: range.from.replaceAll("-", ""), td: range.to.replaceAll("-", "") };
+}
+
+/** One "not ready yet / busy" answer the client waited on: which request, IBKR's code, and the pause before asking again. */
+export interface FlexRetry {
+  stage: "send" | "get";
+  code: string;
+  waitMs: number;
+}
+
+export interface FlexFetchHooks {
+  /** Called before each pause on a retryable answer (the pull's log line lists them). */
+  onRetry?: (retry: FlexRetry) => void;
+}
+
 export interface FlexClient {
-  /** SendRequest, then GetStatement until the statement is ready. Returns the FlexQueryResponse XML. */
-  fetchStatement(): Promise<string>;
+  /**
+   * SendRequest, then GetStatement until the statement is ready. Returns the FlexQueryResponse XML. Without
+   * `range` the period saved in the query applies.
+   */
+  fetchStatement(range?: FlexRange, hooks?: FlexFetchHooks): Promise<string>;
 }
 
 type Step = { kind: "done"; xml: string } | { kind: "ref"; code: string; url: string | null } | { kind: "retry"; code: string; message: string };
@@ -126,11 +188,12 @@ export function createFlexClient(opts: FlexClientOptions): FlexClient {
   const firstDelay = opts.initialDelayMs ?? 5000;
   const maxDelay = opts.maxDelayMs ?? 30_000;
 
-  async function get(base: string, q: string): Promise<string> {
+  async function get(base: string, q: string, extra: Record<string, string> = {}): Promise<string> {
     const u = new URL(base);
     u.searchParams.set("t", opts.token);
     u.searchParams.set("q", q);
     u.searchParams.set("v", "3");
+    for (const [k, v] of Object.entries(extra)) u.searchParams.set(k, v);
     let res: Response;
     try {
       res = await doFetch(u.toString(), {
@@ -146,32 +209,45 @@ export function createFlexClient(opts: FlexClientOptions): FlexClient {
     return text;
   }
 
-  /** Repeats `call` while it answers with a retryable code, sleeping with doubling delays; bounded by maxWait. */
-  async function withRetry(call: () => Promise<Step>): Promise<Exclude<Step, { kind: "retry" }>> {
-    let waited = 0;
+  /**
+   * Repeats `call` while it answers with a retryable code, sleeping with doubling delays. `budget` is shared by
+   * both requests of one fetch: the last pause is cut to what is left of maxWait, then the fetch gives up.
+   */
+  async function withRetry(
+    stage: FlexRetry["stage"],
+    call: () => Promise<Step>,
+    budget: { waited: number },
+    hooks: FlexFetchHooks,
+  ): Promise<Exclude<Step, { kind: "retry" }>> {
     let delay = firstDelay;
     for (;;) {
       const step = await call();
       if (step.kind !== "retry") return step;
-      const wait = step.code === FLEX_RATE_LIMIT_CODE ? Math.max(delay, 10_000) : delay;
-      if (waited + wait > maxWait) {
+      const left = maxWait - budget.waited;
+      if (left <= 0) {
         if (step.code === FLEX_RATE_LIMIT_CODE) throw new FlexError("rate_limited", step.code, `IBKR Flex rate limit: ${step.message}`);
-        throw new FlexError("in_progress_timeout", step.code, `IBKR Flex statement not ready after ${Math.round(waited / 1000)} s (${step.code}: ${step.message})`);
+        throw new FlexError("in_progress_timeout", step.code, `IBKR Flex statement not ready after ${Math.round(budget.waited / 1000)} s (${step.code}: ${step.message})`);
       }
+      const wait = Math.min(step.code === FLEX_RATE_LIMIT_CODE ? Math.max(delay, 10_000) : delay, left);
+      hooks.onRetry?.({ stage, code: step.code, waitMs: wait });
       await sleep(wait);
-      waited += wait;
+      budget.waited += wait;
       delay = Math.min(delay * 2, maxDelay);
     }
   }
 
   return {
-    async fetchStatement() {
-      const sent = await withRetry(async () => readFlexAnswer(await get(FLEX_SEND_REQUEST_URL, opts.queryId)));
+    async fetchStatement(range, hooks = {}) {
+      const extra = range ? flexRangeParams(range) : {};
+      const budget = { waited: 0 };
+      const sent = await withRetry("send", async () => readFlexAnswer(await get(FLEX_SEND_REQUEST_URL, opts.queryId, extra)), budget, hooks);
       if (sent.kind === "done") return sent.xml;
       const url = statementUrl(sent.url);
       // The statement is generated asynchronously: give it a moment before the first poll.
-      await sleep(Math.min(firstDelay, 5000));
-      const got = await withRetry(async () => readFlexAnswer(await get(url, sent.code)));
+      const pause = Math.min(firstDelay, 5000);
+      await sleep(pause);
+      budget.waited += pause;
+      const got = await withRetry("get", async () => readFlexAnswer(await get(url, sent.code)), budget, hooks);
       if (got.kind !== "done") throw new FlexError("unavailable", null, "GetStatement answered with a new reference code");
       return got.xml;
     },

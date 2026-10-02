@@ -30,7 +30,7 @@ import { dayLabel } from "@/lib/month";
 import { AccountHoldings } from "./account-holdings";
 import { AccountRow } from "./account-row";
 import { CurrencySummary } from "./currency-summary";
-import { HistoryChart } from "./history-chart";
+import { AllHistory, CashHistory, InvestHistory } from "./history-chart";
 import { pnlTone, weightText } from "./numbers";
 import {
   type AssetsParams,
@@ -40,7 +40,6 @@ import {
   oneCurrency,
   RangeChips,
   RateLine,
-  seriesOf,
   startingBalanceAccounts,
 } from "./shared";
 import { StartingBalance } from "./starting-balance";
@@ -127,13 +126,12 @@ export function AllView(p: AssetsViewProps) {
             <RangeChips params={params} t={t} />
             <span className="text-hint text-3">{a.dailySnapshots}</span>
           </div>
-          <HistoryChart
-            points={seriesOf(nw, one?.currency ?? nw.currencies[0]?.currency ?? "USD", (x) => x.totalMinor)}
+          <AllHistory
+            nw={nw}
             currency={one?.currency ?? nw.currencies[0]?.currency ?? "USD"}
             what={one ? a.netWorth : `${a.netWorth} · ${nw.currencies[0]?.currency ?? ""}`}
             t={t}
             locale={locale}
-            testId="assets-history"
           />
           <CashFlowLink {...p} />
         </StatCard>
@@ -318,14 +316,7 @@ export function CashView(p: AssetsViewProps) {
                 <RateLine nw={nw} t={t} locale={locale} />
               </p>
             )}
-            <HistoryChart
-              points={seriesOf(nw, one.currency, (x) => x.cashMinor + x.cardsMinor)}
-              currency={one.currency}
-              what={a.netCash}
-              t={t}
-              locale={locale}
-              testId="assets-cash-history"
-            />
+            <CashHistory nw={nw} currency={one.currency} t={t} locale={locale} />
             <CashFlowLink {...p} />
           </div>
         </ListCard>
@@ -392,14 +383,7 @@ export function InvestmentsView(p: AssetsViewProps) {
             <RangeChips params={params} t={t} />
           </div>
           {one && (
-            <HistoryChart
-              points={seriesOf(nw, one.currency, (x) => (x.holdingsMinor === 0 ? null : params.chart === "pnl" ? x.pnlMinor : x.holdingsMinor))}
-              currency={one.currency}
-              what={params.chart === "pnl" ? ia.pnl : ia.value}
-              t={t}
-              locale={locale}
-              testId="assets-invest-history"
-            />
+            <InvestHistory nw={nw} currency={one.currency} kind={params.chart} t={t} locale={locale} />
           )}
           <p className="text-meta text-2">{a.lastCloseNote}</p>
         </StatCard>

@@ -25,6 +25,7 @@ export function Guide({
   testId,
   defaultOpen = true,
   checkedOn = GUIDES_CHECKED_ON,
+  more,
 }: {
   title: string;
   steps: readonly string[];
@@ -35,6 +36,8 @@ export function Guide({
   defaultOpen?: boolean;
   /** Date the steps were verified against the official pages; null hides the "Last checked" line. */
   checkedOn?: string | null;
+  /** A secondary, collapsed list after the steps (an alternative setup). */
+  more?: { title: string; items: readonly string[] };
 }) {
   const t = useT();
   const locale = useLocale();
@@ -60,6 +63,19 @@ export function Guide({
           </li>
         ))}
       </ol>
+      {more && (
+        <details className="group/more mt-2" data-testid={testId ? `${testId}-more` : undefined}>
+          <summary className="flex cursor-pointer list-none items-center gap-2 text-meta font-medium text-2 outline-none focus-visible:ring-2 focus-visible:ring-ring/50 [&::-webkit-details-marker]:hidden">
+            <ChevronRightIcon className="size-3.5 shrink-0 transition-transform duration-[120ms] group-open/more:rotate-90" aria-hidden />
+            {more.title}
+          </summary>
+          <ul className="mt-1.5 flex list-disc flex-col gap-1 pl-5 text-meta text-2">
+            {more.items.map((s) => (
+              <li key={s}>{s}</li>
+            ))}
+          </ul>
+        </details>
+      )}
       {checkedOn && <p className="mt-2 text-hint text-3">{fmt(t.secrets.lastChecked, { date: dayLabel(checkedOn, locale, { year: true }) })}</p>}
     </details>
   );
