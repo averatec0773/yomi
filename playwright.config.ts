@@ -54,39 +54,50 @@ const accessKeyFile = path.join(root, "data", "demo-e2e-access-secret.key");
  * open in the server process only). It needs Plaid Sandbox keys and network, so the default run skips it.
  */
 const plaidSandbox = process.env.PLAID_SANDBOX_E2E === "1";
+const ci = !!process.env.CI;
+/**
+ * On CI (or with YOMI_E2E_PROD=1; YOMI_E2E_PROD=0 forces dev) both servers run `next start` on one production build in
+ * E2E_DIST_DIR, made beforehand by `pnpm e2e:build`. Locally the default is `next dev`, each server with its own build dir.
+ */
+const prod = process.env.YOMI_E2E_PROD ? process.env.YOMI_E2E_PROD === "1" : ci;
+/** Keep in sync with the `e2e:build` script in package.json. */
+const E2E_DIST_DIR = ".next-e2e";
+const nextServer = (p: number) => `pnpm --filter @yomi/web exec next ${prod ? "start" : "dev"} -p ${p}`;
+const distDir = (devDir: string) => (prod ? E2E_DIST_DIR : devDir);
 
 export default defineConfig({
   testDir: "e2e",
   ...(plaidSandbox ? { testMatch: /plaid-sandbox(-invest)?\.spec\.ts$/, timeout: 240_000 } : { testIgnore: /plaid-sandbox(-invest)?\.spec\.ts$/ }),
   fullyParallel: false,
   workers: 1,
-  retries: 0,
-  reporter: [["list"]],
+  // CI retries once and lists a test that passed on retry as "flaky" (the github reporter also annotates it).
+  retries: ci ? 1 : 0,
+  reporter: ci ? [["list"], ["github"]] : [["list"]],
   use: {
     baseURL: plaidSandbox ? (process.env.PLAID_E2E_BASE_URL ?? "http://localhost:3160") : `http://localhost:${port}`,
-    trace: "retain-on-failure",
+    trace: ci ? "on-first-retry" : "retain-on-failure",
     // The browser reports this zone; on the first visit the app stores it (see apps/web/lib/time-zone.tsx).
     timezoneId: "America/Chicago",
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: plaidSandbox ? undefined : [
     {
-      // Fresh synthetic ledger every run, then a dev server with its own build dir so it can run beside `pnpm dev`.
-      command: `rm -f ${JSON.stringify(E2E_KEY_FILE)} && pnpm demo:db data/demo-e2e-pglite && pnpm --filter @yomi/web exec next dev -p ${port}`,
+      // Fresh synthetic ledger every run, then the server (dev: its own build dir, so it can run beside `pnpm dev`).
+      command: `rm -f ${JSON.stringify(E2E_KEY_FILE)} && pnpm demo:db data/demo-e2e-pglite && ${nextServer(port)}`,
       cwd: root,
       url: `http://localhost:${port}/transactions`,
       // Access gate off; see quietEnv.
-      env: { NEXT_DIST_DIR: ".next-playwright", DATABASE_URL: db, YOMI_ACCESS_TOKEN: "", ...quietEnv, YOMI_SECRET_KEY_FILE: E2E_KEY_FILE },
+      env: { NEXT_DIST_DIR: distDir(".next-playwright"), DATABASE_URL: db, YOMI_ACCESS_TOKEN: "", ...quietEnv, YOMI_SECRET_KEY_FILE: E2E_KEY_FILE },
       reuseExistingServer: false,
       timeout: 180_000,
     },
     {
-      command: `rm -f ${JSON.stringify(accessKeyFile)} && pnpm demo:db data/demo-e2e-access-pglite && pnpm --filter @yomi/web exec next dev -p ${ACCESS_E2E_PORT}`,
+      command: `rm -f ${JSON.stringify(accessKeyFile)} && pnpm demo:db data/demo-e2e-access-pglite && ${nextServer(ACCESS_E2E_PORT)}`,
       cwd: root,
       // /api/health is exempt from the gate, so readiness does not need the token.
       url: `http://localhost:${ACCESS_E2E_PORT}/api/health`,
       env: {
-        NEXT_DIST_DIR: ".next-playwright-access",
+        NEXT_DIST_DIR: distDir(".next-playwright-access"),
         DATABASE_URL: accessDb,
         YOMI_ACCESS_TOKEN: ACCESS_E2E_TOKEN,
         ...quietEnv,

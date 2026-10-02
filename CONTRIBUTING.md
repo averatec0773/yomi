@@ -26,6 +26,7 @@ Develop against the demo ledger or your own scratch copy, never against data you
 | `pnpm typecheck` | TypeScript across all packages |
 | `pnpm lint` | ESLint, including the framework-free rule for core, importers and contracts |
 | `pnpm e2e` | Playwright; starts two servers (ports 3120 and 3420) on fresh demo ledgers. First time: `pnpm exec playwright install chromium` |
+| `pnpm e2e:build && YOMI_E2E_PROD=1 pnpm e2e` | The same suite against a production build (`next start`), as CI runs it |
 | `pnpm db:generate` | Drizzle migration after changing `packages/db/src/schema.ts` |
 | `pnpm demo:db [dir]` | Rebuild a synthetic demo ledger (the directory name must contain "demo") |
 | `pnpm demo:showcase [dir]` | Rebuild the English-only ledger used for README screenshots (default `data/demo-showcase-pglite`) |

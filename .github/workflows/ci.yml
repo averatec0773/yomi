@@ -35,10 +35,14 @@ jobs:
       - run: pnpm lint
       - run: pnpm test
 
-  e2e:
-    name: End-to-end (Playwright)
+  e2e-shard:
+    name: e2e shard ${{ matrix.shard }}/2
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -47,11 +51,53 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm e2e
-      - uses: actions/upload-artifact@v4
-        if: failure()
+      - name: Playwright version
+        id: playwright
+        run: echo "version=$(pnpm exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
         with:
-          name: playwright-traces
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      - name: Install Chromium and its system dependencies
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Install Chromium system dependencies
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: pnpm exec playwright install-deps chromium
+      # Turbopack's build cache; after a source change it starts from the newest cache for the same lockfile.
+      - name: Cache Next build
+        uses: actions/cache@v4
+        with:
+          path: apps/web/.next-e2e/cache
+          key: next-e2e-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('apps/web/**', 'packages/*/src/**', '!**/node_modules/**', '!apps/web/.next*/**') }}
+          restore-keys: next-e2e-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+      - run: pnpm e2e:build
+      # Playwright splits shards by test count in file order. 3:7 ends shard 1 after secrets.spec.ts (one ~30 s test),
+      # which evens out measured run times. PWTEST_SHARD_WEIGHTS is internal to Playwright; if it is ever dropped, the
+      # split falls back to even test counts, still correct.
+      - run: pnpm e2e --shard=${{ matrix.shard }}/2
+        env:
+          PWTEST_SHARD_WEIGHTS: "3:7"
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-traces-shard-${{ matrix.shard }}
           path: test-results/
+          if-no-files-found: ignore
           retention-days: 7
+
+  # Branch protection requires this exact check name, so it stays the single gate over the shards.
+  e2e:
+    name: End-to-end (Playwright)
+    needs: e2e-shard
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every shard passed
+        env:
+          RESULT: ${{ needs.e2e-shard.result }}
+        run: |
+          echo "e2e shards: $RESULT"
+          test "$RESULT" = success
