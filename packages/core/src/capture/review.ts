@@ -93,7 +93,7 @@ async function statementReach(q: Db, user: CurrentUser, cards: readonly string[]
   return out;
 }
 
-function staleReason(c: ReviewCapture, reach: Map<string, { from: string; through: string }>, today: string): StaleReason | null {
+function staleReason(c: Pick<ReviewCapture, "last4" | "occurredOn">, reach: Map<string, { from: string; through: string }>, today: string): StaleReason | null {
   const r = c.last4 ? reach.get(c.last4) : undefined;
   if (r && r.from <= c.occurredOn && r.through >= addDays(c.occurredOn, PDF_WINDOW.to)) return { reason: "covered", source: "icbc_pdf", through: r.through };
   const days = daysInclusive(c.occurredOn, today) - 1;
@@ -104,13 +104,8 @@ function emptyCounts(): Record<ReviewType, number> {
   return { ambiguous: 0, near_miss: 0, stale: 0, amount_changed: 0 };
 }
 
-/**
- * The queue, read only (no writes on a read): stored reviews plus open captures that went stale, i.e. an imported
- * ICBC statement of the card covers the capture's day (and the matching window after it) without a match, or
- * STALE_AFTER_DAYS passed without one. `today` defaults to today in the user's time zone.
- */
-export async function listReview(q: Db, user: CurrentUser, opts: { today?: string } = {}): Promise<ReviewList> {
-  const today = opts.today ?? todayIn(await getTimeZone(q, user));
+/** Stored reviews and provisional captures, newest first, with the statement reach of the cards that may be stale. */
+async function queueRows(q: Db, user: CurrentUser) {
   const rows = await q
     .select({ c: captures, occurredOn: transactions.occurredOn, merchant: transactions.merchant, amountMinor: transactions.amountMinor, currency: transactions.currency })
     .from(captures)
@@ -118,6 +113,34 @@ export async function listReview(q: Db, user: CurrentUser, opts: { today?: strin
     .where(and(eq(captures.userId, user.id), or(eq(captures.state, "provisional"), isNotNull(captures.review))))
     .orderBy(desc(captures.occurredAt), desc(captures.id));
   const reach = await statementReach(q, user, [...new Set(rows.flatMap((r) => (r.c.state === "provisional" && !r.c.review && r.c.last4 ? [r.c.last4] : [])))]);
+  return { rows, reach };
+}
+
+/** The item type of a queued capture: its stored review, else stale or nothing to look at (null). */
+function classify(
+  c: { review: ReviewType | null; last4: string | null },
+  occurredOn: string,
+  reach: Map<string, { from: string; through: string }>,
+  today: string,
+): { type: ReviewType; stale: StaleReason | null } | null {
+  if (c.review) return { type: c.review, stale: null };
+  const stale = staleReason({ last4: c.last4, occurredOn }, reach, today);
+  return stale ? { type: "stale", stale } : null;
+}
+
+/** An ambiguous or near-miss item is a choice between candidates; with none left it is not listed. */
+const needsCandidates = (type: ReviewType) => type === "ambiguous" || type === "near_miss";
+/** A candidate still on offer: not closed and not linked to another row. */
+const isOpenCandidate = (t: { status: string; duplicateOfId: number | null }) => t.status === "ok" && t.duplicateOfId == null;
+
+/**
+ * The queue, read only (no writes on a read): stored reviews plus open captures that went stale, i.e. an imported
+ * ICBC statement of the card covers the capture's day (and the matching window after it) without a match, or
+ * STALE_AFTER_DAYS passed without one. `today` defaults to today in the user's time zone.
+ */
+export async function listReview(q: Db, user: CurrentUser, opts: { today?: string } = {}): Promise<ReviewList> {
+  const today = opts.today ?? todayIn(await getTimeZone(q, user));
+  const { rows, reach } = await queueRows(q, user);
   const candidateIds = [...new Set(rows.flatMap((r) => (r.c.payload.candidates ?? []).map((x) => x.id)))];
   const candidateRows = new Map(
     (candidateIds.length
@@ -133,6 +156,8 @@ export async function listReview(q: Db, user: CurrentUser, opts: { today?: strin
 
   const items: ReviewItem[] = [];
   for (const { c, occurredOn, merchant, amountMinor, currency } of rows) {
+    const kind = classify(c, occurredOn, reach, today);
+    if (!kind) continue;
     const capture: ReviewCapture = {
       kind: c.kind,
       transactionId: c.transactionId!,
@@ -144,25 +169,16 @@ export async function listReview(q: Db, user: CurrentUser, opts: { today?: strin
       hold: c.hold,
       merchant,
     };
-    let type: ReviewType;
-    let stale: StaleReason | null = null;
     let shares: ReviewItem["shares"] = null;
-    if (c.review === "amount_changed") {
-      type = "amount_changed";
+    if (kind.type === "amount_changed") {
       const s = splits.get(c.transactionId!) ?? [];
       shares = { sharesMinor: s.reduce((a, x) => a + x.owedMinor, 0), amountMinor: Math.abs(amountMinor) };
       capture.amountMinor = amountMinor;
       capture.currency = currency;
-    } else if (c.review) {
-      type = c.review;
-    } else {
-      stale = staleReason(capture, reach, today);
-      if (!stale) continue;
-      type = "stale";
     }
     const candidates = (c.payload.candidates ?? []).flatMap((x): ReviewCandidate[] => {
       const t = candidateRows.get(x.id);
-      if (!t || t.status !== "ok" || t.duplicateOfId != null) return [];
+      if (!t || !isOpenCandidate(t)) return [];
       return [
         {
           transactionId: t.id,
@@ -178,13 +194,36 @@ export async function listReview(q: Db, user: CurrentUser, opts: { today?: strin
         },
       ];
     });
-    if ((type === "ambiguous" || type === "near_miss") && candidates.length === 0) continue;
-    items.push({ captureId: c.id, type, capture, candidates, stale, shares, createdAt: c.createdAt });
+    if (needsCandidates(kind.type) && candidates.length === 0) continue;
+    items.push({ captureId: c.id, type: kind.type, capture, candidates, stale: kind.stale, shares, createdAt: c.createdAt });
   }
   items.sort((a, b) => REVIEW_TYPES.indexOf(a.type) - REVIEW_TYPES.indexOf(b.type));
   const counts = emptyCounts();
   for (const i of items) counts[i.type] += 1;
   return { items, counts, total: items.length };
+}
+
+/** listReview's total without building the items (an import reports the queue size after it). */
+export async function countReview(q: Db, user: CurrentUser, opts: { today?: string } = {}): Promise<number> {
+  const today = opts.today ?? todayIn(await getTimeZone(q, user));
+  const { rows, reach } = await queueRows(q, user);
+  const queued = rows.flatMap(({ c, occurredOn }) => {
+    const kind = classify(c, occurredOn, reach, today);
+    return kind ? [{ type: kind.type, candidateIds: (c.payload.candidates ?? []).map((x) => x.id) }] : [];
+  });
+  const ids = [...new Set(queued.filter((x) => needsCandidates(x.type)).flatMap((x) => x.candidateIds))];
+  const open = new Set(
+    (ids.length
+      ? await q
+          .select({ id: transactions.id, status: transactions.status, duplicateOfId: transactions.duplicateOfId })
+          .from(transactions)
+          .where(and(eq(transactions.userId, user.id), inArray(transactions.id, ids)))
+      : []
+    )
+      .filter(isOpenCandidate)
+      .map((t) => t.id),
+  );
+  return queued.filter((x) => !needsCandidates(x.type) || x.candidateIds.some((id) => open.has(id))).length;
 }
 
 export interface ResolveResult {

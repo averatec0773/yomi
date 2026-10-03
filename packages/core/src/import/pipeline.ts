@@ -1,4 +1,4 @@
-import { accounts, backupDatabase, type Db, importBatches, settlements, transactions, transactionSplits } from "@yomi/db";
+import { accounts, backupDatabase, type Db, importBatches, settlements, transactions } from "@yomi/db";
 import {
   bucketTotals,
   CodedError,
@@ -12,22 +12,22 @@ import {
   type ParseResult,
   type SourceId,
 } from "@yomi/importers";
-import { and, desc, eq, gt, inArray, isNull } from "@yomi/db/orm";
+import { and, desc, eq, gt, inArray } from "@yomi/db/orm";
 import { runMatching } from "../capture/match";
-import { capturesConfirmedBy, listReview } from "../capture/review";
+import { capturesConfirmedBy, countReview } from "../capture/review";
 import { detachFromAuthority } from "../capture/supersede";
 import { autoSplitParticipants } from "../split/rules";
 import { applySplit } from "../split/splits";
 import { getTimeZone } from "../settings/time-zone";
-import { dayNumber } from "../time/day";
 import { occurredOnFor } from "../time/zone";
 import type { CurrentUser } from "../user";
 import { removeBatchBalances, statementBalances, upsertBalanceSnapshot } from "../assets/balances";
-import { accountKey, accountMatchKey, type AccountSpec, fileAccountCurrency, loadAccountIds, parsePaymentMethod, resolveAccountSpec } from "./accounts";
+import { accountKey, accountMatchKey, type AccountSpec, fileAccountCurrency, loadAccountIds, resolveAccountSpec } from "./accounts";
 import { resolveCategoryId } from "./categorize";
 import { categoryContext, latestPurchaseCategories, loadCategorySources } from "./category-context";
 import { statementCoverage } from "./coverage";
 import { computeDedupKeys, sha256Hex } from "./dedup";
+import { type LinkRow, planLinks } from "./link";
 import { cleanMerchant } from "./merchant";
 
 /** Db or a transaction handle: both are Drizzle Postgres databases. */
@@ -125,18 +125,12 @@ export class ImportError extends CodedError {
   }
 }
 
-interface PlannedRow {
-  row: NormalizedRow;
-  spec: AccountSpec;
+interface PlannedRow extends LinkRow {
   /** accountMatchKey of the spec: which ledger account the row lands on. */
   matchKey: string;
   dedupKey: string;
-  isDup: boolean;
   merchant: string;
   categoryId: number | null;
-  duplicateOfId: number | null;
-  /** Wallet row only: an existing bank row that duplicates it; linked to this row after insert. */
-  linkBankId: number | null;
   participantIds: number[] | null;
   /** Auto-split rule participants (non-self), when this new row will be split on commit. */
   autoSplitIds: number[] | null;
@@ -155,16 +149,7 @@ export interface PlanOptions {
   accountSpec?: (row: NormalizedRow) => AccountSpec | null;
 }
 
-/** Sources whose rows are the card's own record; they link to the Alipay/WeChat row paid with that card. */
-const BANK_SOURCES = ["icbc_pdf", "plaid", "boa_csv"] as const;
-const isBankSource = (s: string) => (BANK_SOURCES as readonly string[]).includes(s);
-
-/** BoA CSV and Plaid both see Bank of America accounts; rows of one link to the other's. */
-const BOA_INSTITUTION = /bank\s*of\s*america|\bbofa\b|\bboa\b/i;
-const CROSS_SOURCE: Partial<Record<SourceId, SourceId>> = { boa_csv: "plaid", plaid: "boa_csv" };
-
 const CHUNK = 200;
-const LINK_WINDOW_DAYS = 3;
 
 function chunks<T>(xs: readonly T[], size = CHUNK): T[][] {
   const out: T[][] = [];
@@ -188,6 +173,25 @@ function parseIds(v: unknown): number[] | null {
   return Array.isArray(v) ? v.filter((x): x is number => Number.isInteger(x)) : null;
 }
 
+/** Each row's account spec and dedup key, and the keys the ledger has already (those rows are duplicates). */
+async function dedupRows(q: Q, user: CurrentUser, parsed: ParseResult, opts: PlanOptions): Promise<{ specs: AccountSpec[]; dedupKeys: string[]; existingKeys: Set<string> }> {
+  const currency = fileAccountCurrency(parsed.source, parsed.rows);
+  const specs = parsed.rows.map((r) => opts.accountSpec?.(r) ?? resolveAccountSpec(r, currency));
+  // Dedup keys stay scoped by the spec's full identity; the row lands on the account its match key names.
+  const dedupKeys = computeDedupKeys(parsed.rows, specs.map(accountKey));
+  const existingKeys = new Set<string>();
+  for (const part of chunks(dedupKeys)) {
+    for (const r of (await q
+      .select({ k: transactions.dedupKey })
+      .from(transactions)
+      .where(and(eq(transactions.userId, user.id), inArray(transactions.dedupKey, part)))
+      )) {
+      existingKeys.add(r.k);
+    }
+  }
+  return { specs, dedupKeys, existingKeys };
+}
+
 async function buildPlan(q: Q, user: CurrentUser, parsed: ParseResult, fileHash: string, fileName: string, opts: PlanOptions = {}): Promise<Plan> {
   const userId = user.id;
   const warnings = [...parsed.warnings];
@@ -199,29 +203,12 @@ async function buildPlan(q: Q, user: CurrentUser, parsed: ParseResult, fileHash:
     .where(and(eq(importBatches.userId, userId), eq(importBatches.fileHash, fileHash), eq(importBatches.status, "committed")))
     .limit(1))[0];
 
-  // Accounts
-  const currency = fileAccountCurrency(parsed.source, rows);
-  const specs = rows.map((r) => opts.accountSpec?.(r) ?? resolveAccountSpec(r, currency));
-  // Dedup keys stay scoped by the spec's full identity; the row lands on the account its match key names.
-  const keys = specs.map(accountKey);
+  const { specs, dedupKeys, existingKeys } = await dedupRows(q, user, parsed, opts);
   const existingAccountIds = await loadAccountIds(q, user);
   const toCreate = new Map<string, AccountSpec>();
   for (const s of specs) {
     const k = accountMatchKey(s);
     if (!existingAccountIds.has(k) && !toCreate.has(k)) toCreate.set(k, s);
-  }
-
-  // Dedup
-  const dedupKeys = computeDedupKeys(rows, keys);
-  const existingKeys = new Set<string>();
-  for (const part of chunks(dedupKeys)) {
-    for (const r of (await q
-      .select({ k: transactions.dedupKey })
-      .from(transactions)
-      .where(and(eq(transactions.userId, userId), inArray(transactions.dedupKey, part)))
-      )) {
-      existingKeys.add(r.k);
-    }
   }
 
   // Categories and merchant rules
@@ -266,168 +253,7 @@ async function buildPlan(q: Q, user: CurrentUser, parsed: ParseResult, fileHash:
     if (ids && ids.length > 0) p.participantIds = ids;
   }
 
-  // Fuzzy link: new bank rows → the Alipay/WeChat row paid with the same card.
-  const claimed = new Set<number>();
-  for (const p of planned) {
-    if (p.isDup || p.duplicateOfId != null || !isBankSource(p.row.source) || p.row.status !== "ok" || !p.spec.last4) continue;
-    const day = dayNumber(p.row.occurredAt);
-    const candidates = (
-      await q
-        .select({ id: transactions.id, occurredAt: transactions.occurredAt, paymentMethod: transactions.paymentMethod })
-        .from(transactions)
-        .where(
-          and(
-            eq(transactions.userId, userId),
-            inArray(transactions.source, ["alipay", "wechat"]),
-            eq(transactions.currency, p.row.currency),
-            eq(transactions.amountMinor, p.row.amountMinor),
-            eq(transactions.status, "ok"),
-            isNull(transactions.duplicateOfId),
-          ),
-        )
-    )
-      .filter((c) => {
-        if (claimed.has(c.id)) return false;
-        if (Math.abs(dayNumber(c.occurredAt) - day) > LINK_WINDOW_DAYS) return false;
-        return parsePaymentMethod(c.paymentMethod)?.last4 === p.spec.last4;
-      })
-      .sort((a, b) => Math.abs(dayNumber(a.occurredAt) - day) - Math.abs(dayNumber(b.occurredAt) - day) || a.id - b.id);
-    let best: (typeof candidates)[number] | undefined;
-    for (const c of candidates) {
-      const linked = await q
-        .select({ id: transactions.id })
-        .from(transactions)
-        .where(and(eq(transactions.userId, userId), eq(transactions.duplicateOfId, c.id)))
-        .limit(1);
-      if (!linked[0]) {
-        best = c;
-        break;
-      }
-    }
-    if (best) {
-      p.duplicateOfId = best.id;
-      claimed.add(best.id);
-    }
-  }
-
-  // Reverse link: new Alipay/WeChat rows paid by card → a bank row imported earlier. The wallet row
-  // becomes the canonical one and the bank row points at it, unless the user already worked on the
-  // bank row (split, settlement, edit); then both stay and a warning says so. A card alert the user kept
-  // (split, settled, edited) is the record instead: the wallet row points at it, so the charge counts once.
-  const bankClaimed = new Set<number>();
-  for (const p of planned) {
-    if (p.isDup || (p.row.source !== "alipay" && p.row.source !== "wechat") || p.row.status !== "ok" || !p.spec.last4) continue;
-    const day = dayNumber(p.row.occurredAt);
-    const candidates = (await q
-      .select({
-        id: transactions.id,
-        source: transactions.source,
-        occurredAt: transactions.occurredAt,
-        paymentMethod: transactions.paymentMethod,
-        accountLast4: accounts.last4,
-        userEditedAt: transactions.userEditedAt,
-      })
-      .from(transactions)
-      .leftJoin(accounts, eq(accounts.id, transactions.accountId))
-      .where(
-        and(
-          eq(transactions.userId, userId),
-          // A card alert no statement confirmed yet is matched as a capture after insert (runMatching); one that
-          // is final (kept, or confirmed with the user's split) is the card's own record here.
-          inArray(transactions.source, [...BANK_SOURCES, "sms"]),
-          isNull(transactions.provisional),
-          eq(transactions.currency, p.row.currency),
-          eq(transactions.amountMinor, p.row.amountMinor),
-          eq(transactions.status, "ok"),
-          isNull(transactions.duplicateOfId),
-        ),
-      )
-      )
-      .filter((c) => {
-        if (bankClaimed.has(c.id)) return false;
-        if (Math.abs(dayNumber(c.occurredAt) - day) > LINK_WINDOW_DAYS) return false;
-        return (parsePaymentMethod(c.paymentMethod)?.last4 ?? c.accountLast4) === p.spec.last4;
-      })
-      .sort((a, b) => Math.abs(dayNumber(a.occurredAt) - day) - Math.abs(dayNumber(b.occurredAt) - day) || a.id - b.id);
-    const best = candidates[0];
-    if (!best) continue;
-    bankClaimed.add(best.id);
-    const split = (await q
-      .select({ id: transactionSplits.id })
-      .from(transactionSplits)
-      .where(eq(transactionSplits.transactionId, best.id))
-      .limit(1))[0];
-    const settled = (await q
-      .select({ id: settlements.id })
-      .from(settlements)
-      .where(and(eq(settlements.userId, userId), eq(settlements.transactionId, best.id)))
-      .limit(1))[0];
-    if ((split || settled || best.userEditedAt != null) && best.source === "sms") {
-      p.duplicateOfId = best.id;
-      continue;
-    }
-    if (split || settled || best.userEditedAt != null) {
-      const reason = split ? "split" : settled ? "settled" : "edited";
-      const words = { split: "split", settled: "recorded as a settlement", edited: "edited by hand" }[reason];
-      const date = occurredOnFor(p.row.occurredAt, p.row.source, await getTimeZone(q, user));
-      warnings.push(
-        notice(
-          "import_link_locked",
-          `Row ${p.row.lineNo} (${date} ${p.row.amountMinor}) may be the same as bank transaction #${best.id}, but that one is ${words}, so they were not linked; please check`,
-          { line: p.row.lineNo, date, amountMinor: p.row.amountMinor, id: best.id, reason },
-        ),
-      );
-      continue;
-    }
-    p.linkBankId = best.id;
-  }
-
-  // BoA CSV ↔ Plaid: the same Bank of America transaction arrives through both. The later row points
-  // at the earlier one (same institution, same account kind, amount, currency, ±3 days); the earlier
-  // row is never touched, so its splits, settlements and edits stay where they are. Accounts are not
-  // merged: the CSV has no account number, so its ledger account stays separate from Plaid's.
-  const crossClaimed = new Set<number>();
-  for (const p of planned) {
-    const other = CROSS_SOURCE[p.row.source];
-    if (!other || p.isDup || p.duplicateOfId != null || p.row.status !== "ok") continue;
-    if (!BOA_INSTITUTION.test(p.spec.institution ?? "")) continue;
-    const day = dayNumber(p.row.occurredAt);
-    const near = (
-      await q
-        .select({ id: transactions.id, occurredAt: transactions.occurredAt, institution: accounts.institution })
-        .from(transactions)
-        .innerJoin(accounts, eq(accounts.id, transactions.accountId))
-        .where(
-          and(
-            eq(transactions.userId, userId),
-            eq(transactions.source, other),
-            eq(accounts.kind, p.spec.kind),
-            eq(transactions.currency, p.row.currency),
-            eq(transactions.amountMinor, p.row.amountMinor),
-            eq(transactions.status, "ok"),
-            isNull(transactions.duplicateOfId),
-          ),
-        )
-    )
-      .filter((c) => !crossClaimed.has(c.id) && BOA_INSTITUTION.test(c.institution ?? "") && Math.abs(dayNumber(c.occurredAt) - day) <= LINK_WINDOW_DAYS)
-      .sort((a, b) => Math.abs(dayNumber(a.occurredAt) - day) - Math.abs(dayNumber(b.occurredAt) - day) || a.id - b.id);
-    let best: (typeof near)[number] | undefined;
-    for (const c of near) {
-      const linked = await q
-        .select({ id: transactions.id })
-        .from(transactions)
-        .where(and(eq(transactions.userId, userId), eq(transactions.duplicateOfId, c.id), eq(transactions.source, p.row.source)))
-        .limit(1);
-      if (!linked[0]) {
-        best = c;
-        break;
-      }
-    }
-    if (best) {
-      p.duplicateOfId = best.id;
-      crossClaimed.add(best.id);
-    }
-  }
+  await planLinks(q, user, planned, warnings);
 
   // Whole-file basis, as the statement declares it (closed rows count, their amounts do not).
   const parsedTotals = bucketTotals(rows);
@@ -551,18 +377,16 @@ export interface CommitParsedOptions extends PlanOptions {
   by?: string;
 }
 
-/** Plans without writing: the same preview commitParsed would act on. */
-export async function previewParsed(db: Db, user: CurrentUser, parsed: ParseResult, opts: CommitParsedOptions): Promise<ImportPreview> {
-  return (await buildPlan(db, user, parsed, opts.fileHash, opts.fileName, opts)).preview;
-}
-
 /** commitImport for rows that did not come from a file (bank sync) or were parsed already. */
 export function commitParsed(db: Db, user: CurrentUser, parsed: ParseResult, opts: CommitParsedOptions & { skipIfNothingNew: true }): Promise<ImportResult | null>;
 export function commitParsed(db: Db, user: CurrentUser, parsed: ParseResult, opts: CommitParsedOptions): Promise<ImportResult>;
 export async function commitParsed(db: Db, user: CurrentUser, parsed: ParseResult, opts: CommitParsedOptions): Promise<ImportResult | null> {
   const userId = user.id;
   const { fileHash, fileName } = opts;
-  if (opts.skipIfNothingNew && (await previewParsed(db, user, parsed, opts)).newCount === 0) return null;
+  if (opts.skipIfNothingNew) {
+    const { dedupKeys, existingKeys } = await dedupRows(db, user, parsed, opts);
+    if (dedupKeys.every((k) => existingKeys.has(k))) return null;
+  }
   if (opts.backup !== false) await backupDatabase(db, "pre-import");
   return await db.transaction(async (tx) => {
     const { preview, parsedTotals, planned, existingAccountIds } = await buildPlan(tx, user, parsed, fileHash, fileName, opts);
@@ -698,7 +522,7 @@ export async function commitParsed(db: Db, user: CurrentUser, parsed: ParseResul
       inserted: fresh.length,
       skippedDup: preview.dupCount,
       linked: preview.linkCount,
-      captures: { linked: matched.linked, toReview: (await listReview(tx, user)).total },
+      captures: { linked: matched.linked, toReview: await countReview(tx, user) },
     };
   });
 }
