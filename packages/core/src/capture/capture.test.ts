@@ -13,7 +13,7 @@ import { rangeOverview } from "../stats/range";
 import { getCurrentUser } from "../user";
 import { createCapture } from "./create";
 import { type AuthorityRow, evaluate, type OpenCapture, planMatches, runMatching } from "./match";
-import { listReview, resolveReview, resolveReviewBulk, undoCapture } from "./review";
+import { countReview, listReview, resolveReview, resolveReviewBulk, undoCapture } from "./review";
 import { supersede } from "./supersede";
 
 // Fictional card tails 3141 and 5501 only. Default time zone America/Chicago: an alert at 01:26 Beijing time on Oct 2
@@ -174,6 +174,7 @@ describe("matching statement rows", () => {
         candidates: [expect.objectContaining({ transactionId: p!.id, reasons: ["card", "time"], daysAfter: 1, amountDiffMinor: 360 })],
       }),
     ]);
+    expect(await countReview(db, user, { today })).toBe(1);
     expect(await usd(db)).toMatchObject({ spendingMinor: 2710, holds: { count: 1, minor: 2350 } });
     await resolveReview(db, user, h.captureId, { action: "link", candidateId: p!.id });
     expect(await usd(db)).toMatchObject({ count: 1, spendingMinor: 2710, holds: { count: 0 } });
@@ -279,6 +280,7 @@ describe("matching statement rows", () => {
     await resolveReview(db2, user, e.captureId, { action: "link", candidateId: q!.id });
     const review = await listReview(db2, user, { today });
     expect(review.items).toEqual([expect.objectContaining({ captureId: e.captureId, type: "amount_changed", shares: { sharesMinor: 2350, amountMinor: 2710 } })]);
+    expect(await countReview(db2, user, { today })).toBe(1);
     await resolveReview(db2, user, e.captureId, { action: "keep_shares" });
     expect((await listReview(db2, user, { today })).total).toBe(0);
   });
@@ -292,6 +294,7 @@ describe("the review queue", () => {
     expect((await listReview(db, user, { today: "2026-10-15" })).items).toEqual([
       expect.objectContaining({ captureId: s.captureId, type: "stale", stale: { reason: "age", days: 14 } }),
     ]);
+    expect(await countReview(db, user, { today: "2026-10-15" })).toBe(1);
     // A statement of another card says nothing about this one; the card's own statement through Oct 4 does.
     await pdf(db, { amountMinor: -999, occurredAt: "2026-10-06T09:00:00+08:00", counterparty: "OTHER SHOP", paymentMethod: "工商银行信用卡(5501)" });
     expect((await listReview(db, user, { today })).total).toBe(0);
@@ -299,6 +302,7 @@ describe("the review queue", () => {
     expect((await listReview(db, user, { today })).items).toEqual([
       expect.objectContaining({ type: "stale", stale: { reason: "covered", source: "icbc_pdf", through: "2026-10-04" } }),
     ]);
+    expect(await countReview(db, user, { today })).toBe(1);
   });
 
   it("Keep as final, Discard and Keep separate, each undoable; kept-separate rows are not offered again", async () => {

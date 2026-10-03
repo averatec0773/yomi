@@ -1,5 +1,5 @@
 import { type Db, settlements, transactionSplits } from "@yomi/db";
-import { and, eq } from "@yomi/db/orm";
+import { and, eq, inArray } from "@yomi/db/orm";
 
 export type LockReason = "edited" | "split" | "settled";
 
@@ -24,3 +24,14 @@ export async function lockReason(q: Db, userId: number, tx: { id: number; userEd
   return null;
 }
 
+
+/** Which of `ids` carry a split, and which a settlement of the user: lockReason's two probes for many rows at once. */
+export async function splitAndSettledIds(q: Db, userId: number, ids: readonly number[]): Promise<{ split: Set<number>; settled: Set<number> }> {
+  if (ids.length === 0) return { split: new Set(), settled: new Set() };
+  const split = await q.select({ id: transactionSplits.transactionId }).from(transactionSplits).where(inArray(transactionSplits.transactionId, [...ids]));
+  const settled = await q
+    .select({ id: settlements.transactionId })
+    .from(settlements)
+    .where(and(eq(settlements.userId, userId), inArray(settlements.transactionId, [...ids])));
+  return { split: new Set(split.map((r) => r.id)), settled: new Set(settled.flatMap((r) => (r.id == null ? [] : [r.id]))) };
+}

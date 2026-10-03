@@ -497,6 +497,7 @@ export async function syncConnection(
   let modified = 0;
   let removed = 0;
   await db.transaction(async (tx) => {
+    const zone = await getTimeZone(tx, user);
     for (const m of toModify) {
       const stored = await findStored(tx, user.id, source, m.row.externalId!);
       if (!stored) continue;
@@ -527,7 +528,7 @@ export async function syncConnection(
           amountMinor: r.amountMinor,
           currency: r.currency,
           occurredAt: r.occurredAt,
-          occurredOn: occurredOnFor(r.occurredAt, source, await getTimeZone(tx, user)),
+          occurredOn: occurredOnFor(r.occurredAt, source, zone),
           counterpartyRaw: r.counterparty,
           descriptionRaw: r.description,
           merchant,
@@ -559,7 +560,7 @@ export async function syncConnection(
       removed += 1;
     }
     // Today's balance of each account, as the bank reports it (Assets history).
-    if (changes.accounts?.length) await recordProviderBalances(tx, user, conn.id, changes.accounts, todayIn(await getTimeZone(tx, user), opts.now ? new Date(now) : undefined));
+    if (changes.accounts?.length) await recordProviderBalances(tx, user, conn.id, changes.accounts, todayIn(zone, opts.now ? new Date(now) : undefined));
     await tx.update(bankConnections)
       .set({ cursor: changes.nextCursor, lastSyncedAt: now, status: "active", lastError: null })
       .where(eq(bankConnections.id, conn.id));
