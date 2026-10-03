@@ -29,6 +29,13 @@
       "when": 1790967995850,
       "tag": "0003_captures",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790994775691,
+      "tag": "0004_fk_and_merchant_indexes",
+      "breakpoints": true
     }
   ]
 }

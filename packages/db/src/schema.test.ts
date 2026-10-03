@@ -75,8 +75,21 @@ describe("migrations", () => {
   it("is idempotent: a second run applies nothing and logs one migration per journal entry", async () => {
     await migrate(db);
     const log = await queryRows<{ n: number }>(db, sql`select count(*)::int as n from drizzle.__drizzle_migrations`);
-    expect(log[0]!.n).toBe(4);
+    expect(log[0]!.n).toBe(5);
     expect(await listTables(db)).toHaveLength(24);
+  });
+
+  it("indexes every foreign key into transactions, so deleting a row never scans the referencing table", async () => {
+    const fks = await queryRows<{ fk: string; indexed: boolean }>(
+      db,
+      sql`select c.conname as fk,
+                 exists (select 1 from pg_index i where i.indrelid = c.conrelid and i.indkey[0] = c.conkey[1]) as indexed
+          from pg_constraint c
+          where c.contype = 'f' and c.confrelid = 'transactions'::regclass
+          order by c.conname`,
+    );
+    expect(fks.length).toBeGreaterThan(4);
+    expect(fks.filter((f) => !f.indexed).map((f) => f.fk)).toEqual([]);
   });
 
   it("enforces foreign keys", async () => {
