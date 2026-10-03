@@ -1,6 +1,6 @@
 # Configuration
 
-Last checked: 2026-09-30
+Last checked: 2026-10-02
 
 Everything here is optional: `pnpm install && pnpm dev` runs yomi with sensible defaults. This guide lists where yomi keeps its data, every setting, and how credentials are protected.
 
@@ -47,6 +47,7 @@ DATABASE_URL=data/demo-pglite pnpm dev
 | `YOMI_SECRET_KEY` | No | key file | 32-byte key (base64 or hex) that encrypts stored credentials; generate with `pnpm secrets:gen-key` | [below](#credentials-and-encryption) |
 | `YOMI_SECRET_KEY_FILE` | No | `~/.config/yomi/secret.key` | Where the key file lives when `YOMI_SECRET_KEY` is unset (`$XDG_CONFIG_HOME` is honored) | |
 | `YOMI_ACCESS_TOKEN` | Before any access from another device | unset (no gate) | Token every browser must present once; generate with `openssl rand -hex 32` | [Remote access](remote-access.md) |
+| `YOMI_ALLOWED_HOSTS` | To open yomi by another name or address | unset (localhost only) | Comma-separated names or addresses the API also answers to, such as `192.168.1.20,my-laptop`; add `:port` when the browser uses another port than yomi (a Docker or SSH port mapping) | [Remote access](remote-access.md) |
 | `PLAID_CLIENT_ID` | For bank sync | | Plaid client ID (Dashboard > Developers > Keys) | [Plaid](plaid.md) |
 | `PLAID_SECRET_SANDBOX` | For Sandbox | | Plaid Sandbox secret (test banks) | [Plaid](plaid.md) |
 | `PLAID_SECRET_PRODUCTION` | For real banks | | Plaid Production secret | [Plaid](plaid.md) |
@@ -86,6 +87,7 @@ Saved secrets are write-only: Settings shows only the last four characters, neve
 - **Outbound connections**, only when you use the feature: Plaid (bank and brokerage sync, and the Plaid Link script from `cdn.plaid.com` when connecting), Interactive Brokers (Flex statements), and [Frankfurter](https://frankfurter.dev) for daily exchange rates on Assets (currency codes only).
 - **Bank passwords** are typed only into Plaid's window and the bank's own page. yomi stores the access token Plaid issues.
 - **Access token gate.** `pnpm dev` listens on every network interface. With `YOMI_ACCESS_TOKEN` set, every page and API call needs the access cookie (a SHA-256 hash of the token, HttpOnly, one year) or an `Authorization: Bearer <token>` header. Without it, anyone who can reach the port can use yomi. See [Remote access](remote-access.md).
+- **Same-origin API.** The API answers only to `localhost`, `127.0.0.1` and `[::1]` on yomi's port, plus the names in `YOMI_ALLOWED_HOSTS`, and refuses requests sent by pages on other sites. A web page you visit cannot change your ledger, with or without the access token.
 - **Real data stays out of git.** `data/`, `.env*` (except `.env.example`), databases and key files are ignored, and `pnpm hooks:install` adds hooks that refuse to commit or push them.
 
 See also: [Troubleshooting](troubleshooting.md), [Backup and restore](backup-and-restore.md).

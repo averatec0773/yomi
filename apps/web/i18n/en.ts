@@ -144,6 +144,8 @@ export const en = {
       backup_server: "yomi does not back up a Postgres server itself. Run: {command}",
       access_required: "This needs the access token. Reload the page to enter it.",
       access_invalid: "That access token is not right.",
+      request_host_not_allowed: "yomi does not answer to {host} yet. Add it to YOMI_ALLOWED_HOSTS in .env.local and restart yomi.",
+      request_cross_site: "That request came from another site, so yomi refused it.",
       image_export_failed: "The image could not be made. Try again, or save as PDF.",
       image_copy_failed: "The image could not be copied. Save it as an image instead.",
       transaction_not_found: "Transaction #{id} does not exist.",

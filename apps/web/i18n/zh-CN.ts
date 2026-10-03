@@ -138,6 +138,8 @@ export const zhCN: Dictionary = {
       backup_server: "yomi 不会自己备份 Postgres 服务器上的数据库。请运行：{command}",
       access_required: "需要访问令牌。刷新页面后输入。",
       access_invalid: "访问令牌不对。",
+      request_host_not_allowed: "yomi 还不接受通过 {host} 访问。把它加到 .env.local 的 YOMI_ALLOWED_HOSTS 里，再重启 yomi。",
+      request_cross_site: "这个请求来自其他网站，yomi 已拒绝。",
       image_export_failed: "没能生成图片。请再试一次，或保存为 PDF。",
       image_copy_failed: "没能复制图片。可以改为保存为图片。",
       transaction_not_found: "交易 #{id} 不存在",

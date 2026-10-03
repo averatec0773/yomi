@@ -48,6 +48,8 @@ async function setup(env: NodeJS.ProcessEnv = {}) {
     getDb: () => db,
     invest: { ibkrFlex: { fetch: ibkrFetch, sleep: async () => {} }, fetch: (async () => new Response("[]")) as unknown as typeof fetch, now: () => new Date("2026-09-29T23:00:00Z") },
     secrets: { plaidFetch, log: (l) => lines.push(l), env },
+    // The LAN and proxied hosts below must reach the secrets check, past the host allowlist.
+    allowedHosts: ["192.168.1.20", "yomi.example.com"],
   });
   const req = (method: string, p: string, body?: unknown, headers: Record<string, string> = {}, host = "http://localhost") =>
     app.request(`${host}/api${p}`, { method, headers: { "Content-Type": "application/json", ...headers }, body: body === undefined ? undefined : JSON.stringify(body) });

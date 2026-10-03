@@ -28,10 +28,12 @@ export const E2E_NOW = process.env.YOMI_E2E_NOW || "2026-09-30T12:00:00-05:00";
  * Each server gets its own key file under data/, removed before the run, so saving a secret creates it fresh and the
  * developer's own key file (~/.config/yomi/secret.key) is never touched. YOMI_E2E=1 routes IBKR Flex calls and
  * Plaid "Test keys" to in-process fakes (apps/web/lib/e2e-fakes.ts) and pins the app's clock to YOMI_E2E_NOW. TZ
- * matches the browser's zone, so server-local "today" does not depend on the machine.
+ * matches the browser's zone, so server-local "today" does not depend on the machine. The LAN address in
+ * YOMI_ALLOWED_HOSTS lets e2e/secrets.spec.ts reach the secrets check with a LAN Host header.
  */
 const quietEnv = {
   YOMI_BACKGROUND_SYNC: "0",
+  YOMI_ALLOWED_HOSTS: "192.168.1.20",
   YOMI_E2E: "1",
   YOMI_E2E_NOW: E2E_NOW,
   TZ: "America/Chicago",
