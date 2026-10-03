@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { listTransactions, unsplitSummary } from "../ledger";
 import { addParticipant, addSplit, addTx, catId, freshDb, selfId, user } from "../ledger/test-helpers";
 import { addDays } from "../time/day";
-import { todayLocal } from "./internal";
+import { userToday } from "../settings/time-zone";
 import {
   acceptSuggestions,
   archiveParticipant,
@@ -238,7 +238,7 @@ describe("acceptSuggestions + undo", () => {
 describe("suggestions in lists", () => {
   it("listTransactions and unsplitSummary carry category suggestions", async () => {
     const { db, alex, groceries } = await setup();
-    const today = todayLocal();
+    const today = await userToday(db, user);
     for (let i = 0; i < 5; i++) await splitRow(db, groceries, [alex], addDays(today, -10));
     const t = await target(db, groceries, "New Market", addDays(today, -1));
     const item = (await listTransactions(db, user, { id: t })).items[0]!;

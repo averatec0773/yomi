@@ -1,8 +1,9 @@
 import { categories, merchantRules, transactions, transactionSplits } from "@yomi/db";
 import { and, desc, eq, gte, isNull, like } from "@yomi/db/orm";
 import type { CurrentUser } from "../user";
+import { userToday } from "../settings/time-zone";
 import { addDays } from "../time/day";
-import { type Q, todayLocal } from "./internal";
+import type { Q } from "./internal";
 import { listParticipants } from "./participants";
 import { suggestSplits } from "./suggest";
 
@@ -33,7 +34,7 @@ export async function unsplitSuggestions(
   user: CurrentUser,
   opts: { month?: string; today?: string } = {},
 ): Promise<UnsplitSuggestion[]> {
-  const today = opts.today ?? todayLocal();
+  const today = opts.today ?? (await userToday(db, user));
   const fallback = (await listParticipants(db, user)).find((p) => !p.isSelf && p.archivedAt === null)?.id;
   const muted = new Set(
     (await db
@@ -70,8 +71,8 @@ export async function unsplitSuggestions(
         isNull(transactionSplits.id),
         isNull(transactions.splitSuggestionDismissedAt),
         opts.month
-          ? like(transactions.occurredAt, `${opts.month}%`)
-          : gte(transactions.occurredAt, addDays(today, -WINDOW_DAYS)),
+          ? like(transactions.occurredOn, `${opts.month}%`)
+          : gte(transactions.occurredOn, addDays(today, -WINDOW_DAYS)),
       ),
     )
     .orderBy(desc(transactions.occurredAt), desc(transactions.id));
