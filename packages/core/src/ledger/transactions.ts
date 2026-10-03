@@ -381,7 +381,7 @@ export function provisionalTotals(rows: readonly SpendingRow[], currency: string
 }
 
 /** All rows of a month with their splits and my share. */
-export async function loadMonthRows(db: Db, userId: number, month: string): Promise<SpendingRow[]> {
+async function loadMonthRows(db: Db, userId: number, month: string): Promise<SpendingRow[]> {
   if (!isMonth(month)) throw new LedgerError("invalid", "invalid_month", `Invalid month: ${month}`, { value: month });
   const { start, end } = monthRange(month);
   return await loadRowsBetween(db, userId, start, end);

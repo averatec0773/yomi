@@ -18,7 +18,6 @@ export {
 export * from "./candidates";
 export {
   addIdentity,
-  guessAliasKind,
   IDENTITY_KINDS,
   type Identity,
   type IdentityInput,

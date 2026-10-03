@@ -13,10 +13,8 @@ export interface StoredToken {
   value: string;
 }
 
-type Q = Db;
-
 /** Every non-empty stored token (a disconnected connection keeps ""), from the tables present in `db`. */
-export async function readStoredTokens(db: Q, tables: readonly TokenTable[] = TOKEN_TABLES): Promise<StoredToken[]> {
+export async function readStoredTokens(db: Db, tables: readonly TokenTable[] = TOKEN_TABLES): Promise<StoredToken[]> {
   const out: StoredToken[] = [];
   if (tables.includes("bank_connections")) {
     for (const r of (await db.select({ id: bankConnections.id, value: bankConnections.accessToken }).from(bankConnections))) {
@@ -32,7 +30,7 @@ export async function readStoredTokens(db: Q, tables: readonly TokenTable[] = TO
 }
 
 /** Replaces one token only if it still holds `from`; returns the number of rows changed (0 or 1). */
-async function replaceToken(tx: Q, t: StoredToken, to: string): Promise<number> {
+async function replaceToken(tx: Db, t: StoredToken, to: string): Promise<number> {
   if (t.table === "bank_connections") {
     return (
       await tx
@@ -51,7 +49,7 @@ async function replaceToken(tx: Q, t: StoredToken, to: string): Promise<number> 
   ).length;
 }
 
-async function currentValue(tx: Q, t: StoredToken): Promise<string | undefined> {
+async function currentValue(tx: Db, t: StoredToken): Promise<string | undefined> {
   if (t.table === "bank_connections") {
     return (await tx.select({ v: bankConnections.accessToken }).from(bankConnections).where(eq(bankConnections.id, t.id)).limit(1))[0]?.v;
   }

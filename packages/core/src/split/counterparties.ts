@@ -1,4 +1,4 @@
-import { counterpartyIgnores, type IdentityKind, participantIdentities, participants, transactions } from "@yomi/db";
+import { counterpartyIgnores, type IdentityKind, participantIdentities, participants, transactions, type Db } from "@yomi/db";
 import { zelleCounterparty } from "@yomi/importers";
 import { and, eq, inArray, isNull, ne } from "@yomi/db/orm";
 import type { CurrentUser } from "../user";
@@ -13,7 +13,7 @@ import {
 import { getTimeZone } from "../settings/time-zone";
 import { dayNumber } from "../time/day";
 import { localDate, todayIn } from "../time/zone";
-import { type Q, SplitError } from "./internal";
+import { SplitError } from "./internal";
 import { createParticipant } from "./participants";
 
 /** WeChat 交易类型 / Alipay 交易分类 values that mean a person-to-person transfer. */
@@ -143,7 +143,7 @@ export function makeMatcher(people: readonly Person[]): (r: P2PRowData) => { id:
 }
 
 /** Non-self participants with their identities; archived ones only when asked. */
-export async function peopleForMatching(db: Q, user: CurrentUser, opts: { includeArchived?: boolean } = {}): Promise<Person[]> {
+export async function peopleForMatching(db: Db, user: CurrentUser, opts: { includeArchived?: boolean } = {}): Promise<Person[]> {
   const ps = (await db
     .select({ id: participants.id, name: participants.name, archivedAt: participants.archivedAt })
     .from(participants)
@@ -192,7 +192,7 @@ export interface UnclaimedCounterparty {
  * the same kind nor ignored, grouped by (kind, normalized value). Sorted by count weighted by recency
  * (a month-old group counts half).
  */
-export async function listUnclaimedCounterparties(db: Q, user: CurrentUser, opts: { today?: string } = {}): Promise<UnclaimedCounterparty[]> {
+export async function listUnclaimedCounterparties(db: Db, user: CurrentUser, opts: { today?: string } = {}): Promise<UnclaimedCounterparty[]> {
   const timeZone = await getTimeZone(db, user);
   const today = dayNumber(opts.today ?? todayIn(timeZone));
   const bound = new Set(
@@ -268,7 +268,7 @@ export async function listUnclaimedCounterparties(db: Q, user: CurrentUser, opts
 }
 
 /** Open, non-duplicate, non-zero rows from the P2P sources, filtered to person-to-person ones. */
-async function p2pRows(db: Q, user: CurrentUser) {
+async function p2pRows(db: Db, user: CurrentUser) {
   return (await db
     .select({
       id: transactions.id,
@@ -307,7 +307,7 @@ export interface ClaimInput extends IdentityInput {
  * "That's X" / "New person": binds the counterparty to a participant as a claimed identity. Settlement
  * candidates pick up its transfers (past and future) at once, since they match on identities.
  */
-export async function claimCounterparty(db: Q, user: CurrentUser, input: ClaimInput): Promise<{ identity: Identity; participantId: number }> {
+export async function claimCounterparty(db: Db, user: CurrentUser, input: ClaimInput): Promise<{ identity: Identity; participantId: number }> {
   cleanIdentity(input);
   const hasId = input.participantId !== undefined;
   const hasName = (input.newParticipantName ?? "").trim() !== "";
@@ -323,7 +323,7 @@ export async function claimCounterparty(db: Q, user: CurrentUser, input: ClaimIn
  * Remembers who a settled transfer was with (used by markAsSettlement). Silent when the row is not
  * person-to-person, names nobody, or the identity already exists (for this or another participant).
  */
-export async function learnIdentityFromRow(db: Q, user: CurrentUser, participantId: number, r: P2PRowData): Promise<void> {
+export async function learnIdentityFromRow(db: Db, user: CurrentUser, participantId: number, r: P2PRowData): Promise<void> {
   const party = p2pParty(r);
   if (!party) return;
   const normalized = normalizeIdentity(party.kind, party.value);

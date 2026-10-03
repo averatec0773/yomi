@@ -36,6 +36,13 @@
       "when": 1790994775691,
       "tag": "0004_fk_and_merchant_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791010441137,
+      "tag": "0005_drop_unused_columns",
+      "breakpoints": true
     }
   ]
 }

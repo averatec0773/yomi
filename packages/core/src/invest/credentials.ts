@@ -13,7 +13,7 @@ import {
   secretView,
   writeSecretSetting,
 } from "../settings/secrets";
-import { deleteSetting, type Q, readSetting, writeSetting } from "../settings/store";
+import { deleteSetting, readSetting, writeSetting } from "../settings/store";
 import { getTimeZone } from "../settings/time-zone";
 import { dayDiff } from "../time/day";
 import { clockNow, todayIn } from "../time/zone";
@@ -38,7 +38,7 @@ export interface IbkrCredentials {
 }
 
 /** Token and query id for `user`: IBKR_FLEX_TOKEN / IBKR_FLEX_QUERY_ID from env first, then Settings, per field. */
-export async function resolveIbkrCredentials(q: Q, user: CurrentUser, env: NodeJS.ProcessEnv = process.env): Promise<IbkrCredentials> {
+export async function resolveIbkrCredentials(q: Db, user: CurrentUser, env: NodeJS.ProcessEnv = process.env): Promise<IbkrCredentials> {
   return {
     token: resolveSecret(env[IBKR_TOKEN_ENV], await readSecretSetting(q, user, IBKR_TOKEN_SETTING, env)),
     queryId: resolveSecret(env[IBKR_QUERY_ENV], await readSecretSetting(q, user, IBKR_QUERY_SETTING, env)),
@@ -46,7 +46,7 @@ export async function resolveIbkrCredentials(q: Q, user: CurrentUser, env: NodeJ
 }
 
 /** configured + the names of what is missing (env variable names, which also name the Settings fields). */
-export async function resolveIbkrConfig(q: Q, user: CurrentUser, env: NodeJS.ProcessEnv = process.env): Promise<IbkrConfig> {
+export async function resolveIbkrConfig(q: Db, user: CurrentUser, env: NodeJS.ProcessEnv = process.env): Promise<IbkrConfig> {
   return ibkrConfigOf(await resolveIbkrCredentials(q, user, env));
 }
 
@@ -118,7 +118,7 @@ export function ibkrSourceFor(token: string, queryId: string, opts: FlexOptions 
  * The IBKR source resolved at use time (per request, per scheduler tick), so a token saved in Settings takes
  * effect without a restart. Null when the token or the query id is missing.
  */
-export async function resolveIbkrSource(q: Q, user: CurrentUser, env: NodeJS.ProcessEnv = process.env, opts: FlexOptions = {}): Promise<IbkrSource | null> {
+export async function resolveIbkrSource(q: Db, user: CurrentUser, env: NodeJS.ProcessEnv = process.env, opts: FlexOptions = {}): Promise<IbkrSource | null> {
   const c = await resolveIbkrCredentials(q, user, env);
   if (!c.token.value || !c.queryId.value) return null;
   return ibkrSourceFor(c.token.value, c.queryId.value, opts);
@@ -160,7 +160,7 @@ export async function testIbkrCredentials(
   queryId: string,
   opts: FlexOptions = {},
   now: Date = clockNow(),
-  record?: { q: Q; user: CurrentUser },
+  record?: { q: Db; user: CurrentUser },
 ): Promise<IbkrTestResult> {
   // One day is enough to check the token and the query, whatever period the query has saved.
   const day = ibkrTestDay(now);

@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { categories, transactions } from "@yomi/db";
+import { categories, transactions, type Db } from "@yomi/db";
 import { and, eq } from "@yomi/db/orm";
 import type { CurrentUser } from "../user";
-import { assertCurrency, getParticipant, type Q, SplitError, toOccurredAt } from "./internal";
+import { assertCurrency, getParticipant, SplitError, toOccurredAt } from "./internal";
 import { setSplit, type SplitMode, type SplitView } from "./splits";
 
 export interface FriendPaidInput {
@@ -26,7 +26,7 @@ export interface CreatedEntry {
   myShareMinor: number;
 }
 
-export async function categoryIdByName(db: Q, user: CurrentUser, name: string | null | undefined): Promise<number | null> {
+export async function categoryIdByName(db: Db, user: CurrentUser, name: string | null | undefined): Promise<number | null> {
   const find = async (n: string) =>
     (await db
       .select({ id: categories.id })
@@ -36,7 +36,7 @@ export async function categoryIdByName(db: Q, user: CurrentUser, name: string | 
   return (name ? await find(name) : null) ?? await find("其他");
 }
 
-export async function assertCategory(db: Q, user: CurrentUser, id: number): Promise<number> {
+export async function assertCategory(db: Db, user: CurrentUser, id: number): Promise<number> {
   const c = (await db
     .select({ id: categories.id })
     .from(categories)
@@ -54,7 +54,7 @@ export function manualDedupKey(): string {
  * "The roommate paid for something": a transaction with no account of mine (account_id null), kind expense,
  * amount -total, and splits where the payer paid the total. Only my owed share is my spending.
  */
-export async function createFriendPaidExpense(db: Q, user: CurrentUser, input: FriendPaidInput): Promise<CreatedEntry> {
+export async function createFriendPaidExpense(db: Db, user: CurrentUser, input: FriendPaidInput): Promise<CreatedEntry> {
   return await db.transaction(async (q) => {
     const payer = await getParticipant(q, user, input.payerId);
     if (payer.isSelf) throw new SplitError("invalid", "friend_paid_payer_is_self", "When I paid, record it as a normal expense");

@@ -1,7 +1,7 @@
-import { accounts, transactions } from "@yomi/db";
+import { accounts, transactions, type Db } from "@yomi/db";
 import { and, eq } from "@yomi/db/orm";
 import { categoryIdByName, type CreatedEntry, createFriendPaidExpense, manualDedupKey } from "../split/friend-paid";
-import { assertCurrency, assertDate, getSelf, type Q, SplitError, toOccurredAt } from "../split/internal";
+import { assertCurrency, assertDate, getSelf, SplitError, toOccurredAt } from "../split/internal";
 import { setSplit, type SplitMode } from "../split/splits";
 import type { CurrentUser } from "../user";
 
@@ -18,7 +18,7 @@ export interface QuickEntryInput {
   categoryHint: string | null;
 }
 
-async function manualAccountId(db: Q, user: CurrentUser, currency: string): Promise<number> {
+async function manualAccountId(db: Db, user: CurrentUser, currency: string): Promise<number> {
   const found = (await db
     .select({ id: accounts.id })
     .from(accounts)
@@ -36,7 +36,7 @@ async function manualAccountId(db: Q, user: CurrentUser, currency: string): Prom
  * Saves a quick-entry draft. I paid → a manual expense on the auto-created "手动记账" cash account
  * (plus splits when participants are given). A friend paid → createFriendPaidExpense.
  */
-export async function createQuickEntry(db: Q, user: CurrentUser, draft: QuickEntryInput): Promise<CreatedEntry> {
+export async function createQuickEntry(db: Db, user: CurrentUser, draft: QuickEntryInput): Promise<CreatedEntry> {
   if (!Number.isSafeInteger(draft.amountMinor) || draft.amountMinor <= 0) {
     throw new SplitError("invalid", "amount_not_positive", "The amount must be a positive integer (minor units)");
   }

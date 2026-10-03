@@ -1,4 +1,4 @@
-import { settlements, transactions } from "@yomi/db";
+import { settlements, transactions, type Db } from "@yomi/db";
 import { and, desc, eq, inArray, isNull, ne, or } from "@yomi/db/orm";
 import { convertFromRate, normalizeRate } from "../money";
 import { userToday } from "../settings/time-zone";
@@ -10,7 +10,6 @@ import {
   assertCurrency,
   getParticipant,
   getTransaction,
-  type Q,
   SplitError,
 } from "./internal";
 import { recordSettlement, type Settlement } from "./settlements";
@@ -50,7 +49,7 @@ export interface SettlementCandidate {
  * first; unmatched ones from the last 90 days follow as "unknown sender" candidates. Outgoing US P2P
  * transfers (BoA / Plaid) to a matched participant are candidates too, with a negative amount ("I pay them back").
  */
-export async function settlementCandidates(db: Q, user: CurrentUser, opts: { today?: string } = {}): Promise<SettlementCandidate[]> {
+export async function settlementCandidates(db: Db, user: CurrentUser, opts: { today?: string } = {}): Promise<SettlementCandidate[]> {
   const today = opts.today ?? (await userToday(db, user));
   const since = addDays(today, -UNKNOWN_WINDOW_DAYS);
   const matchParticipant = makeMatcher(await peopleForMatching(db, user));
@@ -184,7 +183,7 @@ export interface MarkAsSettlementInput {
  * an income/expense row to kind transfer and remembers the old kind) and learns the counterparty as
  * a claimed identity (person-to-person rows only, never taking one from another participant). Only open, non-duplicate income/expense/transfer rows qualify.
  */
-export async function markAsSettlement(db: Q, user: CurrentUser, txId: number, input: MarkAsSettlementInput): Promise<Settlement> {
+export async function markAsSettlement(db: Db, user: CurrentUser, txId: number, input: MarkAsSettlementInput): Promise<Settlement> {
   return await db.transaction(async (q) => {
     const t = await getTransaction(q, user, txId);
     if (t.amountMinor === 0) throw new SplitError("invalid", "settlement_zero_amount", "A zero-amount transaction cannot be marked as a settlement");

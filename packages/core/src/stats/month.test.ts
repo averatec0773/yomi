@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { LedgerError } from "../ledger/errors";
 import { addParticipant, addSplit, addTx, catId, freshDb, selfId, user } from "../ledger/test-helpers";
-import { getMonthlyTarget, monthOverview, setMonthlyTarget, sharedReceivable } from "./overview";
+import { getMonthlyTarget, setMonthlyTarget } from "../month";
+import { monthRangeOf } from "./period";
+import { rangeOverview } from "./range";
 
 async function month() {
   const db = await freshDb();
@@ -36,10 +38,10 @@ async function month() {
   return { db, food, groc, orig };
 }
 
-describe("monthOverview", () => {
+describe("rangeOverview over a calendar month", () => {
   it("computes per-currency numbers on a hand-built month, never summing currencies", async () => {
     const { db, food, groc, orig } = await month();
-    const o = await monthOverview(db, user, "2026-09", { today: "2026-10-05" });
+    const o = await rangeOverview(db, user, monthRangeOf("2026-09"), { today: "2026-10-05" });
     expect(o.days).toBe(30);
     expect(o.currencies.map((c) => c.currency)).toEqual(["CNY", "USD"]);
     const cny = o.currencies[0]!;
@@ -61,7 +63,7 @@ describe("monthOverview", () => {
       ["午饭", 3000],
     ]);
     expect(cny.largest.some((l) => l.id === orig)).toBe(true);
-    expect(cny.previousMonthSpendingMinor).toBe(10000);
+    expect(cny.previous?.spendingMinor).toBe(10000);
     expect(cny.dailyAverageMinor).toBe(Math.round(25001 / 30));
     expect(cny.sharedReceivableMinor).toBe(10000);
     expect(cny.target).toBeNull();
@@ -71,15 +73,14 @@ describe("monthOverview", () => {
       spendingMinor: 5999,
       transactionCount: 2,
       smallPayments: { thresholdMinor: 1000, count: 1, minor: 999 },
-      previousMonthSpendingMinor: null,
+      previous: null,
       sharedReceivableMinor: 0,
     });
-    expect(await sharedReceivable(db, user, "2026-09")).toEqual([{ currency: "CNY", minor: 10000 }]);
   });
 
   it("averages over elapsed days in the current month", async () => {
     const { db } = await month();
-    const o = await monthOverview(db, user, "2026-09", { today: "2026-09-10" });
+    const o = await rangeOverview(db, user, monthRangeOf("2026-09"), { today: "2026-09-10" });
     expect(o.days).toBe(10);
     expect(o.currencies[0]!.dailyAverageMinor).toBe(2500);
   });
@@ -88,13 +89,13 @@ describe("monthOverview", () => {
     const { db } = await month();
     expect(await getMonthlyTarget(db, user, "2026-09")).toBeNull();
     await setMonthlyTarget(db, user, { month: null, amountMinor: 300000, currency: "CNY" });
-    let o = await monthOverview(db, user, "2026-09", { today: "2026-10-01" });
+    let o = await rangeOverview(db, user, monthRangeOf("2026-09"), { today: "2026-10-01" });
     expect(o.currencies[0]!.target).toEqual({ amountMinor: 300000, currency: "CNY", remainingMinor: 300000 - 25001, monthSpecific: false });
     expect(o.currencies[1]!.target).toBeNull();
 
     await setMonthlyTarget(db, user, { month: "2026-09", amountMinor: 20000, currency: "USD" });
     await setMonthlyTarget(db, user, { month: "2026-09", amountMinor: 5000, currency: "USD" });
-    o = await monthOverview(db, user, "2026-09", { today: "2026-10-01" });
+    o = await rangeOverview(db, user, monthRangeOf("2026-09"), { today: "2026-10-01" });
     expect(o.currencies.find((c) => c.currency === "CNY")!.target).toBeNull();
     expect(o.currencies.find((c) => c.currency === "USD")!.target).toEqual({
       amountMinor: 5000,
@@ -105,7 +106,7 @@ describe("monthOverview", () => {
     // Other months still fall back to the default.
     expect(await getMonthlyTarget(db, user, "2026-08")).toMatchObject({ month: null, amountMinor: 300000 });
     // An empty month shows the target currency with zero spending.
-    const empty = await monthOverview(db, user, "2025-01", { today: "2026-10-01" });
+    const empty = await rangeOverview(db, user, monthRangeOf("2025-01"), { today: "2026-10-01" });
     expect(empty.currencies).toMatchObject([{ currency: "CNY", spendingMinor: 0, target: { remainingMinor: 300000 } }]);
     await expect(setMonthlyTarget(db, user, { month: "2026-9", amountMinor: 1, currency: "CNY" })).rejects.toThrow(LedgerError);
     await expect(setMonthlyTarget(db, user, { month: null, amountMinor: 1.5, currency: "CNY" })).rejects.toThrow(LedgerError);

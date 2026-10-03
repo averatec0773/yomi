@@ -75,7 +75,7 @@ describe("migrations", () => {
   it("is idempotent: a second run applies nothing and logs one migration per journal entry", async () => {
     await migrate(db);
     const log = await queryRows<{ n: number }>(db, sql`select count(*)::int as n from drizzle.__drizzle_migrations`);
-    expect(log[0]!.n).toBe(5);
+    expect(log[0]!.n).toBe(6);
     expect(await listTables(db)).toHaveLength(24);
   });
 
@@ -128,8 +128,8 @@ describe("migrations", () => {
     await db.execute(sql`insert into merchant_rules (user_id, merchant, participant_ids, updated_at) values (1, 'M', '[1]'::jsonb, 'x')`);
     const s = await queryRows<{ kind: string; prior_kind: string | null }>(db, sql`select kind, prior_kind from settlements`);
     expect(s).toEqual([{ kind: "payment", prior_kind: null }]);
-    const p = await queryRows<{ is_self: unknown; aliases: string }>(db, sql`select is_self, aliases from participants`);
-    expect(p).toEqual([{ is_self: false, aliases: "[]" }]);
+    const p = await queryRows<{ is_self: unknown }>(db, sql`select is_self from participants`);
+    expect(p).toEqual([{ is_self: false }]);
     const m = await queryRows<{ participant_ids: unknown; auto_split: unknown; suggest: unknown }>(db, sql`select participant_ids, auto_split, suggest from merchant_rules`);
     expect(m).toEqual([{ participant_ids: [1], auto_split: false, suggest: true }]);
   });

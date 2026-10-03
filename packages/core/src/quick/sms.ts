@@ -1,8 +1,9 @@
+import type { Db } from "@yomi/db";
 import { type IcbcSms, looksLikeIcbcSms, type NormalizedRow, parseIcbcSms } from "@yomi/importers";
 import { type CaptureResult, createCapture } from "../capture/create";
 import { sha256Hex } from "../import/dedup";
 import { getTimeZone } from "../settings/time-zone";
-import { type Q, SplitError } from "../split/internal";
+import { SplitError } from "../split/internal";
 import type { SplitMode } from "../split/splits";
 import { todayIn } from "../time/zone";
 import type { CurrentUser } from "../user";
@@ -61,7 +62,7 @@ export interface SmsEntryInput {
  * Saves a pasted ICBC card alert as a capture (source `sms`, the "auto" entries) on the card's account: see
  * createCapture. A hold (预授权) is marked and not counted.
  */
-export async function createSmsEntry(db: Q, user: CurrentUser, input: SmsEntryInput): Promise<CaptureResult> {
+export async function createSmsEntry(db: Db, user: CurrentUser, input: SmsEntryInput): Promise<CaptureResult> {
   const sms = parseIcbcSms(input.text, { today: input.today ?? todayIn(await getTimeZone(db, user)) });
   if (!sms) {
     throw new SplitError("invalid", "quick_sms_unsupported", "This bank message is not a supported ICBC card alert");

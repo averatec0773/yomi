@@ -4,7 +4,7 @@ import path from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { backupsDir, needsPreMigrateBackup } from "./backup";
+import { needsPreMigrateBackup } from "./backup";
 import { closeDb, createDb, type Db, listTables, migrate } from "./client";
 import { migrationsFolder } from "./paths";
 import { migratedTestDir } from "./testing";
@@ -72,7 +72,7 @@ describe("pre-migrate backup", { timeout: 30_000 }, () => {
     expect(await needsPreMigrateBackup(db, next)).toBe(true);
     const copy = await migrate(db, next);
     expect(copy).toMatch(/[/\\]backups[/\\]pglite-\d{8}-\d{6}-pre-migrate\.tar\.gz$/);
-    expect(path.dirname(copy!)).toBe(backupsDir(db));
+    expect(path.dirname(copy!)).toBe(path.join(dir, "backups"));
     expect(backups()).toHaveLength(1);
     expect(await listTables(db)).toContain("zz_extra");
     expect(await migrate(db, next)).toBeNull();

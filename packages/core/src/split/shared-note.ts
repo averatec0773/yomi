@@ -1,7 +1,7 @@
-import { transactions } from "@yomi/db";
+import { transactions, type Db } from "@yomi/db";
 import { eq } from "@yomi/db/orm";
 import type { CurrentUser } from "../user";
-import { getTransaction, nowIso, type Q, SplitError } from "./internal";
+import { getTransaction, nowIso, SplitError } from "./internal";
 
 export const SHARED_NOTE_MAX = 500;
 
@@ -11,13 +11,13 @@ export interface SharedNote {
 }
 
 /** The note written for the people a transaction is shared with (their statement shows it; `note` stays private). */
-export async function getSharedNote(db: Q, user: CurrentUser, transactionId: number): Promise<SharedNote> {
+export async function getSharedNote(db: Db, user: CurrentUser, transactionId: number): Promise<SharedNote> {
   const t = await getTransaction(db, user, transactionId);
   return { transactionId: t.id, sharedNote: t.sharedNote };
 }
 
 /** Sets or clears (empty or null) the shared note. Counts as a user edit, so an import revert keeps the row. */
-export async function setSharedNote(db: Q, user: CurrentUser, transactionId: number, note: string | null): Promise<SharedNote> {
+export async function setSharedNote(db: Db, user: CurrentUser, transactionId: number, note: string | null): Promise<SharedNote> {
   const t = await getTransaction(db, user, transactionId);
   const value = note?.trim() || null;
   if (value !== null && value.length > SHARED_NOTE_MAX) {

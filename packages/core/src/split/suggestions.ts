@@ -1,9 +1,8 @@
-import { categories, merchantRules, transactions, transactionSplits } from "@yomi/db";
+import { categories, merchantRules, transactions, transactionSplits, type Db } from "@yomi/db";
 import { and, desc, eq, gte, isNull, like } from "@yomi/db/orm";
 import type { CurrentUser } from "../user";
 import { userToday } from "../settings/time-zone";
 import { addDays } from "../time/day";
-import type { Q } from "./internal";
 import { listParticipants } from "./participants";
 import { suggestSplits } from "./suggest";
 
@@ -30,7 +29,7 @@ export interface UnsplitSuggestion {
  * expenses. Dismissed rows and merchants marked "don't suggest" are left out. Default window: last 60 days; `month` (YYYY-MM) replaces it. Max 20, newest first.
  */
 export async function unsplitSuggestions(
-  db: Q,
+  db: Db,
   user: CurrentUser,
   opts: { month?: string; today?: string } = {},
 ): Promise<UnsplitSuggestion[]> {

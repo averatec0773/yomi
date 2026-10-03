@@ -1,8 +1,8 @@
-import { participants, transactions, transactionSplits } from "@yomi/db";
+import { participants, transactions, transactionSplits, type Db } from "@yomi/db";
 import { and, eq, max, ne } from "@yomi/db/orm";
 import type { CurrentUser } from "../user";
 import { addIdentity, type Identity, type IdentityInput, listIdentities } from "./identities";
-import { getParticipant, nowIso, type ParticipantRow, type Q, SplitError } from "./internal";
+import { getParticipant, nowIso, type ParticipantRow, SplitError } from "./internal";
 
 export interface Participant {
   id: number;
@@ -25,7 +25,7 @@ function cleanName(name: string): string {
   return n;
 }
 
-async function assertNameFree(db: Q, user: CurrentUser, name: string, exceptId?: number): Promise<void> {
+async function assertNameFree(db: Db, user: CurrentUser, name: string, exceptId?: number): Promise<void> {
   const clash = (await db
     .select({ id: participants.id })
     .from(participants)
@@ -41,7 +41,7 @@ async function assertNameFree(db: Q, user: CurrentUser, name: string, exceptId?:
 }
 
 /** Self first, then by most recent split use (never-used last, by creation order). Archived hidden unless asked. */
-export async function listParticipants(db: Q, user: CurrentUser, opts: { includeArchived?: boolean } = {}): Promise<Participant[]> {
+export async function listParticipants(db: Db, user: CurrentUser, opts: { includeArchived?: boolean } = {}): Promise<Participant[]> {
   const rows = await db.select().from(participants).where(eq(participants.userId, user.id));
   const used = await db
     .select({ participantId: transactionSplits.participantId, last: max(transactions.occurredAt) })
@@ -65,7 +65,7 @@ export async function listParticipants(db: Q, user: CurrentUser, opts: { include
 }
 
 /** Creates a participant, optionally with identities (all or nothing). */
-export async function createParticipant(db: Q, user: CurrentUser, name: string, identities: readonly IdentityInput[] = []): Promise<Participant> {
+export async function createParticipant(db: Db, user: CurrentUser, name: string, identities: readonly IdentityInput[] = []): Promise<Participant> {
   const n = cleanName(name);
   return await db.transaction(async (q) => {
     await assertNameFree(q, user, n);
@@ -76,7 +76,7 @@ export async function createParticipant(db: Q, user: CurrentUser, name: string, 
   });
 }
 
-export async function renameParticipant(db: Q, user: CurrentUser, id: number, name: string): Promise<Participant> {
+export async function renameParticipant(db: Db, user: CurrentUser, id: number, name: string): Promise<Participant> {
   const p = await getParticipant(db, user, id);
   if (p.isSelf) throw new SplitError("invalid", "participant_self_rename", "Cannot rename \"me\"");
   const n = cleanName(name);
@@ -86,7 +86,7 @@ export async function renameParticipant(db: Q, user: CurrentUser, id: number, na
 }
 
 /** Soft delete; history and balances keep the row. `archived: false` restores it. */
-export async function archiveParticipant(db: Q, user: CurrentUser, id: number, archived = true): Promise<Participant> {
+export async function archiveParticipant(db: Db, user: CurrentUser, id: number, archived = true): Promise<Participant> {
   const p = await getParticipant(db, user, id);
   if (p.isSelf) throw new SplitError("invalid", "participant_self_archive", "Cannot archive \"me\"");
   const row = (await db

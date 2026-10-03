@@ -8,7 +8,6 @@ import {
   archiveParticipant,
   claimCounterparty,
   createParticipant,
-  guessAliasKind,
   ignoreCounterparty,
   listIdentities,
   listUnclaimedCounterparties,
@@ -54,13 +53,6 @@ describe("normalizeIdentity", () => {
     expect(normalizeIdentity("wechat", "阿杰　🌙")).toBe("阿杰 🌙");
     expect(normalizeIdentity("zelle_phone", "+1 (512) 555-0100")).toBe("15125550100");
     expect(normalizeIdentity("zelle_email", " Alex.T@Example.COM ")).toBe("alex.t@example.com");
-  });
-
-  it("guesses alias kinds like migration 0006", () => {
-    expect(guessAliasKind("阿杰")).toBe("wechat");
-    expect(guessAliasKind("A-Wang🌙")).toBe("wechat");
-    expect(guessAliasKind("wxid_abc123")).toBe("wechat");
-    expect(guessAliasKind("Alex Tester")).toBe("zelle_name");
   });
 });
 

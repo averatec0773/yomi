@@ -14,7 +14,7 @@ export async function seed(db: Db): Promise<void> {
   const userId = getCurrentUser().id;
   await db.transaction(async (tx) => {
     await tx.insert(participants)
-      .values({ userId, name: SELF_PARTICIPANT_NAME, isSelf: true, aliases: "[]" })
+      .values({ userId, name: SELF_PARTICIPANT_NAME, isSelf: true })
       .onConflictDoNothing();
     const rows = [
       ...SYSTEM_EXPENSE_CATEGORIES.map((name, i) => ({ userId, name, kind: "expense" as const, isSystem: true, sort: i })),

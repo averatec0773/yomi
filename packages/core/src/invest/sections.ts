@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { FLEX_SECTION_IDS, type FlexSectionId } from "@yomi/importers";
 import type { Db } from "@yomi/db";
-import { type Q, readSetting, writeSetting } from "../settings/store";
+import { readSetting, writeSetting } from "../settings/store";
 import { daysInclusive } from "../time/day";
 import type { CurrentUser } from "../user";
 
@@ -81,7 +81,7 @@ export function parseSectionsRecord(raw: string | null): IbkrSectionsRecord | nu
 }
 
 /** Records one successful pull of the IBKR query (scheduled, Sync now, Pull history or Test connection on the saved query). */
-export async function recordIbkrSections(q: Q, user: CurrentUser, pull: IbkrPullSections): Promise<IbkrSectionsRecord> {
+export async function recordIbkrSections(q: Db, user: CurrentUser, pull: IbkrPullSections): Promise<IbkrSectionsRecord> {
   const next = nextSectionsRecord(parseSectionsRecord(await readSetting(q, user, IBKR_SECTIONS_SETTING)), pull);
   await writeSetting(q, user, IBKR_SECTIONS_SETTING, JSON.stringify(next));
   return next;

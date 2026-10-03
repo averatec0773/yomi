@@ -30,9 +30,6 @@ import { computeDedupKeys, sha256Hex } from "./dedup";
 import { type LinkRow, planLinks } from "./link";
 import { cleanMerchant } from "./merchant";
 
-/** Db or a transaction handle: both are Drizzle Postgres databases. */
-type Q = Db;
-
 export type ParseFn = (bytes: Uint8Array, fileName: string) => Promise<ParseResult>;
 
 export type BucketName = "expense" | "income" | "neutral";
@@ -174,7 +171,7 @@ function parseIds(v: unknown): number[] | null {
 }
 
 /** Each row's account spec and dedup key, and the keys the ledger has already (those rows are duplicates). */
-async function dedupRows(q: Q, user: CurrentUser, parsed: ParseResult, opts: PlanOptions): Promise<{ specs: AccountSpec[]; dedupKeys: string[]; existingKeys: Set<string> }> {
+async function dedupRows(q: Db, user: CurrentUser, parsed: ParseResult, opts: PlanOptions): Promise<{ specs: AccountSpec[]; dedupKeys: string[]; existingKeys: Set<string> }> {
   const currency = fileAccountCurrency(parsed.source, parsed.rows);
   const specs = parsed.rows.map((r) => opts.accountSpec?.(r) ?? resolveAccountSpec(r, currency));
   // Dedup keys stay scoped by the spec's full identity; the row lands on the account its match key names.
@@ -192,7 +189,7 @@ async function dedupRows(q: Q, user: CurrentUser, parsed: ParseResult, opts: Pla
   return { specs, dedupKeys, existingKeys };
 }
 
-async function buildPlan(q: Q, user: CurrentUser, parsed: ParseResult, fileHash: string, fileName: string, opts: PlanOptions = {}): Promise<Plan> {
+async function buildPlan(q: Db, user: CurrentUser, parsed: ParseResult, fileHash: string, fileName: string, opts: PlanOptions = {}): Promise<Plan> {
   const userId = user.id;
   const warnings = [...parsed.warnings];
   const rows = parsed.rows;

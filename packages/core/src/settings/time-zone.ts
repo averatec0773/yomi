@@ -3,7 +3,7 @@ import { eq } from "@yomi/db/orm";
 import { LedgerError } from "../ledger/errors";
 import { DEFAULT_TIME_ZONE, isTimeZone, occurredOnFor, todayIn } from "../time/zone";
 import type { CurrentUser } from "../user";
-import { type Q, readSetting, writeSetting } from "./store";
+import { readSetting, writeSetting } from "./store";
 
 const TIME_ZONE_KEY = "timeZone";
 /** The zone transactions.occurred_on was last computed in; differs from timeZone only before a recompute. */
@@ -20,18 +20,18 @@ export interface TimeZoneChange extends TimeZoneSetting {
   changed: number;
 }
 
-export async function getTimeZoneSetting(q: Q, user: CurrentUser): Promise<TimeZoneSetting> {
+export async function getTimeZoneSetting(q: Db, user: CurrentUser): Promise<TimeZoneSetting> {
   const stored = await readSetting(q, user, TIME_ZONE_KEY);
   return stored && isTimeZone(stored) ? { timeZone: stored, isSet: true } : { timeZone: DEFAULT_TIME_ZONE, isSet: false };
 }
 
 /** The user's IANA time zone (default America/Chicago). */
-export async function getTimeZone(q: Q, user: CurrentUser): Promise<string> {
+export async function getTimeZone(q: Db, user: CurrentUser): Promise<string> {
   return (await getTimeZoneSetting(q, user)).timeZone;
 }
 
 /** Today's 'YYYY-MM-DD' in the user's time zone, the day transactions.occurred_on is counted in. */
-export async function userToday(q: Q, user: CurrentUser): Promise<string> {
+export async function userToday(q: Db, user: CurrentUser): Promise<string> {
   return todayIn(await getTimeZone(q, user));
 }
 

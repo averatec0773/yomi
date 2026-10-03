@@ -5,7 +5,6 @@ export {
   BACKUP_EXTENSION,
   backupDatabase,
   BACKUPS_KEEP,
-  backupsDir,
   needsPreMigrateBackup,
   openBackupFile,
   pgDumpHint,

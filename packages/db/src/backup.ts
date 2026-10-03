@@ -15,12 +15,6 @@ export interface BackupOptions {
   now?: Date;
 }
 
-/** Where backups of `db` go: data/backups next to a PGlite directory; null in memory or on a server. */
-export function backupsDir(db: Db): string | null {
-  const t = dbTarget(db);
-  return t.kind === "pglite" ? path.join(path.dirname(t.dataDir), "backups") : null;
-}
-
 /** The pg_dump command (run from the repo root) that copies a server database into data/backups; yomi never runs it itself. */
 export function pgDumpHint(now: Date = new Date()): string {
   return `pg_dump --format=custom --file=data/backups/yomi-${stamp(now)}.dump "$DATABASE_URL"`;
