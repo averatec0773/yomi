@@ -1,5 +1,5 @@
 import type { Locator, Page } from "@playwright/test";
-import { expect, openRowPopover, pinClock, test } from "./fixtures";
+import { expect, expectNoHScroll, openRowPopover, pinClock, test } from "./fixtures";
 
 /** "$1,234.56" → 123456 (minor units), from the element's text. */
 async function minorOf(el: Locator): Promise<number> {
@@ -487,7 +487,7 @@ test("settings tabs: server-rendered ?tab=, arrows and back/forward switch tabs,
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/settings?tab=data");
   await expect(tab("Data")).toBeInViewport({ ratio: 1 });
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  await expectNoHScroll(page, 390);
   expect(await page.getByRole("tablist").evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
   expect((await tab("General").boundingBox())!.height).toBeGreaterThanOrEqual(44);
 });
@@ -646,4 +646,29 @@ test("import: each source has a collapsed how-to guide that links to its GitHub 
   await expect(boa).not.toContainText("Last checked");
   await expect(boa.getByRole("link", { name: "guide on GitHub" })).toHaveAttribute("href", "https://github.com/averatec0773/yomi/blob/main/guides/import-boa.md");
   await expect(page.getByTestId("import-guide-sms").getByRole("link", { name: "guide on GitHub", includeHidden: true })).toHaveAttribute("href", /import-icbc\.md#sms-alerts$/);
+});
+
+test("not found: an unknown address gets a 404 inside the shell with a way back, in both languages", async ({ page, context, baseURL }) => {
+  const res = await page.goto("/no-such-page");
+  expect(res?.status()).toBe(404);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Page not found");
+  await expect(page.getByRole("navigation", { name: "Main navigation" }).first()).toBeVisible();
+  await page.getByRole("link", { name: "Go to Transactions" }).click();
+  await expect(page).toHaveURL(/\/transactions$/);
+  await context.addCookies([{ name: "locale", value: "zh-CN", url: baseURL! }]);
+  await page.goto("/no-such-page");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("找不到页面");
+  await expect(page.getByRole("link", { name: "前往交易" })).toBeVisible();
+});
+
+test("import: uploads up to 25 MB reach the parser whole (past Next's 10 MB proxy buffer); larger ones get a 413", async ({ request }) => {
+  const MB = 1024 * 1024;
+  const file = (size: number) => ({ multipart: { file: { name: "statement.csv", mimeType: "text/csv", buffer: Buffer.alloc(size, "x") } } });
+  // A cut-off body would fail as a broken form; a whole one reaches the parser, which does not know the file.
+  const whole = await request.post("/api/import/preview", file(12 * MB));
+  expect(whole.status()).toBe(422);
+  expect((await whole.json()).code).toMatch(/^import_/);
+  const big = await request.post("/api/import/preview", file(25 * MB + 1));
+  expect(big.status()).toBe(413);
+  expect(await big.json()).toMatchObject({ code: "import_file_too_large", params: { maxMb: 25 } });
 });

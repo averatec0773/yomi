@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { expect, test } from "./fixtures";
+import { expect, expectNoHScroll, expectWithinX, test } from "./fixtures";
 
 /** Sidebar destinations with a leader key: Transactions, Analysis, Assets, Tools, Split and settle, Import, Rules, Settings. */
 const NAV_HINTS = 8;
@@ -163,9 +163,7 @@ test("shortcuts: 中文 Settings rows and sheet; the phone tab bar still fits at
     await page.goto(path);
     const tabs = page.getByRole("navigation", { name: "主导航" });
     await expect(tabs.getByRole("link")).toHaveCount(4);
-    const box = (await tabs.boundingBox())!;
-    expect(box.x).toBeGreaterThanOrEqual(0);
-    expect(box.x + box.width).toBeLessThanOrEqual(390);
-    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+    await expectWithinX(tabs, 0, 390);
+    await expectNoHScroll(page, 390);
   }
 });

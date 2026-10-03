@@ -19,6 +19,21 @@ export const test = base.extend({
   },
 });
 
+/** The page does not scroll sideways at `width`. Polled: right after a navigation the layout may still be settling. */
+export async function expectNoHScroll(page: Page, width: number): Promise<void> {
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+}
+
+/** `locator`'s box lies within [left, right] on the x axis, polled like expectNoHScroll. */
+export async function expectWithinX(locator: Locator, left: number, right: number): Promise<void> {
+  await expect
+    .poll(async () => {
+      const box = await locator.boundingBox();
+      return box !== null && box.x >= left && box.x + box.width <= right;
+    })
+    .toBe(true);
+}
+
 /**
  * Hover `row` and click its split popover `trigger` until the popover shows. Right after a page load every row's
  * trigger is replaced once (Radix's PopoverTrigger rewraps itself when the row's PopoverAnchor mounts, in an effect),

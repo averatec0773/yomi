@@ -1,16 +1,23 @@
-import { ACCESS_COOKIE, accessCookieHeader, decideAccess, readAccessToken } from "@yomi/core/access";
+import { ACCESS_COOKIE, accessCookieHeader, allowedHostsFromEnv, decideAccess, hostRefusal, readAccessToken } from "@yomi/core/access";
 import { type NextRequest, NextResponse } from "next/server";
 
 /**
- * Optional access token gate (YOMI_ACCESS_TOKEN). With the variable unset every request passes untouched. The decision
- * lives in @yomi/core/access; this file only reads the request and writes the response. Localhost is deliberately not
- * exempt: the Host header is client-controlled, so a LAN client could claim to be localhost.
+ * First the Host allowlist, on every request but the /api/health probe: a page on another name that resolves to this
+ * computer (DNS rebinding) must not read server-rendered pages. Then the optional access token gate
+ * (YOMI_ACCESS_TOKEN); with the variable unset every allowed request passes untouched. Both decisions live in
+ * @yomi/core/access; this file only reads the request and writes the response. Localhost is deliberately not exempt
+ * from the gate: the Host header is client-controlled, so a LAN client could claim to be localhost.
  */
 export function proxy(request: NextRequest) {
+  const url = request.nextUrl;
+  if (url.pathname !== "/api/health") {
+    const refusal = hostRefusal(request.headers.get("host"), new URL(request.url), allowedHostsFromEnv());
+    if (refusal) return NextResponse.json(refusal, { status: 403 });
+  }
+
   const token = readAccessToken();
   if (token === null) return NextResponse.next();
 
-  const url = request.nextUrl;
   const auth = request.headers.get("authorization");
   const decision = decideAccess({
     token,

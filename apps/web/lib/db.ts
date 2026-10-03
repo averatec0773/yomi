@@ -16,7 +16,7 @@ async function open(): Promise<Db> {
   const regrouped = await ensureOccurredOn(db, getCurrentUser());
   if (regrouped) console.log(`[yomi] Regrouped ${regrouped} transactions by day in your time zone`);
   // Captures waiting since before this start (or since the upgrade that added them) get their review items; nothing is linked.
-  await db.transaction((tx) => runMatching(tx, getCurrentUser(), { by: "startup" }));
+  await runMatching(db, getCurrentUser(), { by: "startup" });
   return db;
 }
 

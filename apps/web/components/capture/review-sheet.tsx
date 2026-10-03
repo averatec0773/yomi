@@ -1,7 +1,7 @@
 "use client";
 
 import type { BulkReviewAction, MatchCandidate, ResolveResult, ReviewAction, ReviewItem, ReviewList } from "@yomi/contracts";
-import { InboxIcon } from "lucide-react";
+import { CircleAlertIcon, InboxIcon, RotateCwIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -58,17 +58,20 @@ function ReviewBody() {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [list, setList] = useState<ReviewList | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<ReadonlySet<number>>(new Set());
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
+    setLoadFailed(false);
     try {
       const next = await apiFetch<ReviewList>("/review");
       setList(next);
       setSelected((sel) => new Set([...sel].filter((id) => next.items.some((i) => i.captureId === id))));
     } catch {
-      /* apiFetch toasted */
+      // apiFetch toasted; with no queue shown yet, the sheet offers Try again instead of a skeleton that never ends.
+      setLoadFailed(true);
     }
   }, []);
   useEffect(() => {
@@ -154,7 +157,7 @@ function ReviewBody() {
       <DialogDescription className="sr-only">{s.description}</DialogDescription>
       <div className="min-h-0 flex-1 overflow-y-auto">
         {/* Until the queue arrives: two placeholder items, so the sheet never opens blank. */}
-        {!list && (
+        {!list && !loadFailed && (
           <div className="flex flex-col gap-6 px-5 py-4" data-testid="review-loading">
             {[0, 1].map((i) => (
               <div key={i} className="flex flex-col gap-3">
@@ -164,6 +167,20 @@ function ReviewBody() {
               </div>
             ))}
           </div>
+        )}
+        {!list && loadFailed && (
+          <EmptyState
+            icon={CircleAlertIcon}
+            variant="inline"
+            action={
+              <Button size="sm" onClick={() => void load()}>
+                <RotateCwIcon aria-hidden />
+                {t.common.retry}
+              </Button>
+            }
+          >
+            {s.loadFailed}
+          </EmptyState>
         )}
         {list && items.length === 0 && (
           <EmptyState icon={InboxIcon} variant="inline">

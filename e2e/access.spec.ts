@@ -52,3 +52,13 @@ test("the gate: redirects, 401s, bearer, token once, form, sign out", async ({ p
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page).toHaveURL(`${base}/settings?tab=security`);
 });
+
+test("a foreign Host is refused before the gate, even with a valid bearer; health stays open for readiness", async ({ request }) => {
+  const host = { host: `rebind.example:${ACCESS_E2E_PORT}` };
+  const page = await request.get("/transactions", { headers: host, maxRedirects: 0 });
+  expect(page.status()).toBe(403);
+  expect(await page.json()).toMatchObject({ code: "request_host_not_allowed" });
+  const api = await request.get("/api/participants", { headers: { ...host, Authorization: `Bearer ${ACCESS_E2E_TOKEN}` } });
+  expect(api.status()).toBe(403);
+  expect((await request.get("/api/health", { headers: host })).status()).toBe(200);
+});

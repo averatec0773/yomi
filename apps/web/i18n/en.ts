@@ -38,6 +38,7 @@ export const en = {
     noName: "(no name)",
     moreRows: { one: "1 more", other: "{count} more" },
     loading: "Loading",
+    retry: "Try again",
     kinds: { expense: "Expense", income: "Income", transfer: "Transfer", refund: "Refund" },
   },
   nav: {
@@ -144,6 +145,8 @@ export const en = {
       backup_server: "yomi does not back up a Postgres server itself. Run: {command}",
       access_required: "This needs the access token. Reload the page to enter it.",
       access_invalid: "That access token is not right.",
+      request_host_not_allowed: "yomi does not answer to {host} yet. Add it to YOMI_ALLOWED_HOSTS in .env.local and restart yomi.",
+      request_cross_site: "That request came from another site, so yomi refused it.",
       image_export_failed: "The image could not be made. Try again, or save as PDF.",
       image_copy_failed: "The image could not be copied. Save it as an image instead.",
       transaction_not_found: "Transaction #{id} does not exist.",
@@ -223,6 +226,7 @@ export const en = {
       capture_candidate_invalid: "That statement row is no longer offered for this capture. Reload the page.",
       capture_nothing_to_undo: "There is nothing to undo here.",
       import_file_missing: "No file was uploaded.",
+      import_file_too_large: "This file is larger than {maxMb} MB, the most yomi accepts in one upload. Export a shorter period and import it in parts.",
       import_parse_failed: "{message}",
       import_unknown_format: "Unrecognized statement file: {fileName}",
       import_header_not_found: "The header row ({header}) was not found.",
@@ -312,6 +316,14 @@ export const en = {
       reason: { edited: "edited by hand", split: "split", settled: "recorded as a settlement" },
       bucket: { expense: "Expense", income: "Income", neutral: "Neutral" },
     } as Record<string, Record<string, string>>,
+  },
+  /** app/error.tsx, app/global-error.tsx, app/not-found.tsx. */
+  errorPage: {
+    title: "Something went wrong",
+    body: "This page could not load. Try again; if it keeps failing, the terminal running yomi shows why.",
+    notFoundTitle: "Page not found",
+    notFoundBody: "There is no page at this address.",
+    toTransactions: "Go to Transactions",
   },
   categories: {
     dining: "Dining",
@@ -565,6 +577,7 @@ export const en = {
       select: "Select",
       done: "Done",
       empty: "Nothing to review.",
+      loadFailed: "The review queue could not load.",
       types: {
         ambiguous: "Which statement row is this?",
         near_miss: "Amount differs",

@@ -46,7 +46,7 @@ describe("/api/access", () => {
     expect(cookie).not.toContain("Secure");
     expect(cookie).not.toContain("tok-3141");
 
-    const https = await app.request("https://yomi.test/api/access", json({ token: "tok-3141" }));
+    const https = await app.request("https://localhost/api/access", json({ token: "tok-3141" }));
     expect(https.headers.get("set-cookie")).toContain("Secure");
 
     const bad = await app.request("/api/access", json({ token: "tok-5501" }));

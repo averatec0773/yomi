@@ -83,6 +83,18 @@ test("captures: the review sheet resolves each kind of item, with Undo", async (
   await expect(sheet.getByTestId("review-item")).toHaveCount(3);
 });
 
+test("captures: a queue that fails to load says so instead of loading forever, and Try again loads it", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.route("**/api/review", (route) => route.fulfill({ status: 500, json: { error: "down" } }));
+  await page.goto("/transactions?month=2026-09");
+  const sheet = await openReview(page);
+  await expect(sheet).toContainText("The review queue could not load.");
+  await expect(sheet.getByTestId("review-loading")).toHaveCount(0);
+  await page.unroute("**/api/review");
+  await sheet.getByRole("button", { name: "Try again" }).click();
+  await expect(sheet.getByTestId("review-item")).toHaveCount(3);
+});
+
 test("captures: on a phone the sheet fills the screen; the details show the capture", async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto("/transactions?month=2026-09");

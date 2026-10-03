@@ -1,5 +1,5 @@
 import type { Health } from "@yomi/contracts";
-import { type CurrentUser, localUser, type ParseFn, runWithUser } from "@yomi/core";
+import { allowedHostsFromEnv, type CurrentUser, localUser, type ParseFn, runWithUser } from "@yomi/core";
 import type { Db } from "@yomi/db";
 import { detectAndParse } from "@yomi/importers";
 import { type Context, Hono } from "hono";
@@ -13,6 +13,7 @@ import { type InvestDeps, investRoutes } from "./invest";
 import { ledgerRoutes } from "./ledger";
 import { maintenanceRoutes } from "./maintenance";
 import { monthRoutes } from "./month";
+import { sameOriginOnly } from "./origin";
 import { quickRoutes } from "./quick";
 import { type SecretsDeps, secretsRoutes } from "./secrets";
 import { splitRoutes } from "./split";
@@ -32,6 +33,8 @@ export interface ApiDeps {
   today?: () => string;
   /** Resolves the acting user per request; defaults to resolveRequestUser. Tests inject one. */
   resolveUser?: (c: Context) => CurrentUser | Promise<CurrentUser>;
+  /** Host names served besides localhost; defaults to YOMI_ALLOWED_HOSTS. */
+  allowedHosts?: readonly string[];
 }
 
 /**
@@ -45,6 +48,8 @@ export function resolveRequestUser(_c: Context): CurrentUser {
 export function createApi(deps: ApiDeps) {
   const app = new Hono().basePath("/api");
   app.get("/health", (c) => c.json({ ok: true } satisfies Health));
+  // Everything after health (container health checks may use any host name) is for this server's own pages and local scripts.
+  app.use(sameOriginOnly(deps.allowedHosts ?? allowedHostsFromEnv()));
   app.route("/", accessRoutes());
   const resolveUser = deps.resolveUser ?? resolveRequestUser;
   // Every route below runs with the request's user in scope (core's getCurrentUser() reads it).

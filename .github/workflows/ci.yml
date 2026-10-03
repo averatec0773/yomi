@@ -74,12 +74,13 @@ jobs:
           key: next-e2e-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('apps/web/**', 'packages/*/src/**', '!**/node_modules/**', '!apps/web/.next*/**') }}
           restore-keys: next-e2e-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
       - run: pnpm e2e:build
-      # Playwright splits shards by test count in file order. 3:7 ends shard 1 after secrets.spec.ts (one ~30 s test),
-      # which evens out measured run times. PWTEST_SHARD_WEIGHTS is internal to Playwright; if it is ever dropped, the
-      # split falls back to even test counts, still correct.
+      # Playwright splits shards by test count in file order. 2:3 ends shard 1 after settle.spec.ts (the split stays
+      # the same while shard 1 gets 23 to 29 of the 59 tests), which evens out measured run times: about 48 s and 51 s
+      # of tests (2026-10-02, production build). PWTEST_SHARD_WEIGHTS is internal to Playwright; if it is ever dropped,
+      # the split falls back to even test counts, still correct.
       - run: pnpm e2e --shard=${{ matrix.shard }}/2
         env:
-          PWTEST_SHARD_WEIGHTS: "3:7"
+          PWTEST_SHARD_WEIGHTS: "2:3"
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:

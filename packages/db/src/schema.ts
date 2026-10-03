@@ -118,6 +118,8 @@ export const transactions = pgTable(
     uniqueIndex("transactions_user_dedup_key_uq").on(t.userId, t.dedupKey),
     index("transactions_user_occurred_at_idx").on(t.userId, t.occurredAt),
     index("transactions_user_occurred_on_idx").on(t.userId, t.occurredOn),
+    index("transactions_user_merchant_idx").on(t.userId, t.merchant),
+    index("transactions_duplicate_of_idx").on(t.duplicateOfId),
   ],
 );
 
@@ -237,27 +239,31 @@ export const transactionSplits = pgTable(
   (t) => [uniqueIndex("transaction_splits_tx_participant_uq").on(t.transactionId, t.participantId)],
 );
 
-export const settlements = pgTable("settlements", {
-  id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
-  userId: integer("user_id").notNull(),
-  participantId: integer("participant_id")
-    .notNull()
-    .references(() => participants.id),
-  amountMinor: bigint("amount_minor", { mode: "number" }).notNull(),
-  currency: text("currency").notNull(),
-  originalAmountMinor: bigint("original_amount_minor", { mode: "number" }),
-  originalCurrency: text("original_currency"),
-  /** Decimal string: units of original_currency per 1 unit of currency (e.g. "7.2"). Null without an original amount. */
-  fxRate: text("fx_rate"),
-  settledOn: text("settled_on").notNull(),
-  note: text("note"),
-  transactionId: integer("transaction_id").references(() => transactions.id),
-  /** 'payment': money changed hands. 'opening': an opening balance, not a payment. */
-  kind: text("kind", { enum: ["payment", "opening"] }).notNull().default("payment"),
-  /** Kind of the linked transaction before the settlement flipped it to transfer; restored on delete. */
-  priorKind: text("prior_kind", { enum: ["expense", "income", "transfer", "refund"] }),
-  createdAt: createdAt(),
-});
+export const settlements = pgTable(
+  "settlements",
+  {
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
+    userId: integer("user_id").notNull(),
+    participantId: integer("participant_id")
+      .notNull()
+      .references(() => participants.id),
+    amountMinor: bigint("amount_minor", { mode: "number" }).notNull(),
+    currency: text("currency").notNull(),
+    originalAmountMinor: bigint("original_amount_minor", { mode: "number" }),
+    originalCurrency: text("original_currency"),
+    /** Decimal string: units of original_currency per 1 unit of currency (e.g. "7.2"). Null without an original amount. */
+    fxRate: text("fx_rate"),
+    settledOn: text("settled_on").notNull(),
+    note: text("note"),
+    transactionId: integer("transaction_id").references(() => transactions.id),
+    /** 'payment': money changed hands. 'opening': an opening balance, not a payment. */
+    kind: text("kind", { enum: ["payment", "opening"] }).notNull().default("payment"),
+    /** Kind of the linked transaction before the settlement flipped it to transfer; restored on delete. */
+    priorKind: text("prior_kind", { enum: ["expense", "income", "transfer", "refund"] }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("settlements_transaction_idx").on(t.transactionId)],
+);
 
 /**
  * Split items a settlement paid off. amount_minor is signed like the item's balance delta (+ they owed me) and
@@ -284,6 +290,7 @@ export const settlementItems = pgTable(
   (t) => [
     uniqueIndex("settlement_items_settlement_tx_uq").on(t.settlementId, t.transactionId),
     index("settlement_items_participant_idx").on(t.participantId),
+    index("settlement_items_transaction_idx").on(t.transactionId),
   ],
 );
 

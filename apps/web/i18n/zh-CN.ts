@@ -36,6 +36,7 @@ export const zhCN: Dictionary = {
     noName: "（没有名字）",
     moreRows: { one: "再看 {count} 笔", other: "再看 {count} 笔" },
     loading: "加载中",
+    retry: "重试",
     kinds: { expense: "支出", income: "收入", transfer: "转账", refund: "退款" },
   },
   nav: {
@@ -138,6 +139,8 @@ export const zhCN: Dictionary = {
       backup_server: "yomi 不会自己备份 Postgres 服务器上的数据库。请运行：{command}",
       access_required: "需要访问令牌。刷新页面后输入。",
       access_invalid: "访问令牌不对。",
+      request_host_not_allowed: "yomi 还不接受通过 {host} 访问。把它加到 .env.local 的 YOMI_ALLOWED_HOSTS 里，再重启 yomi。",
+      request_cross_site: "这个请求来自其他网站，yomi 已拒绝。",
       image_export_failed: "没能生成图片。请再试一次，或保存为 PDF。",
       image_copy_failed: "没能复制图片。可以改为保存为图片。",
       transaction_not_found: "交易 #{id} 不存在",
@@ -217,6 +220,7 @@ export const zhCN: Dictionary = {
       capture_candidate_invalid: "这笔账单记录已不在候选里，请刷新页面。",
       capture_nothing_to_undo: "这里没有可撤销的。",
       import_file_missing: "缺少文件字段 file",
+      import_file_too_large: "文件超过 {maxMb} MB，超出单次上传的上限。请导出较短的时间段，分几次导入。",
       import_parse_failed: "{message}",
       import_unknown_format: "无法识别的账单文件：{fileName}",
       import_header_not_found: "找不到表头（{header}）",
@@ -305,6 +309,13 @@ export const zhCN: Dictionary = {
       reason: { edited: "已手动编辑", split: "已分摊", settled: "已记为结算" },
       bucket: { expense: "支出", income: "收入", neutral: "不计收支" },
     },
+  },
+  errorPage: {
+    title: "出了点问题",
+    body: "这个页面没能加载。请重试；如果一直这样，运行 yomi 的终端里会显示原因。",
+    notFoundTitle: "找不到页面",
+    notFoundBody: "这个地址没有页面。",
+    toTransactions: "前往交易",
   },
   categories: {
     dining: "餐饮",
@@ -491,6 +502,7 @@ export const zhCN: Dictionary = {
       select: "选择",
       done: "完成",
       empty: "没有要确认的。",
+      loadFailed: "待确认列表没能加载。",
       types: {
         ambiguous: "是账单里的哪一笔？",
         near_miss: "金额不一样",

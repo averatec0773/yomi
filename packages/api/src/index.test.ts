@@ -101,4 +101,19 @@ describe("api", () => {
     expect(ApiError.parse(await bad.json())).toMatchObject({ code: "import_parse_failed", params: { message: "unrecognized statement file" } });
     expect(ApiError.parse(await missing.json())).toMatchObject({ code: "import_file_missing" });
   });
+
+  it("refuses an upload over 25 MB with 413 before reading it, and accepts one just under", async () => {
+    const app = await setup();
+    const MB = 1024 * 1024;
+    for (const path of ["/api/import/preview", "/api/import/commit"]) {
+      const big = await app.request(path, upload("x".repeat(25 * MB + 1)));
+      expect(big.status).toBe(413);
+      expect(ApiError.parse(await big.json())).toMatchObject({ code: "import_file_too_large", params: { maxMb: 25 } });
+      // A declared Content-Length is refused without reading the body.
+      const declared = await app.request(path, { method: "POST", headers: { "Content-Type": "multipart/form-data; boundary=x", "Content-Length": String(30 * MB) }, body: "--x--" });
+      expect(declared.status).toBe(413);
+    }
+    expect((await app.request("/api/import/preview", upload("x".repeat(24 * MB)))).status).toBe(200);
+    expect(BatchList.parse(await (await app.request("/api/import/batches")).json()).batches).toEqual([]);
+  });
 });

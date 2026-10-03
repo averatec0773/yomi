@@ -1,7 +1,7 @@
 import { captures, categories, type Db, transactions, transactionSplits } from "@yomi/db";
 import { testDb } from "@yomi/db/testing";
 import type { NormalizedRow, ParseResult, SourceId } from "@yomi/importers";
-import { asc, eq } from "@yomi/db/orm";
+import { asc, eq, sql } from "@yomi/db/orm";
 import { describe, expect, it } from "vitest";
 import { loadSourceActivity } from "../analysis/freshness";
 import { commitImport, revertBatch } from "../import/pipeline";
@@ -13,6 +13,7 @@ import { rangeOverview } from "../stats/range";
 import { getCurrentUser } from "../user";
 import { type AuthorityRow, evaluate, type OpenCapture, planMatches, runMatching } from "./match";
 import { listReview, resolveReview, resolveReviewBulk, undoCapture } from "./review";
+import { supersede } from "./supersede";
 
 // Fictional card tails 3141 and 5501 only. Default time zone America/Chicago: an alert at 01:26 Beijing time on Oct 2
 // is the afternoon of Oct 1 there.
@@ -343,6 +344,37 @@ describe("the review queue", () => {
     expect(await runMatching(db, user, { by: "startup" })).toEqual({ linked: 0, toReview: 1 });
     expect(await runMatching(db, user, { by: "startup" })).toEqual({ linked: 0, toReview: 1 });
     expect(await cap(db, s.captureId)).toMatchObject({ state: "provisional", review: "ambiguous" });
+  });
+
+  it("supersede and runMatching are all or nothing on a bare handle: a failure at the last write leaves no half link", async () => {
+    const db = await freshDb();
+    const s = await paste(db, ONLINE);
+    const [p] = await db
+      .insert(transactions)
+      .values({ userId: 1, occurredAt: "2026-10-03T09:00:00+08:00", occurredOn: "2026-10-02", amountMinor: -2350, currency: "USD", kind: "expense", source: "icbc_pdf", paymentMethod: "工商银行信用卡(3141)", dedupKey: "late-pdf-row" })
+      .returning({ id: transactions.id });
+    // Both write the transactions rows first and the capture last; make that last write fail.
+    await db.execute(sql`create function fail_capture_write() returns trigger language plpgsql as $$ begin raise exception 'injected'; end $$`);
+    await db.execute(sql`create trigger fail_capture_write before update on captures for each row execute function fail_capture_write()`);
+    try {
+      await expect(supersede(db, user, s.captureId, p!.id, { by: "user" })).rejects.toThrow();
+      await expect(runMatching(db, user, { by: "user", newAuthorityIds: [p!.id] })).rejects.toThrow();
+      expect(await tx(db, s.transactionId)).toMatchObject({ duplicateOfId: null, provisional: "capture" });
+      expect(await cap(db, s.captureId)).toMatchObject({ state: "provisional", authorityId: null });
+    } finally {
+      await db.execute(sql`drop trigger fail_capture_write on captures`);
+      await db.execute(sql`drop function fail_capture_write()`);
+    }
+    // Inside a caller's transaction it is a savepoint: the caller's rollback takes the link back too.
+    await expect(
+      db.transaction(async (t) => {
+        expect(await runMatching(t, user, { by: "user", newAuthorityIds: [p!.id] })).toEqual({ linked: 1, toReview: 0 });
+        throw new Error("caller rolls back");
+      }),
+    ).rejects.toThrow("caller rolls back");
+    expect(await cap(db, s.captureId)).toMatchObject({ state: "provisional" });
+    expect(await runMatching(db, user, { by: "user", newAuthorityIds: [p!.id] })).toEqual({ linked: 1, toReview: 0 });
+    expect(await cap(db, s.captureId)).toMatchObject({ state: "superseded", authorityId: p!.id });
   });
 });
 
