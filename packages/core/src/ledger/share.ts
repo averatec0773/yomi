@@ -1,6 +1,7 @@
 // Spending rule (plan §3): my share counts only for kind expense/refund, status ok, not linked, not a card hold.
 // With splits it is my owed (sign follows the row: purchases positive, refunds negative);
 // without splits it is −amount. Positive = money I spent.
+// No imports: the web client paints optimistic totals with this same rule (@yomi/core/share).
 
 export interface ShareRow {
   kind: "expense" | "income" | "transfer" | "refund";
