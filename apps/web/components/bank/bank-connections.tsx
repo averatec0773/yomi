@@ -47,7 +47,7 @@ export function BankConnections({ connections, environments }: { connections: Ba
 
 /**
  * "Synced 2 hours ago" with the absolute time (and how often it syncs) on hover. Both read the viewer's clock and
- * zone, so they render after hydration.
+ * zone, so they render after hydration; until then nothing, so SourceRow drops the part with its separator.
  */
 export function SyncedAt({ at, note }: { at: string | null; note?: string }) {
   const t = useT();
@@ -55,7 +55,7 @@ export function SyncedAt({ at, note }: { at: string | null; note?: string }) {
   const hydrated = useHydrated();
   const c = t.connections;
   if (!at) return <span title={note}>{c.neverSynced}</span>;
-  if (!hydrated) return <span />;
+  if (!hydrated) return null;
   const title = [fmt(c.lastSynced, { time: shortDateTime(at, locale) }), note].filter(Boolean).join(" · ");
   return <span title={title}>{fmt(c.synced, { time: relativeTime(at, locale, c.justNow) })}</span>;
 }
