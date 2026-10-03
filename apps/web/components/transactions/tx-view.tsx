@@ -39,6 +39,7 @@ import { dateFormat, dayLabel, isMonth, utcDate } from "@/lib/month";
 import { rangeLabel } from "@/lib/period";
 import { isTypingTarget, keyFromEvent } from "@/lib/shortcut-keys";
 import { useShortcuts } from "@/lib/shortcuts";
+import { useIsDesktop } from "@/lib/use-media";
 import { BulkBar } from "./bulk-bar";
 import { categoriesFor } from "./category-menu";
 import { PersonBalance, SpendStrip } from "./spend-strip";
@@ -126,6 +127,8 @@ export function TxView({
   const t = useT();
   const locale = useLocale();
   const keys = useShortcuts();
+  // One media-query subscription for the whole list; rows get the answer as a prop.
+  const desktop = useIsDesktop();
   const [, startTransition] = useTransition();
   // People added from the AA popover show up before the server list catches up.
   const [added, setAdded] = useState<ParticipantDto[]>([]);
@@ -838,6 +841,7 @@ export function TxView({
                   actions={actions}
                   done={filters.unsplit && (t.splits.length > 0 || kept.has(t.id))}
                   autoSplit={autoSplitSet.has(t.merchant)}
+                  desktop={desktop}
                 />
               ))}
             </div>

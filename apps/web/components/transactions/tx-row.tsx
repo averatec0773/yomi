@@ -17,7 +17,6 @@ import { accountLabel } from "@/i18n/accounts";
 import { categoryLabel } from "@/i18n/categories";
 import { useT } from "@/i18n/client";
 import { displayDescription, sourceTermLabel } from "@/i18n/source-terms";
-import { useIsDesktop } from "@/lib/use-media";
 import { cn } from "@/lib/utils";
 import { AaAnchor, AaRowPopover } from "./aa-popover";
 import { CategoryMenu } from "./category-menu";
@@ -40,6 +39,8 @@ export interface TxRowProps {
   done?: boolean;
   /** The merchant's rule splits new rows automatically. */
   autoSplit?: boolean;
+  /** The md layout and up (TxView's one useIsDesktop). */
+  desktop: boolean;
 }
 
 const marker =
@@ -225,10 +226,9 @@ function NoteEditor({ tx, onDone }: { tx: Tx; onDone: (note: string | null | und
 
 const badge = "shrink-0 rounded-sm bg-tile px-1.5 text-hint font-normal";
 
-function TxRowImpl({ tx, others, selfId, nameOf, categories, selected, focused, selecting, panel, actions, done, autoSplit }: TxRowProps) {
+function TxRowImpl({ tx, others, selfId, nameOf, categories, selected, focused, selecting, panel, actions, done, autoSplit, desktop }: TxRowProps) {
   const t = useT();
   const r = t.transactions.row;
-  const desktop = useIsDesktop();
   const splittable = canSplit(tx);
   const hidden = tx.status !== "ok" || tx.duplicateOfId != null;
   const transfer = tx.kind === "transfer";
@@ -455,6 +455,7 @@ export const TxRow = memo(TxRowImpl, (a, b) =>
   a.panel === b.panel &&
   a.done === b.done &&
   a.autoSplit === b.autoSplit &&
+  a.desktop === b.desktop &&
   a.actions === b.actions &&
   a.nameOf === b.nameOf &&
   a.selfId === b.selfId,
