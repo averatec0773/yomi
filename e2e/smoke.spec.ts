@@ -648,6 +648,19 @@ test("import: each source has a collapsed how-to guide that links to its GitHub 
   await expect(page.getByTestId("import-guide-sms").getByRole("link", { name: "guide on GitHub", includeHidden: true })).toHaveAttribute("href", /import-icbc\.md#sms-alerts$/);
 });
 
+test("not found: an unknown address gets a 404 inside the shell with a way back, in both languages", async ({ page, context, baseURL }) => {
+  const res = await page.goto("/no-such-page");
+  expect(res?.status()).toBe(404);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Page not found");
+  await expect(page.getByRole("navigation", { name: "Main navigation" }).first()).toBeVisible();
+  await page.getByRole("link", { name: "Go to Transactions" }).click();
+  await expect(page).toHaveURL(/\/transactions$/);
+  await context.addCookies([{ name: "locale", value: "zh-CN", url: baseURL! }]);
+  await page.goto("/no-such-page");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("找不到页面");
+  await expect(page.getByRole("link", { name: "前往交易" })).toBeVisible();
+});
+
 test("import: uploads up to 25 MB reach the parser whole (past Next's 10 MB proxy buffer); larger ones get a 413", async ({ request }) => {
   const MB = 1024 * 1024;
   const file = (size: number) => ({ multipart: { file: { name: "statement.csv", mimeType: "text/csv", buffer: Buffer.alloc(size, "x") } } });

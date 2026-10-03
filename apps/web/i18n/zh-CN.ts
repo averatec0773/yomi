@@ -36,6 +36,7 @@ export const zhCN: Dictionary = {
     noName: "（没有名字）",
     moreRows: { one: "再看 {count} 笔", other: "再看 {count} 笔" },
     loading: "加载中",
+    retry: "重试",
     kinds: { expense: "支出", income: "收入", transfer: "转账", refund: "退款" },
   },
   nav: {
@@ -309,6 +310,13 @@ export const zhCN: Dictionary = {
       bucket: { expense: "支出", income: "收入", neutral: "不计收支" },
     },
   },
+  errorPage: {
+    title: "出了点问题",
+    body: "这个页面没能加载。请重试；如果一直这样，运行 yomi 的终端里会显示原因。",
+    notFoundTitle: "找不到页面",
+    notFoundBody: "这个地址没有页面。",
+    toTransactions: "前往交易",
+  },
   categories: {
     dining: "餐饮",
     groceries: "买菜",
@@ -494,6 +502,7 @@ export const zhCN: Dictionary = {
       select: "选择",
       done: "完成",
       empty: "没有要确认的。",
+      loadFailed: "待确认列表没能加载。",
       types: {
         ambiguous: "是账单里的哪一笔？",
         near_miss: "金额不一样",

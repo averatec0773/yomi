@@ -38,6 +38,7 @@ export const en = {
     noName: "(no name)",
     moreRows: { one: "1 more", other: "{count} more" },
     loading: "Loading",
+    retry: "Try again",
     kinds: { expense: "Expense", income: "Income", transfer: "Transfer", refund: "Refund" },
   },
   nav: {
@@ -316,6 +317,14 @@ export const en = {
       bucket: { expense: "Expense", income: "Income", neutral: "Neutral" },
     } as Record<string, Record<string, string>>,
   },
+  /** app/error.tsx, app/global-error.tsx, app/not-found.tsx. */
+  errorPage: {
+    title: "Something went wrong",
+    body: "This page could not load. Try again; if it keeps failing, the terminal running yomi shows why.",
+    notFoundTitle: "Page not found",
+    notFoundBody: "There is no page at this address.",
+    toTransactions: "Go to Transactions",
+  },
   categories: {
     dining: "Dining",
     groceries: "Groceries",
@@ -568,6 +577,7 @@ export const en = {
       select: "Select",
       done: "Done",
       empty: "Nothing to review.",
+      loadFailed: "The review queue could not load.",
       types: {
         ambiguous: "Which statement row is this?",
         near_miss: "Amount differs",
