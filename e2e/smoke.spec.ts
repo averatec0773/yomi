@@ -1,5 +1,5 @@
 import type { Locator, Page } from "@playwright/test";
-import { expect, expectNoHScroll, openRowPopover, pinClock, test } from "./fixtures";
+import { expect, expectNoHScroll, pinClock, test } from "./fixtures";
 
 /** "$1,234.56" → 123456 (minor units), from the element's text. */
 async function minorOf(el: Locator): Promise<number> {
@@ -25,7 +25,9 @@ test("transactions: split popover splits a row with 室友 and it sticks", async
   await expect(page.getByRole("region", { name: "Your share, September" })).toContainText("$");
   const target = await plainRow(page);
   const id = await target.getAttribute("data-tx-id");
-  const dialog = await openRowPopover(page, target, target.getByRole("button", { name: "Split", exact: true }));
+  await target.hover();
+  await target.getByRole("button", { name: "Split", exact: true }).click();
+  const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("Split ·");
   await expect(dialog.getByRole("checkbox", { name: "Me" })).toBeDisabled();
   const saved = page.waitForResponse((r) => r.url().includes(`/api/transactions/${id}/`) && r.request().method() === "POST");
@@ -345,7 +347,9 @@ test("auto-split: enable from the split popover, split the existing rows, /split
   const n = merchants.filter((m) => m === merchant).length;
 
   const row = rows.filter({ hasText: merchant }).first();
-  const dialog = await openRowPopover(page, row, row.getByRole("button", { name: /^Split/ }).first());
+  await row.hover();
+  await row.getByRole("button", { name: /^Split/ }).first().click();
+  const dialog = page.getByRole("dialog");
   await dialog.getByRole("checkbox", { name: "室友" }).check();
   const auto = dialog.getByRole("checkbox", { name: `Split ${merchant} like this from now on` });
   await expect(auto).toBeEnabled();

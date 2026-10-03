@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { expect, openRowPopover, test } from "./fixtures";
+import { expect, test } from "./fixtures";
 
 const ACCEPT = /^Accept \d+ suggestions?$/;
 
@@ -21,7 +21,8 @@ test("suggestions: category reason on the marker and in the popover, accept all,
   const byCategory = page.getByRole("button", { name: "Split with 室友" }).and(page.locator('[title*="of split Groceries are with 室友"]')).first();
   await expect(byCategory).toBeVisible();
   const row = page.getByRole("row").filter({ has: byCategory }).first();
-  await openRowPopover(page, row, row.getByRole("button", { name: "Split settings" }));
+  await row.hover();
+  await row.getByRole("button", { name: "Split settings" }).click();
   await expect(page.getByTestId("split-suggestion-reason")).toContainText(/\d+% of split Groceries are with 室友/);
   await page.keyboard.press("Escape");
 
