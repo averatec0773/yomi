@@ -1,4 +1,4 @@
-import { participants, settlementItems, settlements, transactions, transactionSplits } from "@yomi/db";
+import { participants, settlementItems, settlements, transactions, transactionSplits, type Db } from "@yomi/db";
 import { and, desc, eq } from "@yomi/db/orm";
 import { convertByRate, normalizeRate, rateFromAmounts } from "../money";
 import { addDays } from "../time/day";
@@ -11,7 +11,6 @@ import {
   getParticipant,
   getTransaction,
   nowIso,
-  type Q,
   SplitError,
   type TransactionRow,
 } from "./internal";
@@ -59,7 +58,7 @@ export interface Settlement {
   opening: boolean;
 }
 
-async function assertNotLinked(db: Q, user: CurrentUser, transactionId: number): Promise<void> {
+async function assertNotLinked(db: Db, user: CurrentUser, transactionId: number): Promise<void> {
   const used = (await db
     .select({ id: settlements.id })
     .from(settlements)
@@ -75,7 +74,7 @@ async function assertNotLinked(db: Q, user: CurrentUser, transactionId: number):
  * A transaction can back a settlement when it is an open, non-duplicate income/expense/transfer row
  * that is not already split or linked. Split rows would count twice (once in the split, once here).
  */
-async function assertLinkable(db: Q, user: CurrentUser, t: TransactionRow): Promise<void> {
+async function assertLinkable(db: Db, user: CurrentUser, t: TransactionRow): Promise<void> {
   if (t.status !== "ok" || t.duplicateOfId !== null) throw new SplitError("invalid", "settlement_closed_or_duplicate", "A closed or duplicate transaction cannot be a settlement");
   if (t.kind !== "income" && t.kind !== "expense" && t.kind !== "transfer") {
     throw new SplitError("invalid", "settlement_kind_invalid", "Only income, expense or transfer rows can be a settlement");
@@ -123,7 +122,7 @@ function resolveFx(
 }
 
 async function insertSettlement(
-  q: Q,
+  q: Db,
   user: CurrentUser,
   input: RecordSettlementInput,
   kind: SettlementKind,
@@ -175,7 +174,7 @@ async function insertSettlement(
 }
 
 /** Allocates a settlement over the chosen open items (see allocateItems); throws when one is not open. */
-async function itemsFor(q: Q, user: CurrentUser, input: RecordSettlementInput): Promise<{ transactionId: number; amountMinor: number }[]> {
+async function itemsFor(q: Db, user: CurrentUser, input: RecordSettlementInput): Promise<{ transactionId: number; amountMinor: number }[]> {
   const ids = input.itemTransactionIds ?? [];
   if (ids.length === 0) return [];
   const currency = assertCurrency(input.currency);
@@ -201,7 +200,7 @@ async function itemsFor(q: Q, user: CurrentUser, input: RecordSettlementInput): 
 }
 
 /** Records a payment. With transactionId, links that row (see insertSettlement). */
-export async function recordSettlement(db: Q, user: CurrentUser, input: RecordSettlementInput): Promise<Settlement> {
+export async function recordSettlement(db: Db, user: CurrentUser, input: RecordSettlementInput): Promise<Settlement> {
   return await db.transaction(async (q) => await insertSettlement(q, user, input, "payment", await itemsFor(q, user, input)));
 }
 
@@ -209,7 +208,7 @@ export async function recordSettlement(db: Q, user: CurrentUser, input: RecordSe
  * Deletes a settlement. A linked transaction whose kind the settlement changed goes back to that
  * kind (prior_kind); otherwise the transaction's kind is left alone.
  */
-export async function deleteSettlement(db: Q, user: CurrentUser, id: number): Promise<{ deleted: true; restoredTransactionId: number | null }> {
+export async function deleteSettlement(db: Db, user: CurrentUser, id: number): Promise<{ deleted: true; restoredTransactionId: number | null }> {
   return await db.transaction(async (q) => {
     const s = (await q
       .select()
@@ -231,7 +230,7 @@ export async function deleteSettlement(db: Q, user: CurrentUser, id: number): Pr
   });
 }
 
-export async function listSettlements(db: Q, user: CurrentUser, participantId?: number): Promise<Settlement[]> {
+export async function listSettlements(db: Db, user: CurrentUser, participantId?: number): Promise<Settlement[]> {
   const rows = await db
     .select({
       id: settlements.id,
@@ -274,7 +273,7 @@ export interface SettleAllInput {
  * split item is recorded as paid by it; any difference (opening balances, money paid ahead) stays in the FIFO pool.
  */
 export async function settleAll(
-  db: Q,
+  db: Db,
   user: CurrentUser,
   participantId: number,
   currency: string,
@@ -307,7 +306,7 @@ export interface OpeningBalanceInput {
  * with the sign that produces the balance (they owe me X → -X, since + settlements reduce what they
  * owe). Balances, history and statements recognize it by the kind column; the note is just a label.
  */
-export async function recordOpeningBalance(db: Q, user: CurrentUser, input: OpeningBalanceInput): Promise<Settlement> {
+export async function recordOpeningBalance(db: Db, user: CurrentUser, input: OpeningBalanceInput): Promise<Settlement> {
   if (!Number.isSafeInteger(input.amountMinor) || input.amountMinor <= 0) {
     throw new SplitError("invalid", "opening_amount_invalid", "An opening balance must be a positive integer (minor units)");
   }
@@ -333,7 +332,7 @@ export async function recordOpeningBalance(db: Q, user: CurrentUser, input: Open
  * before, so later items stay open and the statement window starts at `fromDate`.
  */
 export async function clearBefore(
-  db: Q,
+  db: Db,
   user: CurrentUser,
   participantId: number,
   currency: string,
@@ -360,7 +359,7 @@ export async function clearBefore(
 export { assertNotLinked };
 
 /** Currencies that appear in the ledger (transactions and settlements), sorted; for FX pickers. */
-export async function ledgerCurrencies(db: Q, user: CurrentUser): Promise<string[]> {
+export async function ledgerCurrencies(db: Db, user: CurrentUser): Promise<string[]> {
   const tx = await db.selectDistinct({ c: transactions.currency }).from(transactions).where(eq(transactions.userId, user.id));
   const st = await db.selectDistinct({ c: settlements.currency }).from(settlements).where(eq(settlements.userId, user.id));
   return [...new Set([...tx, ...st].map((r) => r.c))].sort();

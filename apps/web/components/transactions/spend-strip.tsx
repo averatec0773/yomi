@@ -17,7 +17,7 @@ export interface SpendTotal {
 
 /**
  * The number on Transactions: my share of spending in the period. The currency with the most rows is the hero (32px);
- * the others follow in one quiet line, never summed. Unboxed at every width (StatCard is for /stats, /split, /assets).
+ * the others follow in one quiet line, never summed. Unboxed at every width (StatCard is for /analysis, /split, /assets).
  * With filters on, the number stays the whole period's and is dimmed with `note`. Nothing when the period has no rows.
  */
 export function SpendStrip({ totals, label, note }: { totals: SpendTotal[]; label: string; note?: string }) {

@@ -1,8 +1,9 @@
+import type { Db } from "@yomi/db";
 import { CodedError } from "@yomi/importers";
 import { decryptSecret, encryptSecret, isEncrypted } from "../secrets/crypto";
 import { activeSecretKey, ensureSecretKey } from "../secrets/keyfile";
 import type { CurrentUser } from "../user";
-import { deleteSetting, type Q, readSetting, writeSetting } from "./store";
+import { deleteSetting, readSetting, writeSetting } from "./store";
 
 /**
  * Instance-wide settings (Plaid developer keys) live in user_settings under the reserved user id 0: no real
@@ -33,7 +34,7 @@ export function last4(value: string): string | null {
 export type StoredSecret = { value: string } | { unreadable: true } | null;
 
 /** Reads and decrypts one secret setting. Values are always stored sealed (`enc:v1:`). */
-export async function readSecretSetting(q: Q, user: CurrentUser, key: string, env: NodeJS.ProcessEnv = process.env): Promise<StoredSecret> {
+export async function readSecretSetting(q: Db, user: CurrentUser, key: string, env: NodeJS.ProcessEnv = process.env): Promise<StoredSecret> {
   const stored = await readSetting(q, user, key);
   if (!stored) return null;
   if (!isEncrypted(stored)) return { unreadable: true };
@@ -45,7 +46,7 @@ export async function readSecretSetting(q: Q, user: CurrentUser, key: string, en
 }
 
 /** Encrypts and stores one secret setting, creating the key file on first need. Never stores plaintext. */
-export async function writeSecretSetting(q: Q, user: CurrentUser, key: string, plain: string, env: NodeJS.ProcessEnv = process.env, log?: (line: string) => void): Promise<void> {
+export async function writeSecretSetting(q: Db, user: CurrentUser, key: string, plain: string, env: NodeJS.ProcessEnv = process.env, log?: (line: string) => void): Promise<void> {
   const master = ensureSecretKey(env, log);
   await writeSetting(q, user, key, encryptSecret(plain, master));
 }

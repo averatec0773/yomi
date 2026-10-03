@@ -13,7 +13,7 @@ import { importRoutes } from "./import";
 import { type InvestDeps, investRoutes } from "./invest";
 import { ledgerRoutes } from "./ledger";
 import { maintenanceRoutes } from "./maintenance";
-import { monthRoutes } from "./month";
+import { statsRoutes } from "./stats";
 import { sameOriginOnly } from "./origin";
 import { quickRoutes } from "./quick";
 import { type SecretsDeps, secretsRoutes } from "./secrets";
@@ -66,7 +66,7 @@ export function createApi(deps: ApiDeps) {
   });
   app.route("/import", importRoutes({ getDb: deps.getDb, parse: deps.parse ?? detectAndParse }));
   app.route("/", ledgerRoutes({ getDb: deps.getDb }));
-  app.route("/", monthRoutes({ getDb: deps.getDb, today: deps.today }));
+  app.route("/", statsRoutes({ getDb: deps.getDb, today: deps.today }));
   app.route("/", analysisRoutes({ getDb: deps.getDb, today: deps.today }));
   app.route("/", splitRoutes({ getDb: deps.getDb }));
   app.route("/quick", quickRoutes({ getDb: deps.getDb }));

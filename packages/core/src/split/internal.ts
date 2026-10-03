@@ -3,9 +3,6 @@ import { CodedError, type ErrorKind, type MessageParams } from "@yomi/importers"
 import { and, eq } from "@yomi/db/orm";
 import type { CurrentUser } from "../user";
 
-/** Db or a transaction handle: both are Drizzle Postgres databases. */
-export type Q = Db;
-
 export class SplitError extends CodedError {
   constructor(kind: ErrorKind, code: string, message: string, params: MessageParams = {}) {
     super(kind, code, message, params);
@@ -25,7 +22,7 @@ export function parseIdList(v: unknown): number[] {
   return Array.isArray(v) ? v.filter((x): x is number => Number.isInteger(x)) : [];
 }
 
-export async function getSelf(db: Q, user: CurrentUser): Promise<ParticipantRow> {
+export async function getSelf(db: Db, user: CurrentUser): Promise<ParticipantRow> {
   const self = (await db
     .select()
     .from(participants)
@@ -35,7 +32,7 @@ export async function getSelf(db: Q, user: CurrentUser): Promise<ParticipantRow>
   return self;
 }
 
-export async function getParticipant(db: Q, user: CurrentUser, id: number): Promise<ParticipantRow> {
+export async function getParticipant(db: Db, user: CurrentUser, id: number): Promise<ParticipantRow> {
   const p = (await db
     .select()
     .from(participants)
@@ -45,7 +42,7 @@ export async function getParticipant(db: Q, user: CurrentUser, id: number): Prom
   return p;
 }
 
-export async function getTransaction(db: Q, user: CurrentUser, id: number): Promise<TransactionRow> {
+export async function getTransaction(db: Db, user: CurrentUser, id: number): Promise<TransactionRow> {
   const t = (await db
     .select()
     .from(transactions)

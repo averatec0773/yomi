@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { LedgerError } from "../ledger/errors";
 import { addParticipant, addSplit, addTx, catId, freshDb, selfId, user } from "../ledger/test-helpers";
 import { listTransactions, rangeTotalsForList } from "../ledger/transactions";
-import { monthOverview, setMonthlyTarget } from "../month/overview";
+import { setMonthlyTarget } from "../month";
 import { rangeOverview } from "./range";
 
 const at = (date: string) => `${date}T12:00:00+08:00`;
@@ -101,37 +101,6 @@ describe("rangeOverview", () => {
     await expect(rangeOverview(db, user, { from: "2026-09-30", to: "2026-09-01" })).rejects.toThrow(LedgerError);
     await expect(rangeOverview(db, user, { from: "2020-01-01", to: "2026-01-01" })).rejects.toThrow(LedgerError);
     await expect(rangeOverview(db, user, { from: "2026-02-29", to: "2026-03-01" })).rejects.toThrow(LedgerError);
-  });
-
-  it("monthOverview is rangeOverview over the calendar month", async () => {
-    const { db } = await ledger();
-    await setMonthlyTarget(db, user, { month: "2026-08", amountMinor: 5000, currency: "USD" });
-    for (const [month, today] of [
-      ["2026-09", "2026-10-05"],
-      ["2026-09", "2026-09-10"],
-      ["2026-08", "2026-10-05"],
-      ["2024-02", "2026-10-05"],
-      ["2030-01", "2026-10-05"],
-    ] as const) {
-      const m = await monthOverview(db, user, month, { today });
-      const r = await rangeOverview(db, user, { from: `${month}-01`, to: `${month}-${month === "2024-02" ? "29" : month === "2026-09" ? "30" : "31"}` }, { today });
-      expect(m.days).toBe(r.days);
-      expect(m.currencies).toEqual(
-        r.currencies.map(({ previous, monthly: _m, ...c }) => ({
-          currency: c.currency,
-          spendingMinor: c.spendingMinor,
-          incomeMinor: c.incomeMinor,
-          transactionCount: c.transactionCount,
-          byCategory: c.byCategory,
-          smallPayments: c.smallPayments,
-          largest: c.largest,
-          previousMonthSpendingMinor: previous?.spendingMinor ?? null,
-          dailyAverageMinor: c.dailyAverageMinor,
-          sharedReceivableMinor: c.sharedReceivableMinor,
-          target: c.target,
-        })),
-      );
-    }
   });
 });
 

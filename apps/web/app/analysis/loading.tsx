@@ -6,7 +6,7 @@ export default async function Loading() {
   const { t } = await getI18n();
   return (
     <div role="status" aria-label={t.common.loading}>
-      <HeaderSkeleton title={t.stats.title} controls actions={1} />
+      <HeaderSkeleton title={t.analysis.title} controls actions={1} />
       <div className="flex flex-col gap-8">
         <div className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-5">
           <Skeleton className="h-3.5 w-36" />

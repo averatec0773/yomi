@@ -1,4 +1,4 @@
-import { ApiError, StatsResponse, TransactionPage } from "@yomi/contracts";
+import { ApiError, StatsResponse, Target, TransactionPage } from "@yomi/contracts";
 import { getCurrentUser, seed } from "@yomi/core";
 import { transactions } from "@yomi/db";
 import { testDb } from "@yomi/db/testing";
@@ -69,6 +69,41 @@ describe("GET /api/stats", () => {
       const res = await app.request(`/api/stats?${q}`);
       expect(res.status, q).toBe(400);
       expect(ApiError.parse(await res.json()).code, q).toBe(q.startsWith("from=2020") ? "range_too_long" : "validation_failed");
+    }
+  });
+});
+
+describe("PUT /api/targets", () => {
+  const put = (body: unknown) => ({ method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+
+  it("sets the default and a month's own target, which stats then compare against", async () => {
+    const { app } = await setup();
+    const def = await app.request("/api/targets", put({ month: null, amountMinor: 10000, currency: "CNY" }));
+    expect(def.status).toBe(200);
+    expect(Target.parse(await def.json())).toMatchObject({ month: null, amountMinor: 10000, currency: "CNY" });
+    let sep = StatsResponse.parse(await (await app.request("/api/stats?preset=this_month")).json());
+    expect(sep.currencies.find((c) => c.currency === "CNY")!.target).toEqual({ amountMinor: 10000, currency: "CNY", remainingMinor: 7000, monthSpecific: false });
+
+    expect((await app.request("/api/targets", put({ month: "2026-09", amountMinor: 2000, currency: "CNY" }))).status).toBe(200);
+    sep = StatsResponse.parse(await (await app.request("/api/stats?preset=this_month")).json());
+    expect(sep.currencies.find((c) => c.currency === "CNY")!.target).toMatchObject({ remainingMinor: -1000, monthSpecific: true });
+    const aug = StatsResponse.parse(await (await app.request("/api/stats?preset=last_month")).json());
+    expect(aug.currencies.find((c) => c.currency === "CNY")!.target).toMatchObject({ amountMinor: 10000, monthSpecific: false });
+  });
+
+  it("rejects bodies that do not match the contract with 400", async () => {
+    const { app } = await setup();
+    for (const body of [
+      { month: null, amountMinor: -1, currency: "CNY" },
+      { month: "2026-9", amountMinor: 100, currency: "CNY" },
+      { month: null, amountMinor: 1.5, currency: "CNY" },
+      { month: null, amountMinor: 100, currency: "yuan" },
+      { month: null, amountMinor: 100, currency: "CNY", extra: true },
+      { amountMinor: 100, currency: "CNY" },
+    ]) {
+      const res = await app.request("/api/targets", put(body));
+      expect(res.status, JSON.stringify(body)).toBe(400);
+      expect(ApiError.parse(await res.json()).code).toBe("validation_failed");
     }
   });
 });

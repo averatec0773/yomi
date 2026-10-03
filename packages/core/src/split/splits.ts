@@ -1,8 +1,8 @@
-import { merchantRules, participants, transactions, transactionSplits } from "@yomi/db";
+import { merchantRules, participants, transactions, transactionSplits, type Db } from "@yomi/db";
 import { and, eq, inArray } from "@yomi/db/orm";
 import { formatMinor, splitEqual } from "../money";
 import type { CurrentUser } from "../user";
-import { getSelf, getTransaction, nowIso, type Q, SplitError, type TransactionRow } from "./internal";
+import { getSelf, getTransaction, nowIso, SplitError, type TransactionRow } from "./internal";
 
 export type SplitMode = "equal" | "full" | "exact";
 
@@ -48,7 +48,7 @@ function splitTotal(t: TransactionRow): number {
   return Math.abs(t.amountMinor);
 }
 
-export async function getSplit(db: Q, user: CurrentUser, txId: number): Promise<SplitView | null> {
+export async function getSplit(db: Db, user: CurrentUser, txId: number): Promise<SplitView | null> {
   const t = await getTransaction(db, user, txId);
   const self = await getSelf(db, user);
   const rows = await db
@@ -92,7 +92,7 @@ function uniq(ids: readonly number[]): number[] {
   return [...new Set(ids)];
 }
 
-async function assertParticipantsExist(db: Q, user: CurrentUser, ids: readonly number[]): Promise<void> {
+async function assertParticipantsExist(db: Db, user: CurrentUser, ids: readonly number[]): Promise<void> {
   if (ids.length === 0) return;
   const found = await db
     .select({ id: participants.id })
@@ -103,7 +103,7 @@ async function assertParticipantsExist(db: Q, user: CurrentUser, ids: readonly n
   if (missing.length) throw new SplitError("not_found", "participant_not_found", `Participant not found: ${missing.join(", ")}`, { ids: missing.join(", ") });
 }
 
-async function writeMerchantRule(db: Q, user: CurrentUser, merchant: string, ids: number[] | null): Promise<void> {
+async function writeMerchantRule(db: Db, user: CurrentUser, merchant: string, ids: number[] | null): Promise<void> {
   if (!merchant) return;
   // An auto-split rule is an explicit choice: a one-off split of the same merchant does not rewrite it.
   const current = (await db
@@ -135,7 +135,7 @@ async function writeMerchantRule(db: Q, user: CurrentUser, merchant: string, ids
  * my share, paid = total). Third parties are not stored: what they owe the payer is not my debt.
  * So "B paid ¥90 for me, A and B" leaves me owing B ¥30 and nothing between me and A.
  */
-export async function setSplit(db: Q, user: CurrentUser, txId: number, input: SetSplitInput): Promise<SplitView | null> {
+export async function setSplit(db: Db, user: CurrentUser, txId: number, input: SetSplitInput): Promise<SplitView | null> {
   return await applySplit(db, user, txId, input, { markEdited: true, rememberMerchant: true });
 }
 
@@ -148,7 +148,7 @@ export interface ApplySplitOptions {
 
 /** setSplit's single code path; auto-split (import, apply-to-existing) calls it with its own options. */
 export async function applySplit(
-  db: Q,
+  db: Db,
   user: CurrentUser,
   txId: number,
   input: SetSplitInput,
@@ -261,7 +261,7 @@ export interface ToggleResult {
  * an exact split becomes equal and `resetExact` says so). Friend-paid rows refuse chips: they only
  * hold me and the payer, so adding a third person or dropping the payer needs a full re-edit.
  */
-export async function toggleParticipantResult(db: Q, user: CurrentUser, txId: number, participantId: number): Promise<ToggleResult> {
+export async function toggleParticipantResult(db: Db, user: CurrentUser, txId: number, participantId: number): Promise<ToggleResult> {
   return await db.transaction(async (q) => {
     const current = await getSplit(q, user, txId);
     const self = await getSelf(q, user);
@@ -277,7 +277,7 @@ export async function toggleParticipantResult(db: Q, user: CurrentUser, txId: nu
   });
 }
 
-export async function toggleParticipant(db: Q, user: CurrentUser, txId: number, participantId: number): Promise<SplitView | null> {
+export async function toggleParticipant(db: Db, user: CurrentUser, txId: number, participantId: number): Promise<SplitView | null> {
   return (await toggleParticipantResult(db, user, txId, participantId)).split;
 }
 
@@ -290,7 +290,7 @@ export interface BulkToggleResult {
 
 /** Multi-select chip: turn p on (or off) for every row; rows that cannot be split are reported, not fatal. */
 export async function bulkToggle(
-  db: Q,
+  db: Db,
   user: CurrentUser,
   txIds: readonly number[],
   participantId: number,

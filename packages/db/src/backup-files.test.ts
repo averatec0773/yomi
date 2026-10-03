@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { backupDatabase, backupsDir, openBackupFile, rewriteBackupFile, rotateBackups } from "./backup";
+import { backupDatabase, openBackupFile, rewriteBackupFile, rotateBackups } from "./backup";
 import { closeDb, createDb, type Db, queryRows } from "./client";
 import { migratedTestDir } from "./testing";
 
@@ -65,7 +65,6 @@ describe("backupDatabase", { timeout: 30_000 }, () => {
 
   it("returns null for in-memory databases and rejects odd reasons", async () => {
     const db = await openDb("memory://");
-    expect(backupsDir(db)).toBeNull();
     expect(await backupDatabase(db, "manual")).toBeNull();
     await expect(backupDatabase(db, "../x")).rejects.toThrow(/invalid backup reason/);
   });

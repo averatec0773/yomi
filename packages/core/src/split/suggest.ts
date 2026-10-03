@@ -1,9 +1,9 @@
-import { categories, merchantRules, participants, transactions, transactionSplits } from "@yomi/db";
+import { categories, merchantRules, participants, transactions, transactionSplits, type Db } from "@yomi/db";
 import { and, count, desc, eq, gte, inArray, isNull } from "@yomi/db/orm";
 import type { CurrentUser } from "../user";
 import { userToday } from "../settings/time-zone";
 import { addDays } from "../time/day";
-import { getSelf, getTransaction, nowIso, parseIdList, type Q, SplitError } from "./internal";
+import { getSelf, getTransaction, nowIso, parseIdList, SplitError } from "./internal";
 import { applySplit } from "./splits";
 
 /** Category learning looks at split rows this many days back from today. */
@@ -81,7 +81,7 @@ const setKey = (ids: readonly number[]) => [...new Set(ids)].sort((a, b) => a - 
  * Participant set of each split expense row, newest first. Callers skip `friendPaid` rows: they record only me and
  * the payer, so they say nothing about who shares a kind of bill.
  */
-async function splitSets(db: Q, user: CurrentUser, where: ReturnType<typeof and>) {
+async function splitSets(db: Db, user: CurrentUser, where: ReturnType<typeof and>) {
   const rows = await db
     .select({
       transactionId: transactionSplits.transactionId,
@@ -125,7 +125,7 @@ async function splitSets(db: Q, user: CurrentUser, where: ReturnType<typeof and>
  * history, and the learned set of each category over the last CATEGORY_WINDOW_DAYS days.
  */
 export async function suggestionContext(
-  db: Q,
+  db: Db,
   user: CurrentUser,
   scope: { merchants: readonly string[]; categoryIds: readonly number[] },
   opts: { today?: string } = {},
@@ -249,7 +249,7 @@ export function suggestFor(ctx: SuggestContext, t: SuggestTarget): SplitSuggesti
 }
 
 /** Suggestions for many rows with one context (list pages). */
-export async function suggestSplits(db: Q, user: CurrentUser, rows: readonly SuggestTarget[], opts: { today?: string } = {}): Promise<Map<number, SplitSuggestion>> {
+export async function suggestSplits(db: Db, user: CurrentUser, rows: readonly SuggestTarget[], opts: { today?: string } = {}): Promise<Map<number, SplitSuggestion>> {
   const out = new Map<number, SplitSuggestion>();
   const open = rows.filter(isCandidate);
   if (open.length === 0) return out;
@@ -273,7 +273,7 @@ function isCandidate(t: SuggestTarget): boolean {
   return t.kind === "expense" && t.status === "ok" && t.duplicateOfId === null && !t.hasSplits && !t.splitSuggestionDismissedAt;
 }
 
-async function targetOf(db: Q, user: CurrentUser, txId: number): Promise<SuggestTarget> {
+async function targetOf(db: Db, user: CurrentUser, txId: number): Promise<SuggestTarget> {
   const t = await getTransaction(db, user, txId);
   const split = (await db
     .select({ id: transactionSplits.id })
@@ -292,11 +292,6 @@ async function targetOf(db: Q, user: CurrentUser, txId: number): Promise<Suggest
   };
 }
 
-/** The split suggestion for one transaction (see suggestFor). */
-export async function suggestSplit(db: Q, user: CurrentUser, txId: number, opts: { today?: string } = {}): Promise<SplitSuggestion> {
-  return (await suggestSplits(db, user, [await targetOf(db, user, txId)], opts)).get(txId) ?? NO_SUGGESTION;
-}
-
 export interface AcceptSuggestionsResult {
   /** Rows split now, with the people they were split with. */
   accepted: { transactionId: number; participantIds: number[] }[];
@@ -308,7 +303,7 @@ export interface AcceptSuggestionsResult {
  * "Accept all suggestions": equal split with me + each row's suggested people, recomputed here (the client's copy
  * may be stale). A user action, so rows are marked edited; merchant rules are not rewritten, so undo is a plain clear.
  */
-export async function acceptSuggestions(db: Q, user: CurrentUser, txIds: readonly number[], opts: { today?: string } = {}): Promise<AcceptSuggestionsResult> {
+export async function acceptSuggestions(db: Db, user: CurrentUser, txIds: readonly number[], opts: { today?: string } = {}): Promise<AcceptSuggestionsResult> {
   return await db.transaction(async (q) => {
     const ids = [...new Set(txIds)];
     const targets: SuggestTarget[] = [];
@@ -341,7 +336,7 @@ export async function acceptSuggestions(db: Q, user: CurrentUser, txIds: readonl
 }
 
 /** Undo of acceptSuggestions: clears the splits of these rows (I paid them, so nothing else is lost). */
-export async function revertAcceptedSuggestions(db: Q, user: CurrentUser, txIds: readonly number[]): Promise<{ reverted: number[] }> {
+export async function revertAcceptedSuggestions(db: Db, user: CurrentUser, txIds: readonly number[]): Promise<{ reverted: number[] }> {
   return await db.transaction(async (q) => {
     const self = await getSelf(q, user);
     const reverted: number[] = [];
@@ -355,7 +350,7 @@ export async function revertAcceptedSuggestions(db: Q, user: CurrentUser, txIds:
   });
 }
 
-async function hasOtherPayer(db: Q, user: CurrentUser, txId: number, selfId: number): Promise<boolean> {
+async function hasOtherPayer(db: Db, user: CurrentUser, txId: number, selfId: number): Promise<boolean> {
   return (await db
     .select({ participantId: transactionSplits.participantId, paidMinor: transactionSplits.paidMinor })
     .from(transactionSplits)
@@ -365,7 +360,7 @@ async function hasOtherPayer(db: Q, user: CurrentUser, txId: number, selfId: num
 }
 
 /** "Not this one": hide (or bring back) the row's split suggestion. */
-export async function dismissSplitSuggestion(db: Q, user: CurrentUser, txId: number, dismissed: boolean): Promise<{ transactionId: number; dismissed: boolean }> {
+export async function dismissSplitSuggestion(db: Db, user: CurrentUser, txId: number, dismissed: boolean): Promise<{ transactionId: number; dismissed: boolean }> {
   const t = await getTransaction(db, user, txId);
   await db.update(transactions)
     .set({ splitSuggestionDismissedAt: dismissed ? nowIso() : null })
@@ -386,7 +381,7 @@ export interface MerchantSuggestResult {
  * `participantIds`.
  */
 export async function setMerchantSuggest(
-  db: Q,
+  db: Db,
   user: CurrentUser,
   merchant: string,
   input: { suggest: boolean; participantIds?: number[] },

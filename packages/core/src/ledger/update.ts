@@ -20,12 +20,9 @@ export interface CategoryItem {
   archivedAt: string | null;
 }
 
-/** Db or a transaction handle. */
-type Q = Db;
-
 const now = () => new Date().toISOString();
 
-async function categoryOf(db: Q, userId: number, id: number) {
+async function categoryOf(db: Db, userId: number, id: number) {
   const c = (await db
     .select()
     .from(categories)
@@ -56,7 +53,7 @@ function categoryKindMismatch(name: string, kind: string): LedgerError {
 
 export const SPLIT_KIND_MESSAGE = "This row is split; remove the split before changing its type";
 
-async function hasSplits(db: Q, userId: number, id: number): Promise<boolean> {
+async function hasSplits(db: Db, userId: number, id: number): Promise<boolean> {
   return (
     (await db
       .select({ id: transactionSplits.id })
@@ -67,11 +64,11 @@ async function hasSplits(db: Q, userId: number, id: number): Promise<boolean> {
 }
 
 /** Splits only live on expense/refund rows; moving a split row to another kind would desync AA and spending. */
-async function blocksKindChange(db: Q, userId: number, from: TransactionKind, to: TransactionKind, id: number): Promise<boolean> {
+async function blocksKindChange(db: Db, userId: number, from: TransactionKind, to: TransactionKind, id: number): Promise<boolean> {
   return from !== to && !SPLITTABLE.has(to) && await hasSplits(db, userId, id);
 }
 
-async function rowOf(db: Q, userId: number, id: number) {
+async function rowOf(db: Db, userId: number, id: number) {
   const r = (await db
     .select({ id: transactions.id, kind: transactions.kind, merchant: transactions.merchant, categoryId: transactions.categoryId })
     .from(transactions)

@@ -39,7 +39,7 @@ export async function generateMetadata() {
 const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 
 /**
- * /assets: stocks at a point in time plus their history (Stats shows flows over a period). `?view=all|cash|investments`,
+ * /assets: stocks at a point in time plus their history (Analysis shows flows over a period). `?view=all|cash|investments`,
  * `?range=1m|3m|1y|all`, `?currency=USD|CNY` for converted totals, `?chart=value|pnl` on Investments, `?asOf=`.
  */
 export default async function AssetsPage({ searchParams }: PageProps<"/assets">) {
@@ -73,13 +73,13 @@ export default async function AssetsPage({ searchParams }: PageProps<"/assets">)
     }
   }
 
-  // Flows over the history range come from Stats (income minus spending, per currency).
+  // Flows over the history range come from Analysis (income minus spending, per currency).
   let cashFlow: { currency: string; minor: number }[] | null = null;
   try {
     const r = await rangeOverview(db, user, { from: nw.from, to: nw.asOf }, { today });
     cashFlow = r.currencies.filter((c) => c.incomeMinor || c.spendingMinor).map((c) => ({ currency: c.currency, minor: c.incomeMinor - c.spendingMinor }));
   } catch {
-    // a range Stats does not take (over 5 years): the link goes without an amount
+    // a range Analysis does not take (over 5 years): the link goes without an amount
   }
 
   const ibkr = await resolveIbkrConfig(db, user);
@@ -95,7 +95,7 @@ export default async function AssetsPage({ searchParams }: PageProps<"/assets">)
     holdingsConverted,
     fx,
     cashFlow,
-    statsHref: `/analysis?${new URLSearchParams({ from: nw.from, to: nw.asOf }).toString()}`,
+    analysisHref: `/analysis?${new URLSearchParams({ from: nw.from, to: nw.asOf }).toString()}`,
     activity: params.view === "investments" ? await recentInvestmentActivity(db, user) : [],
     brokerages,
     plaid: { configured: plaid.configured, defaultEnvironment: plaid.defaultEnvironment, environments: plaid.environments },

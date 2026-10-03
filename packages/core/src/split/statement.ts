@@ -1,4 +1,4 @@
-import { categories, participants, transactions, transactionSplits } from "@yomi/db";
+import { categories, participants, transactions, transactionSplits, type Db } from "@yomi/db";
 import { and, eq, inArray } from "@yomi/db/orm";
 import { formatMinor } from "../money";
 import { contactParts, type PaymentKind, paymentTitle, type StatementPayment, statementPayments } from "../payment";
@@ -9,7 +9,7 @@ import { type AaEvent, aaAccounts, aaEvents } from "./balances";
 import { coverageOf, type ItemStatus, itemRowsOf, settledOnDates } from "./items";
 import { userToday } from "../settings/time-zone";
 import { addDays } from "../time/day";
-import { assertCurrency, assertDate, getParticipant, type Q, SplitError } from "./internal";
+import { assertCurrency, assertDate, getParticipant, SplitError } from "./internal";
 
 /**
  * What a statement shows besides the items themselves; shared by the text, the print view, the dialog and the CSV.
@@ -256,7 +256,7 @@ interface ItemDetails {
 }
 
 /** Who else shares each item, my own share and its category, for the transactions given. */
-async function itemDetails(db: Q, user: CurrentUser, participantId: number, currency: string, ids: readonly number[]): Promise<Map<number, ItemDetails>> {
+async function itemDetails(db: Db, user: CurrentUser, participantId: number, currency: string, ids: readonly number[]): Promise<Map<number, ItemDetails>> {
   const out = new Map<number, ItemDetails>();
   if (ids.length === 0) return out;
   const unique = [...new Set(ids)];
@@ -325,7 +325,7 @@ function balanceSentence(w: StatementWords, balance: number, currency: string): 
  * the CSV export uses: every event after the last time the balance was zero, or from `since`.
  */
 export async function statementText(
-  db: Q,
+  db: Db,
   user: CurrentUser,
   participantId: number,
   currency: string,

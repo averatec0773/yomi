@@ -23,7 +23,7 @@ export async function CategoryList({
   items: CategoryShare[];
 }) {
   const { t } = await getI18n();
-  if (items.length === 0) return <p className="px-4 py-4 text-body text-2 md:px-5">{t.stats.noSpending}</p>;
+  if (items.length === 0) return <p className="px-4 py-4 text-body text-2 md:px-5">{t.analysis.noSpending}</p>;
   const top = Math.max(...items.map((c) => c.share), 1);
 
   return (
@@ -51,7 +51,7 @@ export async function CategoryList({
               </span>
               <span className="num text-meta text-2">{percent(c.share)}</span>
               <Money minor={c.minor} currency={currency} />
-              <span className="num hidden text-meta text-3 sm:block">{plural(t.stats.categoryCount, c.count)}</span>
+              <span className="num hidden text-meta text-3 sm:block">{plural(t.analysis.categoryCount, c.count)}</span>
             </Link>
           </li>
         );

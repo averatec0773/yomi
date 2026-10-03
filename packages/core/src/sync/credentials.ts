@@ -15,7 +15,7 @@ import {
   secretView,
   writeSecretSetting,
 } from "../settings/secrets";
-import { deleteSetting, type Q, readSetting, writeSetting } from "../settings/store";
+import { deleteSetting, readSetting, writeSetting } from "../settings/store";
 import { type BankConfig, plaidConfig, plaidProviderFromEnv, plaidSecretVar } from "./config";
 import type { BankProvider } from "./provider";
 
@@ -54,7 +54,7 @@ export interface PlaidCredentials {
   defaultEnvironment: { value: PlaidEnvironment | null; source: SecretSource | null };
 }
 
-export async function resolvePlaidCredentials(q: Q, env: NodeJS.ProcessEnv = process.env): Promise<PlaidCredentials> {
+export async function resolvePlaidCredentials(q: Db, env: NodeJS.ProcessEnv = process.env): Promise<PlaidCredentials> {
   const field = async (f: PlaidSecretField) => resolveSecret(envValue(env, f), await readSecretSetting(q, INSTANCE_USER, PLAID_SETTINGS[f], env));
   const stored = await readSetting(q, INSTANCE_USER, PLAID_SETTINGS.defaultEnvironment);
   const defaultEnvironment: PlaidCredentials["defaultEnvironment"] = isEnvironment(env.PLAID_ENV)
@@ -66,7 +66,7 @@ export async function resolvePlaidCredentials(q: Q, env: NodeJS.ProcessEnv = pro
 }
 
 /** An env-shaped view of the resolved keys, so plaidConfig / plaidProviderFromEnv apply the same rules to both sources. */
-export async function resolvedPlaidEnv(q: Q, env: NodeJS.ProcessEnv = process.env): Promise<NodeJS.ProcessEnv> {
+export async function resolvedPlaidEnv(q: Db, env: NodeJS.ProcessEnv = process.env): Promise<NodeJS.ProcessEnv> {
   const c = await resolvePlaidCredentials(q, env);
   const out = {} as NodeJS.ProcessEnv;
   if (c.clientId.value) out.PLAID_CLIENT_ID = c.clientId.value;
@@ -77,12 +77,12 @@ export async function resolvedPlaidEnv(q: Q, env: NodeJS.ProcessEnv = process.en
 }
 
 /** Plaid setup resolved at use time (env, then Settings). Never contains a key. */
-export async function resolvePlaidConfig(q: Q, env: NodeJS.ProcessEnv = process.env): Promise<BankConfig> {
+export async function resolvePlaidConfig(q: Db, env: NodeJS.ProcessEnv = process.env): Promise<BankConfig> {
   return plaidConfig(await resolvedPlaidEnv(q, env));
 }
 
 /** The Plaid provider resolved at use time (per request, per scheduler tick), or null when the setup is incomplete. */
-export async function resolvePlaidProvider(q: Q, env: NodeJS.ProcessEnv = process.env): Promise<BankProvider | null> {
+export async function resolvePlaidProvider(q: Db, env: NodeJS.ProcessEnv = process.env): Promise<BankProvider | null> {
   return plaidProviderFromEnv(await resolvedPlaidEnv(q, env));
 }
 
@@ -93,7 +93,7 @@ export interface PlaidSecretsView {
   defaultEnvironment: { value: PlaidEnvironment | null; source: SecretSource | null };
 }
 
-export async function plaidSecretsView(q: Q, env: NodeJS.ProcessEnv = process.env): Promise<PlaidSecretsView> {
+export async function plaidSecretsView(q: Db, env: NodeJS.ProcessEnv = process.env): Promise<PlaidSecretsView> {
   const c = await resolvePlaidCredentials(q, env);
   return { clientId: identifierView(c.clientId), sandbox: secretView(c.sandbox), production: secretView(c.production), defaultEnvironment: c.defaultEnvironment };
 }

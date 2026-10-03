@@ -1,7 +1,6 @@
-import { participants, settlementItems, settlements, transactions, transactionSplits } from "@yomi/db";
+import { participants, settlementItems, settlements, transactions, transactionSplits, type Db } from "@yomi/db";
 import { and, eq, inArray, isNull } from "@yomi/db/orm";
 import type { CurrentUser } from "../user";
-import type { Q } from "./internal";
 import { coverageOf, type ItemRow } from "./items";
 
 /** One entry on a participant's running AA account in one currency. delta > 0 means they owe me more. */
@@ -45,7 +44,7 @@ export type AaEvent =
  * rows spending counts) and settlements for non-self
  * participants, in time order. Same-day opening balances sort before that day's splits, settlements after.
  */
-export async function aaEvents(db: Q, user: CurrentUser, participantId?: number): Promise<AaEvent[]> {
+export async function aaEvents(db: Db, user: CurrentUser, participantId?: number): Promise<AaEvent[]> {
   const splitRows = await db
     .select({
       participantId: transactionSplits.participantId,
@@ -179,7 +178,7 @@ export interface Balance {
 }
 
 /** One line per participant per currency. Currencies are never summed. */
-export async function balances(db: Q, user: CurrentUser): Promise<Balance[]> {
+export async function balances(db: Db, user: CurrentUser): Promise<Balance[]> {
   const people = new Map(
     (await db
       .select()
@@ -219,7 +218,7 @@ export async function balances(db: Q, user: CurrentUser): Promise<Balance[]> {
     .sort((a, b) => a.participantId - b.participantId || (a.currency < b.currency ? -1 : 1));
 }
 
-export async function balanceOf(db: Q, user: CurrentUser, participantId: number, currency: string): Promise<number> {
+export async function balanceOf(db: Db, user: CurrentUser, participantId: number, currency: string): Promise<number> {
   return (await aaEvents(db, user, participantId))
     .filter((e) => e.currency === currency)
     .reduce((s, e) => s + e.deltaMinor, 0);

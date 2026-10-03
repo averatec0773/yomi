@@ -12,7 +12,7 @@
  *               border-line-strong (popover edge, dashed suggestion)
  * Accent        text-primary / bg-primary (teal: links, focus, the one primary button per view) · text-primary-foreground
  *               bg-primary-soft + text-primary-soft-foreground (active nav, Split marker, soft Settle button)
- * Money         text-pos / bg-pos-soft (inflows only) · text-neg / bg-neg-soft ("You pay X" on Split and settle only)
+ * Money         text-pos (inflows only) · text-neg / bg-neg-soft ("You pay X" on Split and settle only)
  *               text-transfer (dimmed transfer rows). Spending is plain text-foreground, never colored.
  * Type scale    text-hint 12/18 (shortcut hints, timestamps) · text-meta 13/19 (row secondary, meta, pills)
  *               text-body 15/22 (default: merchant, buttons, inputs, nav) · text-title 16/24 (section title, person)
@@ -56,9 +56,9 @@
 }
 
 @theme {
-  --font-sans: "Inter", -apple-system, "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei",
+  --font-sans: -apple-system, "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei",
     system-ui, sans-serif;
-  --font-num: "Inter", "SF Pro Text", -apple-system, system-ui, sans-serif;
+  --font-num: "SF Pro Text", -apple-system, system-ui, sans-serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
 
   --text-hint: 12px;
@@ -103,24 +103,10 @@
   --color-line-soft: var(--tile);
   --color-line-strong: var(--line-strong);
   --color-pos: var(--pos);
-  --color-pos-soft: var(--pos-soft);
   --color-neg: var(--neg);
   --color-neg-soft: var(--neg-soft);
   --color-transfer: var(--transfer);
 
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -145,8 +131,6 @@
   --radius-lg: 10px;
   --radius-xl: 12px;
   --radius-2xl: 14px;
-  --radius-3xl: 16px;
-  --radius-4xl: 20px;
 }
 
 /* Base palette: light. `.light` on an element below the root (the statement's paper) scopes it to that subtree. */
@@ -169,7 +153,6 @@
   --day: #f7f7f5;
   --line-strong: #d6d5cf;
   --pos: #3f7a54;
-  --pos-soft: #e6f0e9;
   --neg: #a65a3a;
   --neg-soft: #f5eae3;
   --transfer: #6e6d66;
@@ -199,7 +182,6 @@
     --day: #161614;
     --line-strong: #3a3a36;
     --pos: #7db88f;
-    --pos-soft: #1b2a20;
     --neg: #d08f6e;
     --neg-soft: #33241c;
     --transfer: #8b8981;
@@ -225,7 +207,6 @@
   --day: #161614;
   --line-strong: #3a3a36;
   --pos: #7db88f;
-  --pos-soft: #1b2a20;
   --neg: #d08f6e;
   --neg-soft: #33241c;
   --transfer: #8b8981;
@@ -253,19 +234,6 @@
   --border: var(--line);
   --input: var(--line);
   --ring: var(--brand);
-  --chart-1: var(--brand);
-  --chart-2: var(--pos);
-  --chart-3: var(--neg);
-  --chart-4: var(--ink-2);
-  --chart-5: var(--ink-3);
-  --sidebar: var(--sunken);
-  --sidebar-foreground: var(--ink);
-  --sidebar-primary: var(--brand);
-  --sidebar-primary-foreground: var(--brand-ink);
-  --sidebar-accent: var(--sunken);
-  --sidebar-accent-foreground: var(--ink);
-  --sidebar-border: var(--line);
-  --sidebar-ring: var(--brand);
 }
 
 @utility text-2 {

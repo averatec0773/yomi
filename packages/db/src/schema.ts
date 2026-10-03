@@ -79,7 +79,7 @@ export const transactions = pgTable(
     /**
      * Calendar day 'YYYY-MM-DD' of occurred_at in the user's time zone (core occurredOnFor); every date
      * filter and grouping reads this. Core writes it; an insert that leaves it '' gets the source's own
-     * date from a trigger (migration 0008).
+     * date from a trigger (in the baseline migration).
      */
     occurredOn: text("occurred_on").notNull().default(""),
     amountMinor: bigint("amount_minor", { mode: "number" }).notNull(),
@@ -211,7 +211,6 @@ export const participants = pgTable(
     userId: integer("user_id").notNull(),
     name: text("name").notNull(),
     isSelf: boolean("is_self").notNull().default(false),
-    aliases: text("aliases").notNull().default("[]"),
     archivedAt: text("archived_at"),
     createdAt: createdAt(),
   },
@@ -302,7 +301,7 @@ export const merchantRules = pgTable(
     merchant: text("merchant").notNull(),
     categoryId: integer("category_id").references(() => categories.id),
     participantIds: jsonb("participant_ids").$type<number[]>(),
-    /** 1: new imported expense rows of this merchant are split equally with me + participant_ids. */
+    /** true: new imported expense rows of this merchant are split equally with me + participant_ids. */
     autoSplit: boolean("auto_split").notNull().default(false),
     /** false: "don't suggest splits for this merchant" (no dashed suggestion from the merchant or its category). */
     suggest: boolean("suggest").notNull().default(true),
@@ -399,7 +398,7 @@ export const plaidLinkSessions = pgTable(
   (t) => [uniqueIndex("plaid_link_sessions_link_token_uq").on(t.linkToken), index("plaid_link_sessions_user_status_idx").on(t.userId, t.status)],
 );
 
-/** A provider account inside a connection, mapped to a ledger account. `cursor` is unused since Plaid (per-Item cursor). */
+/** A provider account inside a connection, mapped to a ledger account. */
 export const bankAccounts = pgTable(
   "bank_accounts",
   {
@@ -417,7 +416,6 @@ export const bankAccounts = pgTable(
     subtype: text("subtype"),
     lastFour: text("last_four"),
     currency: text("currency").notNull(),
-    cursor: text("cursor"),
     createdAt: createdAt(),
   },
   (t) => [uniqueIndex("bank_accounts_connection_provider_account_uq").on(t.connectionId, t.providerAccountId)],
@@ -429,8 +427,7 @@ export type IdentityKind = (typeof IDENTITY_KINDS)[number];
 /**
  * How a participant shows up in payment apps and bank text: a typed value plus its normalized form
  * (lowercase, trimmed, spaces collapsed; phone digits only; see core normalizeIdentity). One
- * (kind, normalized) belongs to one participant. Replaces `participants.aliases`, which migration
- * 0006 copied here; the column stays readable but is no longer written.
+ * (kind, normalized) belongs to one participant.
  */
 export const participantIdentities = pgTable(
   "participant_identities",

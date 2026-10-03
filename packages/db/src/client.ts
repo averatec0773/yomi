@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { type SQL, sql } from "drizzle-orm";
@@ -10,7 +10,7 @@ import { migrate as migratePglite } from "drizzle-orm/pglite/migrator";
 import pg from "pg";
 import { backupDatabase, type BackupOptions, needsPreMigrateBackup, pgDumpHint } from "./backup";
 import { acquireDirLock, releaseDirLock } from "./lock";
-import { type DbTarget, defaultDatabaseUrl, defaultPgliteDir, migrationsFolder, redactUrl, resolveDbTarget } from "./paths";
+import { type DbTarget, defaultDatabaseUrl, migrationsFolder, redactUrl, resolveDbTarget } from "./paths";
 
 /**
  * A database or a transaction handle. Both drivers (PGlite, node-postgres) are Drizzle PgDatabases, and a
@@ -63,13 +63,11 @@ function poolMax(): number {
  *   DbLockedError when another live process holds it (a PGlite directory allows one process at a time).
  * - `memory://`: in-memory PGlite (tests).
  * - `postgres://` / `postgresql://`: a Postgres server through a node-postgres pool.
- * A path that is a file (a yomi v0.1 SQLite ledger) is refused, and so is creating the default data/pglite
- * next to an existing data/yomi.db, so an upgrade never starts an empty ledger by mistake (LegacyLedgerError;
- * `allowBesideLegacy` is for the import itself). Close with closeDb.
+ * A path that is a file (a yomi v0.1 SQLite ledger) is refused (LegacyLedgerError). Close with closeDb.
  */
-export async function createDb(url: string = defaultDatabaseUrl(), opts: { allowBesideLegacy?: boolean } = {}): Promise<Db> {
+export async function createDb(url: string = defaultDatabaseUrl()): Promise<Db> {
   const target = resolveDbTarget(url);
-  if (target.kind === "pglite") assertNotLegacy(target.dataDir, opts.allowBesideLegacy ?? false);
+  if (target.kind === "pglite") assertNotLegacy(target.dataDir);
   if (target.kind === "server") {
     const pool = new pg.Pool({ connectionString: target.url, max: poolMax() });
     try {
@@ -112,9 +110,7 @@ export async function openDumpInMemory(tarball: Blob): Promise<Db> {
   return db;
 }
 
-const IMPORT_HINT = "pnpm db:import-sqlite data/yomi.db";
-
-/** Opening a v0.1 SQLite ledger as a PGlite directory, or starting a new default ledger beside one. */
+/** Opening a file (a yomi v0.1 SQLite ledger) as a PGlite directory. */
 export class LegacyLedgerError extends Error {
   readonly code = "db_legacy_sqlite";
   constructor(message: string) {
@@ -123,20 +119,11 @@ export class LegacyLedgerError extends Error {
   }
 }
 
-function assertNotLegacy(dataDir: string, allowBesideLegacy: boolean): void {
+function assertNotLegacy(dataDir: string): void {
   if (existsSync(dataDir) && !statSync(dataDir).isDirectory()) {
     throw new LegacyLedgerError(
-      `DATABASE_URL points at the file ${dataDir}, probably a yomi v0.1 SQLite ledger. yomi now keeps the ledger in a ` +
-        `PGlite directory: copy it with \`pnpm db:import-sqlite ${dataDir}\`, then unset DATABASE_URL (or point it at a directory).`,
-    );
-  }
-  if (allowBesideLegacy || dataDir !== defaultPgliteDir()) return;
-  const fresh = !existsSync(dataDir) || readdirSync(dataDir).length === 0;
-  const legacy = path.join(path.dirname(dataDir), "yomi.db");
-  if (fresh && existsSync(legacy)) {
-    throw new LegacyLedgerError(
-      `Found a yomi v0.1 SQLite ledger at ${legacy} but no ledger at ${dataDir}. Copy it first with \`${IMPORT_HINT}\` ` +
-        "(stop the yomi server while it runs); yomi does not start an empty ledger beside it.",
+      `DATABASE_URL points at the file ${dataDir}, probably a yomi v0.1 SQLite ledger. yomi keeps the ledger in a ` +
+        "PGlite directory: unset DATABASE_URL or point it at a directory. yomi v0.2.4 is the last release that can copy a v0.1 ledger.",
     );
   }
 }

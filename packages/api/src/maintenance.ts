@@ -80,11 +80,7 @@ export function maintenanceRoutes(deps: { getDb: () => Db | Promise<Db> }): Hono
     if (!isTimeZone(body.timeZone)) {
       return c.json({ error: `Unknown time zone: ${body.timeZone}`, code: "invalid_time_zone", params: { value: body.timeZone } } satisfies ApiError, 400);
     }
-    const db = await deps.getDb();
-    const user = getCurrentUser();
-    const current = await getTimeZoneSetting(db, user);
-    if (body.ifUnset && current.isSet) return c.json({ ...current, changed: 0 } satisfies TimeZoneChange);
-    return c.json((await setTimeZone(db, user, body.timeZone)) satisfies TimeZoneChange);
+    return c.json((await setTimeZone(await deps.getDb(), getCurrentUser(), body.timeZone, { ifUnset: body.ifUnset })) satisfies TimeZoneChange);
   });
 
   r.get("/settings/shortcuts", async (c) =>

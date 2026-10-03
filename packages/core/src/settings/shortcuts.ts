@@ -1,5 +1,6 @@
+import type { Db } from "@yomi/db";
 import type { CurrentUser } from "../user";
-import { deleteSetting, type Q, readSetting, writeSetting } from "./store";
+import { deleteSetting, readSetting, writeSetting } from "./store";
 
 const SHORTCUTS_KEY = "shortcuts";
 
@@ -8,7 +9,7 @@ const SHORTCUTS_KEY = "shortcuts";
  * validation live in @yomi/contracts/shortcuts; core only keeps the string map. A value that is not a JSON object of
  * strings reads as no overrides.
  */
-export async function getShortcutOverrides(q: Q, user: CurrentUser): Promise<Record<string, string>> {
+export async function getShortcutOverrides(q: Db, user: CurrentUser): Promise<Record<string, string>> {
   const raw = await readSetting(q, user, SHORTCUTS_KEY);
   if (!raw) return {};
   try {
@@ -21,7 +22,7 @@ export async function getShortcutOverrides(q: Q, user: CurrentUser): Promise<Rec
 }
 
 /** Replaces the stored overrides; an empty map removes the row (back to the defaults). */
-export async function setShortcutOverrides(q: Q, user: CurrentUser, overrides: Record<string, string>): Promise<Record<string, string>> {
+export async function setShortcutOverrides(q: Db, user: CurrentUser, overrides: Record<string, string>): Promise<Record<string, string>> {
   if (Object.keys(overrides).length === 0) await deleteSetting(q, user, SHORTCUTS_KEY);
   else await writeSetting(q, user, SHORTCUTS_KEY, JSON.stringify(overrides));
   return await getShortcutOverrides(q, user);

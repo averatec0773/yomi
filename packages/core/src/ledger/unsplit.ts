@@ -3,13 +3,11 @@ import { and, desc, eq, isNotNull, isNull, notExists, type SQL } from "@yomi/db/
 import { suggestSplits } from "../split/suggest";
 import type { CurrentUser } from "../user";
 
-type Q = Db;
-
 /**
  * "Unsplit" rows (backfill triage): my own card/wallet expenses that count and have no splits yet.
  * kind expense, status ok, not a duplicate, paid from one of my accounts, no transaction_splits.
  */
-export function unsplitConditions(db: Q, userId: number): SQL[] {
+export function unsplitConditions(db: Db, userId: number): SQL[] {
   return [
     eq(transactions.userId, userId),
     eq(transactions.kind, "expense"),
@@ -42,7 +40,7 @@ export interface UnsplitMonth {
 }
 
 /** Unsplit rows per month, newest first; per-currency sums are never added across currencies. */
-export async function unsplitSummary(db: Q, user: CurrentUser): Promise<UnsplitMonth[]> {
+export async function unsplitSummary(db: Db, user: CurrentUser): Promise<UnsplitMonth[]> {
   const rows = await db
     .select({
       id: transactions.id,

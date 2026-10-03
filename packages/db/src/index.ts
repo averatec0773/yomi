@@ -5,7 +5,6 @@ export {
   BACKUP_EXTENSION,
   backupDatabase,
   BACKUPS_KEEP,
-  backupsDir,
   needsPreMigrateBackup,
   openBackupFile,
   pgDumpHint,
@@ -14,4 +13,3 @@ export {
   type BackupOptions,
 } from "./backup";
 export { DbLockedError, dirLockHolder, lockFileFor } from "./lock";
-export { formatImportReport, type ImportCheck, ImportRefusedError, type ImportReport, importSqliteLedger, sqliteMigrationsFolder, verifySqliteImport } from "./import-sqlite";

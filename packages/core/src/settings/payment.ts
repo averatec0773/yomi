@@ -1,3 +1,4 @@
+import type { Db } from "@yomi/db";
 import {
   defaultPaymentCurrencies,
   isLegacyContact,
@@ -15,7 +16,7 @@ import {
 } from "../payment";
 import { upgradePhone } from "../phone";
 import type { CurrentUser } from "../user";
-import { deleteSetting, type Q, readSetting, writeSetting } from "./store";
+import { deleteSetting, readSetting, writeSetting } from "./store";
 
 const PAYMENT_METHODS_KEY = "payment_methods";
 /**
@@ -82,7 +83,7 @@ function readMethod(v: unknown): StoredPaymentMethod | null {
 }
 
 /** The stored entries in display order (at most PAYMENT_METHODS_MAX), without the profile upgrade. */
-async function readStored(q: Q, user: CurrentUser): Promise<StoredPaymentMethod[]> {
+async function readStored(q: Db, user: CurrentUser): Promise<StoredPaymentMethod[]> {
   const raw = await readSetting(q, user, PAYMENT_METHODS_KEY);
   if (!raw) return [];
   try {
@@ -97,21 +98,21 @@ async function readStored(q: Q, user: CurrentUser): Promise<StoredPaymentMethod[
   }
 }
 
-async function writeMethods(q: Q, user: CurrentUser, methods: readonly PaymentMethod[]): Promise<void> {
+async function writeMethods(q: Db, user: CurrentUser, methods: readonly PaymentMethod[]): Promise<void> {
   if (methods.length === 0) await deleteSetting(q, user, PAYMENT_METHODS_KEY);
   else await writeSetting(q, user, PAYMENT_METHODS_KEY, JSON.stringify(methods));
 }
 
 const normalizeContact = (f: keyof ProfileContact, v: string | null | undefined): string | null => (v ?? "").trim().slice(0, PROFILE_MAX[f]).trim() || null;
 
-async function readProfile(q: Q, user: CurrentUser): Promise<ProfileContact> {
+async function readProfile(q: Db, user: CurrentUser): Promise<ProfileContact> {
   return {
     email: normalizeContact("email", await readSetting(q, user, PROFILE_KEYS.email)),
     phone: normalizeContact("phone", upgradePhone(await readSetting(q, user, PROFILE_KEYS.phone) ?? "")),
   };
 }
 
-async function writeProfile(q: Q, user: CurrentUser, contact: ProfileContact): Promise<void> {
+async function writeProfile(q: Db, user: CurrentUser, contact: ProfileContact): Promise<void> {
   for (const f of ["email", "phone"] as const) {
     const v = normalizeContact(f, contact[f]);
     if (v === null) await deleteSetting(q, user, PROFILE_KEYS[f]);
@@ -124,7 +125,7 @@ async function writeProfile(q: Q, user: CurrentUser, contact: ProfileContact): P
  * predates the profile flags, the upgrade runs and both are written back at once, so it happens exactly once and the
  * methods' email and phone end up referencing the profile.
  */
-async function readContacts(q: Q, user: CurrentUser): Promise<{ profile: ProfileContact; methods: PaymentMethod[] }> {
+async function readContacts(q: Db, user: CurrentUser): Promise<{ profile: ProfileContact; methods: PaymentMethod[] }> {
   const stored = await readStored(q, user);
   const profile = await readProfile(q, user);
   if (!stored.some(isLegacyContact)) return upgradeToProfile(profile, stored);
@@ -139,13 +140,13 @@ async function readContacts(q: Q, user: CurrentUser): Promise<{ profile: Profile
  * read as a method are skipped; at most PAYMENT_METHODS_MAX. `email` and `phone` are each method's own values (see
  * `resolveContact` for what statements show). Validation of new values is @yomi/contracts' PaymentMethodInput.
  */
-export async function getPaymentMethods(q: Q, user: CurrentUser): Promise<PaymentMethod[]> {
+export async function getPaymentMethods(q: Db, user: CurrentUser): Promise<PaymentMethod[]> {
   return (await readContacts(q, user)).methods;
 }
 
 /** Replaces the list; an empty list removes the row. Missing profile flags read as off. Returns what is stored now. */
 export async function setPaymentMethods(
-  q: Q,
+  q: Db,
   user: CurrentUser,
   methods: readonly (Omit<PaymentMethod, keyof ProfileFlags> & Partial<ProfileFlags>)[],
 ): Promise<PaymentMethod[]> {
@@ -160,12 +161,12 @@ export async function setPaymentMethods(
 }
 
 /** Settings > Profile's email and phone (null when unset), after the v0.1.29 upgrade. */
-export async function getProfileContact(q: Q, user: CurrentUser): Promise<ProfileContact> {
+export async function getProfileContact(q: Db, user: CurrentUser): Promise<ProfileContact> {
   return (await readContacts(q, user)).profile;
 }
 
 /** Changes the fields given (trimmed; empty or null removes the row). Returns what is stored now. */
-export async function setProfileContact(q: Q, user: CurrentUser, patch: Partial<ProfileContact>): Promise<ProfileContact> {
+export async function setProfileContact(q: Db, user: CurrentUser, patch: Partial<ProfileContact>): Promise<ProfileContact> {
   const current = await getProfileContact(q, user);
   await writeProfile(q, user, { ...current, ...patch });
   return await getProfileContact(q, user);

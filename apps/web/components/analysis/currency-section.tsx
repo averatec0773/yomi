@@ -45,7 +45,7 @@ function Comparison({ data, inProgress, label, t }: { data: RangeCurrencyOvervie
   if (!prev) return null;
   const [current, previous] = inProgress ? [data.dailyAverageMinor, prev.dailyAverageMinor] : [data.spendingMinor, prev.spendingMinor];
   const diff = current - previous;
-  const c = t.stats.compare;
+  const c = t.analysis.compare;
   if (diff === 0) return <span>{fmt(inProgress ? c.dailySame : c.same, { prev: label })}</span>;
   const template = diff < 0 ? (inProgress ? c.dailyLess : c.less) : inProgress ? c.dailyMore : c.more;
   return <span>{rich(template, { prev: label, amount: <Money minor={Math.abs(diff)} currency={data.currency} /> })}</span>;
@@ -71,7 +71,7 @@ export async function CurrencySection({ data, period, days, inProgress, previous
   const code = showCode && <span className="ml-2 text-meta font-normal text-3">{cur}</span>;
 
   return (
-    <section aria-label={fmt(t.stats.sectionLabel, { currency: cur })} className="flex flex-col gap-8">
+    <section aria-label={fmt(t.analysis.sectionLabel, { currency: cur })} className="flex flex-col gap-8">
       <div
         className={
           month
@@ -81,8 +81,8 @@ export async function CurrencySection({ data, period, days, inProgress, previous
       >
         <div className="flex min-w-0 flex-col gap-2">
           <div className="text-meta text-2">
-            {fmt(t.stats.spending, { currency: cur })}
-            <span className="text-3">{t.stats.myPart}</span>
+            {fmt(t.analysis.spending, { currency: cur })}
+            <span className="text-3">{t.analysis.myPart}</span>
           </div>
           <div className="text-hero font-semibold tracking-[-0.02em]">
             <Money minor={data.spendingMinor} currency={cur} />
@@ -92,25 +92,25 @@ export async function CurrencySection({ data, period, days, inProgress, previous
             {compare && <Comparison data={data} inProgress={inProgress} label={previousLabel} t={t} />}
             {compare && <Dot />}
             <span>
-              {rich(t.stats.dailyAvg, { amount: <Money minor={data.dailyAverageMinor} currency={cur} /> })}
-              <span className="text-3">{plural(t.stats.days, days)}</span>
+              {rich(t.analysis.dailyAvg, { amount: <Money minor={data.dailyAverageMinor} currency={cur} /> })}
+              <span className="text-3">{plural(t.analysis.days, days)}</span>
             </span>
             <Dot />
-            <span>{plural(t.stats.count, data.transactionCount)}</span>
+            <span>{plural(t.analysis.count, data.transactionCount)}</span>
           </div>
           {(data.incomeMinor > 0 || data.sharedReceivableMinor > 0) && (
             <div className="flex flex-col gap-y-1 text-body text-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-2">
               {data.incomeMinor > 0 && (
                 <span>
-                  {rich(t.stats.income, { amount: <Money minor={data.incomeMinor} currency={cur} sign="inflow" /> })}
+                  {rich(t.analysis.income, { amount: <Money minor={data.incomeMinor} currency={cur} sign="inflow" /> })}
                 </span>
               )}
               {data.incomeMinor > 0 && data.sharedReceivableMinor > 0 && <Dot />}
               {data.sharedReceivableMinor > 0 && (
                 <span>
-                  {rich(t.stats.fronted, { amount: <Money minor={data.sharedReceivableMinor} currency={cur} /> })}
+                  {rich(t.analysis.fronted, { amount: <Money minor={data.sharedReceivableMinor} currency={cur} /> })}
                   <Link href="/split" className="ml-0.5 text-primary underline-offset-4 hover:underline">
-                    {t.stats.frontedLink}
+                    {t.analysis.frontedLink}
                   </Link>
                 </span>
               )}
@@ -127,7 +127,7 @@ export async function CurrencySection({ data, period, days, inProgress, previous
         <div className="flex flex-col gap-4">
           <h2 className="flex items-center gap-2 text-title font-semibold">
             <ChartColumnIcon className="size-[18px] text-2" aria-hidden />
-            {t.stats.monthly}
+            {t.analysis.monthly}
             {code}
           </h2>
           <MonthlyTrend points={data.monthly} currency={cur} />
@@ -136,15 +136,15 @@ export async function CurrencySection({ data, period, days, inProgress, previous
 
       <div className="grid gap-6 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <div className="flex min-w-0 flex-col gap-3">
-          <ListCard icon={TagIcon} title={<>{t.stats.categories}{code}</>}>
+          <ListCard icon={TagIcon} title={<>{t.analysis.categories}{code}</>}>
             <CategoryList period={period} currency={cur} items={data.byCategory} />
           </ListCard>
           {data.smallPayments.count > 0 && (
             <p className="text-body text-2">
-              {rich(plural(t.stats.small, data.smallPayments.count), {
+              {rich(plural(t.analysis.small, data.smallPayments.count), {
                 amount: <Money minor={data.smallPayments.minor} currency={cur} className="text-foreground" />,
               })}
-              <span className="text-3">{rich(t.stats.smallEach, { amount: <Money minor={data.smallPayments.thresholdMinor} currency={cur} /> })}</span>
+              <span className="text-3">{rich(t.analysis.smallEach, { amount: <Money minor={data.smallPayments.thresholdMinor} currency={cur} /> })}</span>
             </p>
           )}
         </div>
@@ -153,7 +153,7 @@ export async function CurrencySection({ data, period, days, inProgress, previous
           code={code}
           largest={
             data.largest.length === 0 ? (
-              <p className="px-4 py-4 text-body text-2 md:px-5">{t.stats.noSpending}</p>
+              <p className="px-4 py-4 text-body text-2 md:px-5">{t.analysis.noSpending}</p>
             ) : (
               <ol className="divide-y divide-line-soft">
                 {data.largest.map((r) => (
@@ -176,7 +176,7 @@ export async function CurrencySection({ data, period, days, inProgress, previous
           }
           merchants={
             data.topMerchants.length === 0 ? (
-              <p className="px-4 py-4 text-body text-2 md:px-5">{t.stats.noSpending}</p>
+              <p className="px-4 py-4 text-body text-2 md:px-5">{t.analysis.noSpending}</p>
             ) : (
               <ol className="divide-y divide-line-soft">
                 {data.topMerchants.map((m) => (
@@ -186,7 +186,7 @@ export async function CurrencySection({ data, period, days, inProgress, previous
                       className="flex h-12 items-center gap-3 px-4 transition-colors duration-[120ms] hover:bg-sunken md:px-5"
                     >
                       <span className="min-w-0 flex-1 truncate">{m.merchant}</span>
-                      <span className="num shrink-0 text-meta text-3">{plural(t.stats.categoryCount, m.count)}</span>
+                      <span className="num shrink-0 text-meta text-3">{plural(t.analysis.categoryCount, m.count)}</span>
                       <span className="num w-10 shrink-0 text-right text-meta text-2">{m.share > 0 && m.share < 100 ? "<1%" : `${Math.round(m.share / 100)}%`}</span>
                       <Money minor={m.minor} currency={cur} />
                     </Link>

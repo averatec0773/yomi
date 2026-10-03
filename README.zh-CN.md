@@ -70,7 +70,6 @@ DATABASE_URL=data/demo-pglite pnpm dev
 - [连接盈透证券](guides/ibkr.md)
 - [在手机上使用 yomi](guides/remote-access.md)
 - [备份与恢复](guides/backup-and-restore.md)
-- [从 v0.1 升级](guides/upgrade-from-v0.1.md)
 - [常见问题](guides/troubleshooting.md)
 
 ## 隐私

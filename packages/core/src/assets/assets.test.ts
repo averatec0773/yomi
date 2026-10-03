@@ -9,7 +9,6 @@ import { addTx, freshDb, user } from "../ledger/test-helpers";
 import type { ProviderAccount } from "../sync/provider";
 import {
   backfillStatementBalances,
-  balancesOn,
   balanceTimeline,
   parseSnapshotRaw,
   providerBalanceMinor,
@@ -156,7 +155,8 @@ describe("derived balances (starting balance + transactions)", () => {
     expect(a.sourceAt.get("CNY")).toEqual({ source: "derived", asOf: "2026-09-01" });
 
     // A range that starts after the start day still counts the transactions before it.
-    expect((await balancesOn(db, user, "2026-09-10")).filter((b) => b.account.id === wallet).map((b) => [b.currency, b.balanceMinor])).toEqual([
+    const later = (await balanceTimeline(db, user, { from: "2026-09-10", to: "2026-09-10" })).accounts.find((x) => x.account.id === wallet)!;
+    expect([...later.daily].map(([c, s]) => [c, s[0]])).toEqual([
       ["CNY", 128000],
       ["USD", -1000],
     ]);

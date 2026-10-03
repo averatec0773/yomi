@@ -5,7 +5,7 @@ import { countsAsIncome, countsAsSpending } from "../ledger/share";
 import { loadRangeRows, type ProvisionalTotals, provisionalTotals, type SpendingRow } from "../ledger/transactions";
 import { getMonthlyTarget, type MonthTarget } from "../month/target";
 import { getTimeZone } from "../settings/time-zone";
-import { clockNow, todayIn } from "../time/zone";
+import { todayIn } from "../time/zone";
 import type { CurrentUser } from "../user";
 import { daysInclusive, isDate, monthEnd, monthStart } from "../time/day";
 import { assertRange, type DateRange, matchPreset, monthsIn, previousRange, resolvePeriod, type StatsPreset, wholeMonths } from "./period";
@@ -86,14 +86,8 @@ export function smallPaymentThreshold(currency: string): number {
   return SMALL_THRESHOLD[currency] ?? DEFAULT_SMALL_THRESHOLD;
 }
 
-/** Today in the server's local time; rangeOverview defaults to today in the user's zone instead. */
-export function localToday(): string {
-  const d = clockNow();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
 /** Σ others' owed on shared rows I paid (from my account, or my split row records the payment). */
-export function receivable(r: SpendingRow): number {
+function receivable(r: SpendingRow): number {
   if (!countsAsSpending(r) || r.splits.length === 0) return 0;
   const othersPaid = r.splits.some((s) => !s.isSelf && s.paidMinor > 0);
   const selfPaid = r.splits.some((s) => s.isSelf && s.paidMinor > 0);

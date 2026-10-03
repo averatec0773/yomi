@@ -76,7 +76,7 @@ export function Sidebar() {
   const collapsed = useHtmlFlag("sidebar", "collapsed");
   const toolsClosed = useHtmlFlag("tools", "closed");
   const keys = useShortcuts();
-  // Collapsed-rail tooltip, e.g. "Stats (\ m)".
+  // Collapsed-rail tooltip, e.g. "Analysis (\ m)".
   const tip = (label: string, key: string) => (key ? `${label} (${keys.leader} ${key})` : label);
   const SettingsIcon = NAV_ICONS[SETTINGS.href]!;
   const ToolsIcon = NAV_ICONS["/tools"]!;

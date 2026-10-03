@@ -1,8 +1,8 @@
-import { categories, merchantRules, participants, transactions } from "@yomi/db";
+import { categories, merchantRules, participants, transactions, type Db } from "@yomi/db";
 import { and, asc, count, eq, inArray, isNull } from "@yomi/db/orm";
 import { unsplitConditions } from "../ledger/unsplit";
 import type { CurrentUser } from "../user";
-import { getSelf, parseIdList, type Q, SplitError } from "./internal";
+import { getSelf, parseIdList, SplitError } from "./internal";
 import { applySplit } from "./splits";
 
 export interface MerchantRuleView {
@@ -24,7 +24,7 @@ export interface SetAutoSplitInput {
 }
 
 /** Active non-self participants among `ids`, in the given order; unknown or archived ids are dropped. */
-async function activeOthers(db: Q, user: CurrentUser, ids: readonly number[]): Promise<{ id: number; name: string }[]> {
+async function activeOthers(db: Db, user: CurrentUser, ids: readonly number[]): Promise<{ id: number; name: string }[]> {
   if (ids.length === 0) return [];
   const rows = await db
     .select({ id: participants.id, name: participants.name })
@@ -41,7 +41,7 @@ async function activeOthers(db: Q, user: CurrentUser, ids: readonly number[]): P
   return [...new Set(ids)].map((id) => byId.get(id)).filter((p): p is { id: number; name: string } => p !== undefined);
 }
 
-async function countRows(db: Q, user: CurrentUser, merchant: string) {
+async function countRows(db: Db, user: CurrentUser, merchant: string) {
   const rowCount =
     (await db
       .select({ n: count() })
@@ -61,7 +61,7 @@ async function countRows(db: Q, user: CurrentUser, merchant: string) {
  * Merchant rules that carry split information (remembered participants or auto-split), merchant order.
  * `autoSplitOnly` narrows to the rules that split new imports on their own.
  */
-export async function listMerchantRules(db: Q, user: CurrentUser, opts: { autoSplitOnly?: boolean } = {}): Promise<MerchantRuleView[]> {
+export async function listMerchantRules(db: Db, user: CurrentUser, opts: { autoSplitOnly?: boolean } = {}): Promise<MerchantRuleView[]> {
   const rows = await db
     .select({
       merchant: merchantRules.merchant,
@@ -88,7 +88,7 @@ export async function listMerchantRules(db: Q, user: CurrentUser, opts: { autoSp
   return out;
 }
 
-export async function getMerchantRule(db: Q, user: CurrentUser, merchant: string): Promise<MerchantRuleView | null> {
+export async function getMerchantRule(db: Db, user: CurrentUser, merchant: string): Promise<MerchantRuleView | null> {
   return (await listMerchantRules(db, user)).find((r) => r.merchant === merchant) ?? null;
 }
 
@@ -96,7 +96,7 @@ export async function getMerchantRule(db: Q, user: CurrentUser, merchant: string
  * "Split {merchant} like this from now on" (equal): upserts the rule's participants and auto_split flag. Enabling needs
  * at least one active participant. Disabling keeps the participants (they stay a chip suggestion).
  */
-export async function setAutoSplit(db: Q, user: CurrentUser, merchant: string, input: SetAutoSplitInput): Promise<MerchantRuleView> {
+export async function setAutoSplit(db: Db, user: CurrentUser, merchant: string, input: SetAutoSplitInput): Promise<MerchantRuleView> {
   const name = merchant.trim();
   if (!name) throw new SplitError("invalid", "auto_split_no_merchant", "A transaction without a merchant cannot get an auto-split rule");
   return await db.transaction(async (q) => {
@@ -117,7 +117,7 @@ export async function setAutoSplit(db: Q, user: CurrentUser, merchant: string, i
 }
 
 /** Active auto-split rules as merchant → participant ids (import pipeline). */
-export async function autoSplitParticipants(db: Q, user: CurrentUser): Promise<Map<string, number[]>> {
+export async function autoSplitParticipants(db: Db, user: CurrentUser): Promise<Map<string, number[]>> {
   const out = new Map<string, number[]>();
   for (const r of (await db
     .select({ merchant: merchantRules.merchant, participantIds: merchantRules.participantIds })
@@ -141,7 +141,7 @@ export interface ApplyAutoSplitResult {
  * auto-split rule's participants (the rule must be on). Rows that already have splits are left alone. This is a user action, so the
  * rows are marked edited like a chip tap.
  */
-export async function applyAutoSplitToExisting(db: Q, user: CurrentUser, merchant: string): Promise<ApplyAutoSplitResult> {
+export async function applyAutoSplitToExisting(db: Db, user: CurrentUser, merchant: string): Promise<ApplyAutoSplitResult> {
   return await db.transaction(async (q) => {
     const rule = (await q
       .select({ participantIds: merchantRules.participantIds, autoSplit: merchantRules.autoSplit })

@@ -54,10 +54,11 @@ export function SourceRow({
         <div className="truncate text-body font-medium">{name}</div>
         {parts.length > 0 && (
           // Each part carries its " · " on the left; the negative margin plus the clip hide it at the start of every line.
+          // A part that renders nothing (yet) is hidden with its separator.
           <div className="overflow-hidden" data-testid="source-meta">
             <div className="-ml-4 flex flex-wrap items-center gap-y-0.5 text-meta text-2">
               {parts.map((p, i) => (
-                <span key={i} className="inline-flex items-center before:w-4 before:text-center before:text-3 before:content-['·']">
+                <span key={i} className="inline-flex items-center before:w-4 before:text-center before:text-3 before:content-['·'] empty:hidden">
                   {p}
                 </span>
               ))}

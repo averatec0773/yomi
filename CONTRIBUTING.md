@@ -23,7 +23,7 @@ Develop against the demo ledger or your own scratch copy, never against data you
 |---------|--------------|
 | `pnpm dev` | Web app on http://localhost:7773 (`PORT=8000 pnpm dev` or `pnpm dev -p 8000` for another port) |
 | `pnpm test` | Unit tests (Vitest); each test file gets its own in-memory PGlite |
-| `pnpm typecheck` | TypeScript across all packages |
+| `pnpm typecheck` | TypeScript across all packages, the e2e specs and the root config files |
 | `pnpm lint` | ESLint, including the framework-free rule for core, importers and contracts |
 | `pnpm e2e` | Playwright; starts two servers (ports 3120 and 3420) on fresh demo ledgers. First time: `pnpm exec playwright install chromium` |
 | `pnpm e2e:build && YOMI_E2E_PROD=1 pnpm e2e` | The same suite against a production build (`next start`), as CI runs it |
@@ -33,7 +33,6 @@ Develop against the demo ledger or your own scratch copy, never against data you
 | `pnpm import:files <files>` | Import statement files from the terminal |
 | `pnpm hooks:install` | Install the private-path guard as git `pre-commit` and `pre-push` hooks (see below) |
 | `pnpm guard` | Check that no tracked file is on the private path list |
-| `pnpm db:import-sqlite <file>` | Copy a v0.1 SQLite ledger into the current one ([guide](guides/upgrade-from-v0.1.md)) |
 | `pnpm secrets:gen-key` / `pnpm secrets:scrub-backups` | Print a new `YOMI_SECRET_KEY` / encrypt plaintext tokens left in `.tar.gz` backups |
 
 All four of `test`, `typecheck`, `lint` and `e2e` must pass before a pull request is merged; CI runs them.
@@ -59,7 +58,7 @@ A TypeScript monorepo (pnpm workspaces). Packages export TypeScript source direc
 |------|----------------|
 | `apps/web` | Next.js App Router pages and components; server components read through core, client components call the API. `components/README.md` documents the shared UI kit |
 | `packages/core` | Ledger rules: import pipeline, dedup, categories, splits, settlements, stats, assets, sync jobs, CLIs. No framework imports |
-| `packages/db` | Drizzle schema, migrations, client (PGlite or Postgres), backups, directory lock, v0.1 SQLite import |
+| `packages/db` | Drizzle schema, migrations, client (PGlite or Postgres), backups, directory lock |
 | `packages/importers` | Statement parsers (Alipay, WeChat, ICBC PDF and SMS, Bank of America CSV) and the Plaid and IBKR Flex clients and mappers. File in, normalized rows out; never touches the database |
 | `packages/contracts` | Zod schemas for API inputs and outputs, shared by the API and the web app (MIT) |
 | `packages/api` | Hono HTTP API mounted inside the Next.js app; thin routes over core |

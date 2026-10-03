@@ -33,7 +33,7 @@ export async function MonthlyTrend({ points, currency }: { points: MonthlyPoint[
           return (
             <div
               key={p.month}
-              title={`${shortMonth(p.month, locale, true)} ${moneyText(p.spendingMinor, currency)}${p.partial ? t.stats.trend.partial : ""}`}
+              title={`${shortMonth(p.month, locale, true)} ${moneyText(p.spendingMinor, currency)}${p.partial ? t.analysis.trend.partial : ""}`}
               className="group relative flex min-w-0 flex-1 flex-col items-center gap-1"
             >
               {showValues ? (
@@ -56,13 +56,13 @@ export async function MonthlyTrend({ points, currency }: { points: MonthlyPoint[
           );
         })}
       </div>
-      {anyPartial && <figcaption className="text-meta text-3">{t.stats.trend.partialCaption}</figcaption>}
+      {anyPartial && <figcaption className="text-meta text-3">{t.analysis.trend.partialCaption}</figcaption>}
       <table className="sr-only">
-        <caption>{fmt(t.stats.trend.tableCaption, { currency })}</caption>
+        <caption>{fmt(t.analysis.trend.tableCaption, { currency })}</caption>
         <thead>
           <tr>
-            <th scope="col">{t.stats.trend.month}</th>
-            <th scope="col">{t.stats.trend.spending}</th>
+            <th scope="col">{t.analysis.trend.month}</th>
+            <th scope="col">{t.analysis.trend.spending}</th>
           </tr>
         </thead>
         <tbody>
@@ -70,7 +70,7 @@ export async function MonthlyTrend({ points, currency }: { points: MonthlyPoint[
             <tr key={p.month}>
               <th scope="row">
                 {shortMonth(p.month, locale, true)}
-                {p.partial ? t.stats.trend.partial : ""}
+                {p.partial ? t.analysis.trend.partial : ""}
               </th>
               <td>{moneyText(p.spendingMinor, currency)}</td>
             </tr>

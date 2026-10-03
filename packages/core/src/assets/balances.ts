@@ -10,8 +10,6 @@ import type { ProviderAccount } from "../sync/provider";
 import { clockNow, todayIn } from "../time/zone";
 import type { CurrentUser } from "../user";
 
-type Q = Db;
-
 export type AssetsErrorCode = "assets_account_not_found" | "assets_invalid_date" | "assets_invalid_amount";
 
 export class AssetsError extends CodedError {
@@ -56,7 +54,7 @@ export interface BalanceSnapshotInput {
  * balance (not a carry-forward copy) also drops the carry-forward copies after its day that repeated a
  * balance older than it.
  */
-export async function upsertBalanceSnapshot(q: Q, user: CurrentUser, s: BalanceSnapshotInput): Promise<void> {
+export async function upsertBalanceSnapshot(q: Db, user: CurrentUser, s: BalanceSnapshotInput): Promise<void> {
   const raw = s.raw && Object.keys(s.raw).length ? { ...s.raw } : null;
   await q.insert(accountBalanceSnapshots)
     .values({ userId: user.id, accountId: s.accountId, asOf: s.asOf, balanceMinor: s.balanceMinor, currency: s.currency, source: s.source, raw })
@@ -92,7 +90,7 @@ export function providerBalanceMinor(a: ProviderAccount): { balanceMinor: number
 }
 
 /** Snapshots today's balances of a bank connection's accounts (called during each sync). Returns how many were written. */
-export async function recordProviderBalances(q: Q, user: CurrentUser, connectionId: number, providerAccounts: readonly ProviderAccount[], today: string): Promise<number> {
+export async function recordProviderBalances(q: Db, user: CurrentUser, connectionId: number, providerAccounts: readonly ProviderAccount[], today: string): Promise<number> {
   const ledgerOf = new Map(
     (await q
       .select({ providerAccountId: bankAccounts.providerAccountId, accountId: bankAccounts.accountId })
@@ -165,7 +163,7 @@ export function statementBalances(items: readonly { key: string; row: Normalized
  * without a statement snapshot gets one from its stored rows' raw 账户余额 (dated the last row's day).
  * Idempotent. Returns the number of snapshots written.
  */
-export async function backfillStatementBalances(q: Q, user: CurrentUser): Promise<number> {
+export async function backfillStatementBalances(q: Db, user: CurrentUser): Promise<number> {
   const done = new Set(
     (await q
       .select({ raw: accountBalanceSnapshots.raw })
@@ -208,7 +206,7 @@ export async function backfillStatementBalances(q: Q, user: CurrentUser): Promis
 }
 
 /** Removes the statement balances an import batch wrote (on revert). */
-export async function removeBatchBalances(q: Q, user: CurrentUser, batchId: number): Promise<number> {
+export async function removeBatchBalances(q: Db, user: CurrentUser, batchId: number): Promise<number> {
   const rows = await q
     .select({ id: accountBalanceSnapshots.id, raw: accountBalanceSnapshots.raw })
     .from(accountBalanceSnapshots)
@@ -232,7 +230,7 @@ export interface StartingBalanceInput {
 
 type AccountRow = typeof accounts.$inferSelect;
 
-async function getAccount(q: Q, user: CurrentUser, id: number): Promise<AccountRow> {
+async function getAccount(q: Db, user: CurrentUser, id: number): Promise<AccountRow> {
   const a = (await q
     .select()
     .from(accounts)
@@ -286,7 +284,7 @@ export async function setStartingBalance(db: Db, user: CurrentUser, accountId: n
  * Net of an account's transactions per day and currency after `after` up to `to` (duplicates of rows
  * on another account and closed rows excluded), oldest first.
  */
-async function netByDay(q: Q, user: CurrentUser, accountId: number, after: string, to: string): Promise<{ day: string; currency: string; minor: number }[]> {
+async function netByDay(q: Db, user: CurrentUser, accountId: number, after: string, to: string): Promise<{ day: string; currency: string; minor: number }[]> {
   return (await q
     .select({ day: transactions.occurredOn, currency: transactions.currency, minor: sum(transactions.amountMinor) })
     .from(transactions)
@@ -343,7 +341,7 @@ export function daysBetween(from: string, to: string): string[] {
  * it, the latest snapshot on or before each day carries forward. Accounts with nothing known are
  * included with empty maps.
  */
-export async function balanceTimeline(db: Q, user: CurrentUser, range: { from: string; to: string }): Promise<BalanceTimeline> {
+export async function balanceTimeline(db: Db, user: CurrentUser, range: { from: string; to: string }): Promise<BalanceTimeline> {
   const days = daysBetween(range.from, range.to);
   const linked = new Set(
     (await db
@@ -405,14 +403,6 @@ export async function balanceTimeline(db: Q, user: CurrentUser, range: { from: s
     out.push({ account: a, class: balanceClassOf(a.kind), plaidLinked: linked.has(a.id), daily, sourceAt });
   }
   return { days, accounts: out };
-}
-
-/** Balance per currency of every account at the end of `day` (only accounts with something known). */
-export async function balancesOn(db: Q, user: CurrentUser, day: string): Promise<{ account: AccountRow; currency: string; balanceMinor: number }[]> {
-  const t = await balanceTimeline(db, user, { from: day, to: day });
-  const out: { account: AccountRow; currency: string; balanceMinor: number }[] = [];
-  for (const a of t.accounts) for (const [c, s] of a.daily) if (s[0] != null) out.push({ account: a.account, currency: c, balanceMinor: s[0] });
-  return out;
 }
 
 /**

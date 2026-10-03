@@ -14,10 +14,11 @@ import {
   setAutoSplit,
   setMerchantSuggest,
   setSplit,
-  suggestSplit,
   toggleParticipant,
   unsplitSuggestions,
 } from "./index";
+import { getTransaction } from "./internal";
+import { NO_SUGGESTION, suggestSplits } from "./suggest";
 
 const TODAY = "2026-09-29";
 const at = (day: string) => `${day}T12:00:00+08:00`;
@@ -39,6 +40,14 @@ async function splitRow(db: Db, categoryId: number, ids: number[], day = "2026-0
   const id = await addTx(db, { amountMinor: -3000, categoryId, merchant: "", accountId, occurredAt: at(day) });
   await setSplit(db, user, id, { participantIds: ids, mode: "equal" });
   return id;
+}
+
+/** The suggestion for one row: suggestSplits over that row alone, as the list computes it. */
+async function suggestSplit(db: Db, u: typeof user, txId: number, opts: { today?: string }) {
+  const t = await getTransaction(db, u, txId);
+  const hasSplits = (await getSplit(db, u, txId)) !== null;
+  const row = { ...t, hasSplits };
+  return (await suggestSplits(db, u, [row], opts)).get(txId) ?? NO_SUGGESTION;
 }
 
 async function target(db: Db, categoryId: number | null, merchant = "New Market", day = "2026-09-20") {

@@ -17,7 +17,7 @@ export interface StatCardProps {
 }
 
 /**
- * One card for hero numbers on /stats, /split and /assets: surface, hairline, 12px radius, 20px padding. Transactions
+ * One card for hero numbers on /analysis, /split and /assets: surface, hairline, 12px radius, 20px padding. Transactions
  * keeps its unboxed spend strip.
  */
 export function StatCard({ label, value, meta, size = "hero", children, className, ...rest }: StatCardProps) {

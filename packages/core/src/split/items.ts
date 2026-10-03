@@ -1,8 +1,8 @@
-import { settlementItems } from "@yomi/db";
+import { settlementItems, type Db } from "@yomi/db";
 import { and, eq } from "@yomi/db/orm";
 import type { CurrentUser } from "../user";
 import { type AaEvent, aaEvents } from "./balances";
-import { assertCurrency, getParticipant, type Q } from "./internal";
+import { assertCurrency, getParticipant } from "./internal";
 
 /**
  * Which split items are still open with one person in one currency.
@@ -182,7 +182,7 @@ export function settledOnDates(events: readonly AaEvent[], rows: readonly ItemRo
   return out;
 }
 
-export async function itemRowsOf(db: Q, user: CurrentUser, participantId: number, currency: string): Promise<ItemRow[]> {
+export async function itemRowsOf(db: Db, user: CurrentUser, participantId: number, currency: string): Promise<ItemRow[]> {
   return await db
     .select({
       settlementId: settlementItems.settlementId,
@@ -199,7 +199,7 @@ export async function itemRowsOf(db: Q, user: CurrentUser, participantId: number
     );
 }
 
-export async function coverageFor(db: Q, user: CurrentUser, participantId: number, currency: string): Promise<Coverage> {
+export async function coverageFor(db: Db, user: CurrentUser, participantId: number, currency: string): Promise<Coverage> {
   const c = assertCurrency(currency);
   const events = (await aaEvents(db, user, participantId)).filter((e) => e.currency === c);
   return coverageOf(events, await itemRowsOf(db, user, participantId, c));
@@ -235,7 +235,7 @@ export function toOpenItem(e: CoverageEntry): OpenItem | null {
 }
 
 /** Split items still open with this person in this currency, oldest first. */
-export async function openItems(db: Q, user: CurrentUser, participantId: number, currency: string): Promise<OpenItem[]> {
+export async function openItems(db: Db, user: CurrentUser, participantId: number, currency: string): Promise<OpenItem[]> {
   await getParticipant(db, user, participantId);
   return (await coverageFor(db, user, participantId, currency))
     .entries.map(toOpenItem)

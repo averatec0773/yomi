@@ -1,7 +1,7 @@
-import { counterpartyIgnores, IDENTITY_KINDS, type IdentityKind, participantIdentities } from "@yomi/db";
+import { counterpartyIgnores, IDENTITY_KINDS, type IdentityKind, participantIdentities, type Db } from "@yomi/db";
 import { and, asc, eq } from "@yomi/db/orm";
 import type { CurrentUser } from "../user";
-import { getParticipant, type Q, SplitError } from "./internal";
+import { getParticipant, SplitError } from "./internal";
 
 export { IDENTITY_KINDS, type IdentityKind };
 
@@ -25,18 +25,12 @@ export const TEXT_MATCH_KINDS: readonly IdentityKind[] = ["wechat", "zelle_name"
 
 /**
  * Matching form of an identity value: trimmed, whitespace runs collapsed to one space, lower case.
- * Phones keep digits only; emails lose all whitespace. Migration 0006 does the same in SQL for the
- * copied aliases (ASCII lower case only, which differs just for accented Latin capitals).
+ * Phones keep digits only; emails lose all whitespace.
  */
 export function normalizeIdentity(kind: IdentityKind, value: string): string {
   if (kind === "zelle_phone") return value.replace(/\D/g, "");
   if (kind === "zelle_email") return value.replace(/\s+/g, "").toLowerCase();
   return value.trim().replace(/\s+/g, " ").toLowerCase();
-}
-
-/** Same rule as migration 0006: non-ASCII (CJK, emoji, full-width) or a wxid_ id → WeChat, else a Zelle name. */
-export function guessAliasKind(value: string): IdentityKind {
-  return /[^\x20-\x7e]/.test(value) || /^wxid_/i.test(value.trim()) ? "wechat" : "zelle_name";
 }
 
 function assertKind(kind: string): IdentityKind {
@@ -73,7 +67,7 @@ function toIdentity(r: IdentityRow): Identity {
 }
 
 /** All identities of the user (or of one participant), oldest first. */
-export async function listIdentities(db: Q, user: CurrentUser, participantId?: number): Promise<Identity[]> {
+export async function listIdentities(db: Db, user: CurrentUser, participantId?: number): Promise<Identity[]> {
   return (await db
     .select()
     .from(participantIdentities)
@@ -88,7 +82,7 @@ export async function listIdentities(db: Q, user: CurrentUser, participantId?: n
     .map(toIdentity);
 }
 
-export async function findIdentity(db: Q, user: CurrentUser, kind: IdentityKind, normalized: string): Promise<Identity | null> {
+export async function findIdentity(db: Db, user: CurrentUser, kind: IdentityKind, normalized: string): Promise<Identity | null> {
   const r = (await db
     .select()
     .from(participantIdentities)
@@ -108,7 +102,7 @@ export async function findIdentity(db: Q, user: CurrentUser, kind: IdentityKind,
  * someone else is a conflict. Removes a matching "ignored" entry, since the user now says who it is.
  */
 export async function addIdentity(
-  db: Q,
+  db: Db,
   user: CurrentUser,
   participantId: number,
   input: IdentityInput,
@@ -136,7 +130,7 @@ export async function addIdentity(
   return toIdentity(row);
 }
 
-export async function removeIdentity(db: Q, user: CurrentUser, id: number): Promise<void> {
+export async function removeIdentity(db: Db, user: CurrentUser, id: number): Promise<void> {
   const r = (await db
     .select({ id: participantIdentities.id })
     .from(participantIdentities)
@@ -147,7 +141,7 @@ export async function removeIdentity(db: Q, user: CurrentUser, id: number): Prom
 }
 
 /** Hides a counterparty from "Who sends you money". Idempotent. */
-export async function ignoreCounterparty(db: Q, user: CurrentUser, input: IdentityInput): Promise<void> {
+export async function ignoreCounterparty(db: Db, user: CurrentUser, input: IdentityInput): Promise<void> {
   const { kind, normalized } = cleanIdentity(input);
   await db.insert(counterpartyIgnores).values({ userId: user.id, kind, normalized }).onConflictDoNothing();
 }

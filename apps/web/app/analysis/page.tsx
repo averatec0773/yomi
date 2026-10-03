@@ -7,7 +7,7 @@ import { CurrencyInsights, type InsightContext, PartialCurrencies, sourceLabel, 
 import { type SourceLine, SourcesPopover } from "@/components/analysis/sources-popover";
 import { CsvLink } from "@/components/csv-link";
 import { Money } from "@/components/money";
-import { CurrencySection } from "@/components/stats/currency-section";
+import { CurrencySection } from "@/components/analysis/currency-section";
 import { PageHeader } from "@/components/ui-kit/page-header";
 import { PeriodBar } from "@/components/ui-kit/period-bar";
 import { Segmented } from "@/components/ui-kit/segmented";
@@ -23,14 +23,14 @@ import { distinctSourceNames } from "@/lib/source-names";
 
 export async function generateMetadata() {
   const { t } = await getI18n();
-  return { title: `${t.stats.title} · yomi` };
+  return { title: `${t.analysis.title} · yomi` };
 }
 
 const KIND_PRESET = { day: "yesterday", week: "this_week", month: "this_month", year: "this_year" } as const;
 
 /**
  * Analysis: one place for the numbers of any period. A Day / Week / Month / Year switcher sits next to the PeriodBar
- * (presets and custom ranges). A day stays light (DayView). Any other period keeps the Stats composition: a net worth
+ * (presets and custom ranges). A day stays light (DayView). Any other period shows the full composition: a net worth
  * line (with investments), then per currency the summary card with its Insights, the monthly trend, categories, and
  * the largest rows or top merchants. "Today" is the user's time-zone day.
  */
@@ -84,7 +84,7 @@ export default async function AnalysisPage({ searchParams }: PageProps<"/analysi
 
   const header = (
     <PageHeader
-      title={t.stats.title}
+      title={t.analysis.title}
       controls={
         <>
           <Segmented
@@ -140,7 +140,7 @@ export default async function AnalysisPage({ searchParams }: PageProps<"/analysi
       {nwChange && (
         <>
           <span>
-            {rich(t.stats.netWorthChange, {
+            {rich(t.analysis.netWorthChange, {
               amount: nwChange.converted ? (
                 <Money minor={nwChange.converted.changeMinor} currency={nwChange.converted.currency} sign="signed" className="text-foreground" />
               ) : (
@@ -157,7 +157,7 @@ export default async function AnalysisPage({ searchParams }: PageProps<"/analysi
           </span>
           <Link href="/assets" className="inline-flex items-center gap-1 text-primary underline-offset-4 hover:underline">
             <ArrowRightIcon className="size-3.5" aria-hidden />
-            {t.stats.netWorthLink}
+            {t.analysis.netWorthLink}
           </Link>
         </>
       )}

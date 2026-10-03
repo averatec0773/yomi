@@ -4,9 +4,9 @@ import {
   Category,
   CategoryList,
   MonthList,
-  MonthOverview,
   RecategorizeResult,
   SetCategoryResult,
+  StatsResponse,
   Target,
   TransactionItem,
   TransactionPage,
@@ -99,16 +99,15 @@ describe("ledger api", () => {
     expect(list.categories.find((x) => x.id === pet.id)?.archivedAt).not.toBeNull();
   });
 
-  it("month overview, targets and recategorize", async () => {
+  it("targets in stats, and recategorize", async () => {
     const { app } = await setup();
     const t = await app.request("/api/targets", json("PUT", { month: null, amountMinor: 100000, currency: "CNY" }));
     expect(Target.parse(await t.json())).toMatchObject({ month: null, amountMinor: 100000 });
     expect((await app.request("/api/targets", json("PUT", { month: null, amountMinor: -1, currency: "CNY" }))).status).toBe(400);
 
-    const o = MonthOverview.parse(await (await app.request("/api/month/2026-09")).json());
-    expect(o.currencies[0]).toMatchObject({ currency: "CNY", spendingMinor: 8000, previousMonthSpendingMinor: 700 });
+    const o = StatsResponse.parse(await (await app.request("/api/stats?from=2026-09-01&to=2026-09-30")).json());
+    expect(o.currencies[0]).toMatchObject({ currency: "CNY", spendingMinor: 8000, previous: { spendingMinor: 700 } });
     expect(o.currencies[0]!.target).toMatchObject({ remainingMinor: 92000 });
-    expect((await app.request("/api/month/2026-13")).status).toBe(400);
 
     const rec = await app.request("/api/ledger/recategorize", { method: "POST" });
     expect(RecategorizeResult.parse(await rec.json())).toEqual({ scanned: 3, categoryChanged: 3, merchantChanged: 1, kindChanged: 0 });

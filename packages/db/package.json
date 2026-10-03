@@ -1,7 +1,7 @@
 {
   "name": "@yomi/db",
   "version": "0.1.0",
-  "description": "yomi database layer: Drizzle schema, migrations, PGlite or Postgres client, backups, v0.1 SQLite import.",
+  "description": "yomi database layer: Drizzle schema, migrations, PGlite or Postgres client, backups.",
   "license": "AGPL-3.0-only",
   "repository": {
     "type": "git",
@@ -19,17 +19,14 @@
   "scripts": {
     "generate": "drizzle-kit generate",
     "migrate": "tsx src/cli/migrate.ts",
-    "import-sqlite": "tsx src/cli/import-sqlite.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.8",
-    "better-sqlite3": "^13.0.3",
     "drizzle-orm": "0.45.3",
     "pg": "^8.23.1"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^9.6.0",
     "@types/pg": "^8.23.1",
     "drizzle-kit": "^0.31.11",
     "tsx": "^4.21.0"

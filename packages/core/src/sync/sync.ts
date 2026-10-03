@@ -70,8 +70,6 @@ export interface SyncResult {
   warnings: Notice[];
 }
 
-type Q = Db;
-
 /** How a lock reason reads in a notice (param `reason` carries the code). */
 const LOCK_WORDS: Record<LockReason, string> = { edited: "edited by hand", split: "split", settled: "recorded as a settlement" };
 type ConnRow = typeof bankConnections.$inferSelect;
@@ -102,7 +100,7 @@ async function getConnection(db: Db, user: CurrentUser, id: number): Promise<Con
   return c;
 }
 
-async function upsertBankAccounts(tx: Q, user: CurrentUser, connId: number, providerAccounts: readonly ProviderAccount[]): Promise<void> {
+async function upsertBankAccounts(tx: Db, user: CurrentUser, connId: number, providerAccounts: readonly ProviderAccount[]): Promise<void> {
   for (const a of providerAccounts) {
     const accountId = await ensureAccount(tx, user, ledgerSpec(a));
     await tx.insert(bankAccounts)
@@ -376,7 +374,7 @@ function assertEnvironmentAvailable(provider: BankProvider, accessToken: string)
   if (!supportsToken(provider, accessToken)) throw environmentUnavailable(provider.tokenEnvironment(accessToken)!, "connection");
 }
 
-async function findStored(q: Q, userId: number, source: string, externalId: string) {
+async function findStored(q: Db, userId: number, source: string, externalId: string) {
   return (await q
     .select()
     .from(transactions)

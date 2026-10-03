@@ -1,9 +1,9 @@
-import { type Db, transactions } from "@yomi/db";
+import { type Db, transactions, userSettings } from "@yomi/db";
 import { eq } from "@yomi/db/orm";
 import { LedgerError } from "../ledger/errors";
 import { DEFAULT_TIME_ZONE, isTimeZone, occurredOnFor, todayIn } from "../time/zone";
 import type { CurrentUser } from "../user";
-import { type Q, readSetting, writeSetting } from "./store";
+import { readSetting, writeSetting } from "./store";
 
 const TIME_ZONE_KEY = "timeZone";
 /** The zone transactions.occurred_on was last computed in; differs from timeZone only before a recompute. */
@@ -20,18 +20,18 @@ export interface TimeZoneChange extends TimeZoneSetting {
   changed: number;
 }
 
-export async function getTimeZoneSetting(q: Q, user: CurrentUser): Promise<TimeZoneSetting> {
+export async function getTimeZoneSetting(q: Db, user: CurrentUser): Promise<TimeZoneSetting> {
   const stored = await readSetting(q, user, TIME_ZONE_KEY);
   return stored && isTimeZone(stored) ? { timeZone: stored, isSet: true } : { timeZone: DEFAULT_TIME_ZONE, isSet: false };
 }
 
 /** The user's IANA time zone (default America/Chicago). */
-export async function getTimeZone(q: Q, user: CurrentUser): Promise<string> {
+export async function getTimeZone(q: Db, user: CurrentUser): Promise<string> {
   return (await getTimeZoneSetting(q, user)).timeZone;
 }
 
 /** Today's 'YYYY-MM-DD' in the user's time zone, the day transactions.occurred_on is counted in. */
-export async function userToday(q: Q, user: CurrentUser): Promise<string> {
+export async function userToday(q: Db, user: CurrentUser): Promise<string> {
   return todayIn(await getTimeZone(q, user));
 }
 
@@ -65,11 +65,26 @@ export async function ensureOccurredOn(db: Db, user: CurrentUser): Promise<numbe
   return await recomputeOccurredOn(db, user, zone);
 }
 
-/** Stores the zone and regroups every transaction by it. */
-export async function setTimeZone(db: Db, user: CurrentUser, timeZone: string): Promise<TimeZoneChange> {
+/**
+ * Stores the zone and regroups every transaction by it, in one transaction. With `ifUnset` (the browser's zone on a
+ * first visit) the zone is stored only when none is: the insert itself is the check, so it can never overwrite a
+ * zone the user picked while the request was on its way; then it returns the stored zone with changed 0.
+ */
+export async function setTimeZone(db: Db, user: CurrentUser, timeZone: string, opts: { ifUnset?: boolean } = {}): Promise<TimeZoneChange> {
   const zone = timeZone.trim();
   if (!isTimeZone(zone)) throw new LedgerError("invalid", "invalid_time_zone", `Unknown time zone: ${timeZone}`, { value: timeZone });
-  await writeSetting(db, user, TIME_ZONE_KEY, zone);
-  const changed = await recomputeOccurredOn(db, user, zone);
-  return { timeZone: zone, isSet: true, changed };
+  return await db.transaction(async (tx) => {
+    if (opts.ifUnset) {
+      const stored = await tx
+        .insert(userSettings)
+        .values({ userId: user.id, key: TIME_ZONE_KEY, value: zone })
+        .onConflictDoNothing({ target: [userSettings.userId, userSettings.key] })
+        .returning({ id: userSettings.id });
+      if (stored.length === 0) return { ...(await getTimeZoneSetting(tx, user)), changed: 0 };
+    } else {
+      await writeSetting(tx, user, TIME_ZONE_KEY, zone);
+    }
+    const changed = await recomputeOccurredOn(tx, user, zone);
+    return { timeZone: zone, isSet: true, changed };
+  });
 }
