@@ -647,3 +647,15 @@ test("import: each source has a collapsed how-to guide that links to its GitHub 
   await expect(boa.getByRole("link", { name: "guide on GitHub" })).toHaveAttribute("href", "https://github.com/averatec0773/yomi/blob/main/guides/import-boa.md");
   await expect(page.getByTestId("import-guide-sms").getByRole("link", { name: "guide on GitHub", includeHidden: true })).toHaveAttribute("href", /import-icbc\.md#sms-alerts$/);
 });
+
+test("import: uploads up to 25 MB reach the parser whole (past Next's 10 MB proxy buffer); larger ones get a 413", async ({ request }) => {
+  const MB = 1024 * 1024;
+  const file = (size: number) => ({ multipart: { file: { name: "statement.csv", mimeType: "text/csv", buffer: Buffer.alloc(size, "x") } } });
+  // A cut-off body would fail as a broken form; a whole one reaches the parser, which does not know the file.
+  const whole = await request.post("/api/import/preview", file(12 * MB));
+  expect(whole.status()).toBe(422);
+  expect((await whole.json()).code).toMatch(/^import_/);
+  const big = await request.post("/api/import/preview", file(25 * MB + 1));
+  expect(big.status()).toBe(413);
+  expect(await big.json()).toMatchObject({ code: "import_file_too_large", params: { maxMb: 25 } });
+});

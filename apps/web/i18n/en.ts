@@ -225,6 +225,7 @@ export const en = {
       capture_candidate_invalid: "That statement row is no longer offered for this capture. Reload the page.",
       capture_nothing_to_undo: "There is nothing to undo here.",
       import_file_missing: "No file was uploaded.",
+      import_file_too_large: "This file is larger than {maxMb} MB, the most yomi accepts in one upload. Export a shorter period and import it in parts.",
       import_parse_failed: "{message}",
       import_unknown_format: "Unrecognized statement file: {fileName}",
       import_header_not_found: "The header row ({header}) was not found.",

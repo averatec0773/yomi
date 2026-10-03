@@ -2,6 +2,7 @@ import type { ApiError, BatchList, ImportPreview, ImportResult, RevertResult } f
 import { CodedError, commitImport, getCurrentUser, ImportError, listBatches, type ParseFn, previewImport, revertBatch } from "@yomi/core";
 import type { Db } from "@yomi/db";
 import { Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 
 const ERROR_STATUS: Record<ImportError["kind"], ContentfulStatusCode> = {
@@ -9,6 +10,9 @@ const ERROR_STATUS: Record<ImportError["kind"], ContentfulStatusCode> = {
   batch_not_found: 404,
   batch_already_reverted: 409,
 };
+
+/** Largest upload (the whole form body) accepted, checked before it is read; apps/web/next.config.ts lets it through the proxy. */
+const MAX_UPLOAD_MB = 25;
 
 function truthy(v: unknown): boolean {
   return typeof v === "string" && ["1", "true", "yes", "on"].includes(v.trim().toLowerCase());
@@ -42,8 +46,13 @@ export function importRoutes(deps: { getDb: () => Db | Promise<Db>; parse: Parse
     }
   }
   const missingFile: ApiError = { error: "Missing the file field `file`", code: "import_file_missing" };
+  const uploadLimit = bodyLimit({
+    maxSize: MAX_UPLOAD_MB * 1024 * 1024,
+    onError: (c) =>
+      c.json({ error: `The file is larger than ${MAX_UPLOAD_MB} MB`, code: "import_file_too_large", params: { maxMb: MAX_UPLOAD_MB } } satisfies ApiError, 413),
+  });
 
-  r.post("/preview", async (c) => {
+  r.post("/preview", uploadLimit, async (c) => {
     const upload = await readUpload(await c.req.parseBody());
     if (!upload) return c.json(missingFile, 400);
     const out = await withParseErrors(async () =>
@@ -53,7 +62,7 @@ export function importRoutes(deps: { getDb: () => Db | Promise<Db>; parse: Parse
     return c.json(out satisfies ImportPreview);
   });
 
-  r.post("/commit", async (c) => {
+  r.post("/commit", uploadLimit, async (c) => {
     const body = await c.req.parseBody();
     const upload = await readUpload(body);
     if (!upload) return c.json(missingFile, 400);

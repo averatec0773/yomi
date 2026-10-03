@@ -219,6 +219,7 @@ export const zhCN: Dictionary = {
       capture_candidate_invalid: "这笔账单记录已不在候选里，请刷新页面。",
       capture_nothing_to_undo: "这里没有可撤销的。",
       import_file_missing: "缺少文件字段 file",
+      import_file_too_large: "文件超过 {maxMb} MB，超出单次上传的上限。请导出较短的时间段，分几次导入。",
       import_parse_failed: "{message}",
       import_unknown_format: "无法识别的账单文件：{fileName}",
       import_header_not_found: "找不到表头（{header}）",
