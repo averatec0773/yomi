@@ -7,7 +7,8 @@ import { getMonthlyTarget, type MonthTarget } from "../month/target";
 import { getTimeZone } from "../settings/time-zone";
 import { clockNow, todayIn } from "../time/zone";
 import type { CurrentUser } from "../user";
-import { assertRange, type DateRange, daysInclusive, isDate, monthEnd, monthsIn, monthStart, previousRange, wholeMonths } from "./period";
+import { daysInclusive, isDate, monthEnd, monthStart } from "../time/day";
+import { assertRange, type DateRange, matchPreset, monthsIn, previousRange, resolvePeriod, type StatsPreset, wholeMonths } from "./period";
 
 export interface CategoryShare {
   categoryId: number | null;
@@ -132,7 +133,7 @@ export async function rangeOverview(
 ): Promise<RangeOverview> {
   assertRange(range);
   const today = opts.today ?? todayIn(await getTimeZone(db, user));
-  if (!isDate(today)) throw new LedgerError("invalid_input", "invalid_date", `Invalid date: ${today}`, { value: today });
+  if (!isDate(today)) throw new LedgerError("invalid", "invalid_date", `Invalid date: ${today}`, { value: today });
   const userId = user.id;
   const rows = await loadRangeRows(db, userId, range.from, range.to);
   const prevRange = previousRange(range);
@@ -244,4 +245,23 @@ export async function rangeOverview(
     month: single,
     currencies: out,
   };
+}
+
+/**
+ * The overview for a stats request (a preset, or from and to; this month by default), resolved against today in the
+ * user's zone (`today` pins it), with the preset that range matches.
+ */
+export async function statsFor(
+  db: Db,
+  user: CurrentUser,
+  sel: { preset?: StatsPreset | "custom"; from?: string; to?: string },
+  opts: { today?: string } = {},
+): Promise<RangeOverview & { preset: StatsPreset | "custom" }> {
+  const today = opts.today ?? todayIn(await getTimeZone(db, user));
+  const { preset, from, to } = sel;
+  const range =
+    from !== undefined && to !== undefined
+      ? resolvePeriod({ preset: "custom", from, to }, today)
+      : resolvePeriod({ preset: preset && preset !== "custom" ? preset : "this_month" }, today);
+  return { preset: matchPreset(range, today), ...(await rangeOverview(db, user, range, { today })) };
 }

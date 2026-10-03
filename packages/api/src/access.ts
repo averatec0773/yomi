@@ -1,7 +1,7 @@
 import { AccessInput, type AccessResult, type ApiError } from "@yomi/contracts";
 import { accessCookieHeader, clearAccessCookieHeader, readAccessToken, tokenMatches } from "@yomi/core";
 import { type Context, Hono } from "hono";
-import { readJson, withSplitErrors } from "./split";
+import { readJson } from "./http";
 
 function isHttps(c: Context): boolean {
   const forwarded = c.req.header("x-forwarded-proto")?.split(",")[0]?.trim();
@@ -13,7 +13,7 @@ function isHttps(c: Context): boolean {
  * access gate in apps/web/proxy.ts, which does the per-request check.
  */
 export function accessRoutes(): Hono {
-  const r = withSplitErrors(new Hono());
+  const r = new Hono();
 
   r.post("/access", async (c) => {
     const { token: presented } = await readJson(c, AccessInput);

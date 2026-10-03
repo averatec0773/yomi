@@ -6,6 +6,7 @@ import { seed } from "../seed";
 import { balances, createParticipant, listParticipants } from "../split";
 import { getCurrentUser } from "../user";
 import { createQuickEntry } from "./create";
+import { quickDraft } from "./draft";
 import { parseQuickEntry, type QuickParseContext } from "./parse";
 
 const ctx: QuickParseContext = {
@@ -218,6 +219,20 @@ describe("createQuickEntry", () => {
     return db;
   }
   const user = getCurrentUser();
+
+  it("quickDraft matches identities as aliases, except a Zelle e-mail or phone, and defaults to CNY", async () => {
+    const db = await freshDb();
+    const roommate = await createParticipant(db, user, "室友", [
+      { kind: "wechat", value: "阿王" },
+      { kind: "zelle_email", value: "wang@example.com" },
+    ]);
+    expect(await quickDraft(db, user, { text: "@阿王 80 电费", today: "2026-09-29" })).toMatchObject({
+      participantIds: [roommate.id],
+      currency: "CNY",
+      date: "2026-09-29",
+    });
+    expect((await quickDraft(db, user, { text: "@wang@example.com 80 电费", today: "2026-09-29" })).participantIds).toEqual([]);
+  });
 
   it("I paid: manual expense on the auto-created 手动记账 account, with splits", async () => {
     const db = await freshDb();

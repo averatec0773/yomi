@@ -1,7 +1,7 @@
 import { type Db, transactions } from "@yomi/db";
 import { eq } from "@yomi/db/orm";
 import { LedgerError } from "../ledger/errors";
-import { DEFAULT_TIME_ZONE, isTimeZone, occurredOnFor } from "../time/zone";
+import { DEFAULT_TIME_ZONE, isTimeZone, occurredOnFor, todayIn } from "../time/zone";
 import type { CurrentUser } from "../user";
 import { type Q, readSetting, writeSetting } from "./store";
 
@@ -28,6 +28,11 @@ export async function getTimeZoneSetting(q: Q, user: CurrentUser): Promise<TimeZ
 /** The user's IANA time zone (default America/Chicago). */
 export async function getTimeZone(q: Q, user: CurrentUser): Promise<string> {
   return (await getTimeZoneSetting(q, user)).timeZone;
+}
+
+/** Today's 'YYYY-MM-DD' in the user's time zone, the day transactions.occurred_on is counted in. */
+export async function userToday(q: Q, user: CurrentUser): Promise<string> {
+  return todayIn(await getTimeZone(q, user));
 }
 
 /** Recomputes occurred_on for every row of the user in `timeZone` (default: the stored zone). Returns rows changed. */
@@ -63,7 +68,7 @@ export async function ensureOccurredOn(db: Db, user: CurrentUser): Promise<numbe
 /** Stores the zone and regroups every transaction by it. */
 export async function setTimeZone(db: Db, user: CurrentUser, timeZone: string): Promise<TimeZoneChange> {
   const zone = timeZone.trim();
-  if (!isTimeZone(zone)) throw new LedgerError("invalid_input", "invalid_time_zone", `Unknown time zone: ${timeZone}`, { value: timeZone });
+  if (!isTimeZone(zone)) throw new LedgerError("invalid", "invalid_time_zone", `Unknown time zone: ${timeZone}`, { value: timeZone });
   await writeSetting(db, user, TIME_ZONE_KEY, zone);
   const changed = await recomputeOccurredOn(db, user, zone);
   return { timeZone: zone, isSet: true, changed };

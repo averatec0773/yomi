@@ -1,5 +1,4 @@
 import {
-  type ApiError,
   IbkrSaveInput,
   IbkrTestInput,
   type IbkrTestResult,
@@ -10,10 +9,10 @@ import {
   type SecretsView,
 } from "@yomi/contracts";
 import {
+  CodedError,
   type FlexOptions,
   getCurrentUser,
   ibkrSecretsView,
-  InvestError,
   plaidSecretsView,
   removeIbkrCredentials,
   removePlaidKey,
@@ -21,15 +20,13 @@ import {
   resolvePlaidCredentials,
   saveIbkrCredentials,
   savePlaidKeys,
-  SecretKeyError,
   secretKeyInfo,
-  SecretSettingError,
   testIbkrCredentials,
   testPlaidKeys,
 } from "@yomi/core";
 import type { Db } from "@yomi/db";
 import { type Context, Hono } from "hono";
-import { BadRequest, errorBody, readJson } from "./split";
+import { BadRequest, readJson, readParam } from "./http";
 
 export interface SecretsDeps {
   getDb: () => Db | Promise<Db>;
@@ -73,12 +70,10 @@ export function secureForSecrets(req: SecretsRequestInfo): boolean {
   return LOCAL_HOSTS.has(host) || host.endsWith(".localhost");
 }
 
-class InsecureOrigin extends BadRequest {}
-
 function assertSecure(c: Context): void {
   const info = { url: c.req.url, host: c.req.header("host"), forwardedHost: c.req.header("x-forwarded-host"), forwardedProto: c.req.header("x-forwarded-proto") };
   if (!secureForSecrets(info)) {
-    throw new InsecureOrigin("secrets_insecure_origin", "Secrets can be saved only on this computer (localhost) or over HTTPS");
+    throw new CodedError("forbidden", "secrets_insecure_origin", "Secrets can be saved only on this computer (localhost) or over HTTPS");
   }
 }
 
@@ -90,25 +85,6 @@ export function secretsRoutes(deps: SecretsDeps): Hono {
   const r = new Hono();
   const env = () => deps.env ?? process.env;
   const log = (line: string) => (deps.log ?? console.log)(line);
-
-  r.onError((err, c) => {
-    if (err instanceof InsecureOrigin) return c.json(errorBody(err), 403);
-    if (err instanceof BadRequest) return c.json(errorBody(err), 400);
-    if (err instanceof SecretSettingError) return c.json(errorBody(err), 409);
-    if (err instanceof SecretKeyError) return c.json(errorBody(err), 409);
-    if (err instanceof InvestError) {
-      const status =
-        err.code === "invest_ibkr_rate_limited"
-          ? 429
-          : err.code.startsWith("invest_ibkr_token") || err.code === "invest_ibkr_query_invalid" || err.code === "invest_ibkr_ip_restricted"
-            ? 409
-            : err.code === "invest_ibkr_test_timeout"
-              ? 504
-              : 502;
-      return c.json(errorBody(err), status);
-    }
-    throw err;
-  });
 
   const view = async (): Promise<SecretsView> => {
     const db = await deps.getDb();
@@ -169,11 +145,8 @@ export function secretsRoutes(deps: SecretsDeps): Hono {
 
   r.delete("/plaid/:field", async (c) => {
     assertSecure(c);
-    const field = PlaidKeyField.safeParse(c.req.param("field"));
-    if (!field.success) {
-      return c.json({ error: "field must be clientId, sandbox or production", code: "validation_failed", params: { details: "field" } } satisfies ApiError, 400);
-    }
-    await removePlaidKey(await deps.getDb(), field.data, log, getCurrentUser());
+    const field = readParam(c, "field", PlaidKeyField);
+    await removePlaidKey(await deps.getDb(), field, log, getCurrentUser());
     return c.json((await view()) satisfies SecretsView);
   });
 

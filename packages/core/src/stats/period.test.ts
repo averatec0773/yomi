@@ -1,10 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { LedgerError } from "../ledger/errors";
 import {
-  addDays,
   assertRange,
-  daysInclusive,
-  isDate,
   matchPreset,
   monthsIn,
   presetRange,
@@ -13,6 +10,7 @@ import {
   shiftRange,
   wholeMonths,
 } from "./period";
+import { addDays, daysInclusive, isDate } from "../time/day";
 
 describe("shiftRange", () => {
   it("steps whole months by their own count", () => {

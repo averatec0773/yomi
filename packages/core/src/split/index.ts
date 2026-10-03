@@ -1,4 +1,4 @@
-export { SplitError, type SplitErrorKind, todayLocal } from "./internal";
+export { SplitError } from "./internal";
 export * from "./participants";
 export * from "./splits";
 export { balances, type Balance } from "./balances";

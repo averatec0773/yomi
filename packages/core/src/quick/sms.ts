@@ -1,17 +1,10 @@
-import { accounts, type CaptureReview, captures, type CaptureState, categories, merchantRules, transactions } from "@yomi/db";
 import { type IcbcSms, looksLikeIcbcSms, type NormalizedRow, parseIcbcSms } from "@yomi/importers";
-import { and, desc, eq } from "@yomi/db/orm";
-import { runMatching } from "../capture/match";
-import { accountKey, resolveAccountSpec } from "../import/accounts";
-import { resolveCategoryId } from "../import/categorize";
+import { type CaptureResult, createCapture } from "../capture/create";
 import { sha256Hex } from "../import/dedup";
-import { cleanMerchant } from "../import/merchant";
-import { myShareMinor } from "../ledger/share";
-import { type Q, SplitError } from "../split/internal";
-import { autoSplitParticipants } from "../split/rules";
-import { applySplit, getSplit, setSplit, type SplitMode, type SplitView } from "../split/splits";
 import { getTimeZone } from "../settings/time-zone";
-import { occurredOnFor } from "../time/zone";
+import { type Q, SplitError } from "../split/internal";
+import type { SplitMode } from "../split/splits";
+import { todayIn } from "../time/zone";
 import type { CurrentUser } from "../user";
 
 export { looksLikeIcbcSms, parseIcbcSms };
@@ -57,172 +50,30 @@ export function smsToRow(sms: IcbcSms): NormalizedRow {
 
 export interface SmsEntryInput {
   text: string;
-  /** 'YYYY-MM-DD'; picks the alert's year. */
-  today: string;
+  /** 'YYYY-MM-DD' that picks the alert's year; default today in the user's zone. */
+  today?: string;
   /** Non-self participants to split with (expenses only). */
   participantIds?: number[];
   mode?: SplitMode;
 }
 
-export interface SmsEntryResult {
-  transactionId: number;
-  split: SplitView | null;
-  myShareMinor: number;
-  /** The same alert was pasted before; nothing was written. */
-  alreadyAdded: boolean;
-  /** The statement (or wallet) row this alert duplicates; the new row is kept but not counted. */
-  duplicateOfId: number | null;
-  captureId: number;
-  /** provisional until a statement row supersedes (or, for a split row, confirms) it. */
-  state: CaptureState;
-  /** An open review the alert landed in (two statement rows fit it, or one nearly does). */
-  review: CaptureReview | null;
-}
-
-async function categoryFor(q: Q, user: CurrentUser, row: NormalizedRow, merchant: string): Promise<number | null> {
-  const cats = await q.select().from(categories).where(eq(categories.userId, user.id));
-  // resolveCategoryId is synchronous and only asks about `merchant`: look its rule (and, for refunds, the
-  // category of its latest purchase) up first.
-  const ruleId = merchant
-    ? ((
-        await q
-          .select({ categoryId: merchantRules.categoryId })
-          .from(merchantRules)
-          .where(and(eq(merchantRules.userId, user.id), eq(merchantRules.merchant, merchant)))
-          .limit(1)
-      )[0]?.categoryId ?? null)
-    : null;
-  const inheritedId =
-    merchant && row.kind === "refund"
-      ? ((
-          await q
-            .select({ categoryId: transactions.categoryId })
-            .from(transactions)
-            .where(and(eq(transactions.userId, user.id), eq(transactions.merchant, merchant), eq(transactions.kind, "expense")))
-            .orderBy(desc(transactions.occurredAt), desc(transactions.id))
-        ).find((r) => r.categoryId != null)?.categoryId ?? null)
-      : null;
-  const rule = (m: string) => (m === merchant ? ruleId : null);
-  const inherited = (m: string) => (m === merchant ? inheritedId : null);
-  return resolveCategoryId(row, merchant, {
-    idByName: new Map(cats.map((c) => [c.name, c.id])),
-    kindById: new Map(cats.map((c) => [c.id, c.kind])),
-    ruleCategoryId: rule,
-    inheritedCategoryId: inherited,
-  });
-}
-
-async function accountIdFor(q: Q, user: CurrentUser, row: NormalizedRow): Promise<number> {
-  const spec = resolveAccountSpec(row, row.currency);
-  const key = accountKey(spec);
-  const found = (await q
-    .select()
-    .from(accounts)
-    .where(eq(accounts.userId, user.id))
-    )
-    .find((a) => accountKey(a) === key);
-  if (found) return found.id;
-  return (await q
-    .insert(accounts)
-    .values({ userId: user.id, ...spec })
-    .returning({ id: accounts.id })
-    )[0]!.id;
-}
-
 /**
- * Saves a pasted ICBC card alert as a provisional transaction (source `sms`, the "auto" entries) on the card's
- * account, with its capture. Idempotent by dedup key. Participants split it like quick add; without them the
- * merchant's auto-split rule applies. Then the matcher runs: when exactly one statement (or Alipay/WeChat) row
- * already in the ledger is this charge, it supersedes the alert at once (a split alert stays primary and takes the
- * statement's facts); ties and near misses go to the review queue. A hold (预授权) is marked and not counted.
+ * Saves a pasted ICBC card alert as a capture (source `sms`, the "auto" entries) on the card's account: see
+ * createCapture. A hold (预授权) is marked and not counted.
  */
-export async function createSmsEntry(db: Q, user: CurrentUser, input: SmsEntryInput): Promise<SmsEntryResult> {
-  const sms = parseIcbcSms(input.text, { today: input.today });
+export async function createSmsEntry(db: Q, user: CurrentUser, input: SmsEntryInput): Promise<CaptureResult> {
+  const sms = parseIcbcSms(input.text, { today: input.today ?? todayIn(await getTimeZone(db, user)) });
   if (!sms) {
     throw new SplitError("invalid", "quick_sms_unsupported", "This bank message is not a supported ICBC card alert");
   }
-  const dedupKey = smsDedupKey(sms);
-  return await db.transaction(async (q) => {
-    const existing = (await q
-      .select({ id: captures.id, transactionId: transactions.id, duplicateOfId: transactions.duplicateOfId, state: captures.state, review: captures.review })
-      .from(captures)
-      .innerJoin(transactions, eq(transactions.id, captures.transactionId))
-      .where(and(eq(captures.userId, user.id), eq(captures.dedupKey, dedupKey)))
-      .limit(1))[0];
-    if (existing) {
-      const { id: captureId, ...rest } = existing;
-      return { ...rest, captureId, split: null, myShareMinor: 0, alreadyAdded: true };
-    }
-
-    const row = smsToRow(sms);
-    const merchant = cleanMerchant(sms.merchant);
-    const inserted = (await q
-      .insert(transactions)
-      .values({
-        userId: user.id,
-        accountId: await accountIdFor(q, user, row),
-        occurredAt: row.occurredAt,
-        occurredOn: occurredOnFor(row.occurredAt, "sms", await getTimeZone(q, user)),
-        amountMinor: row.amountMinor,
-        currency: row.currency,
-        kind: row.kind,
-        counterpartyRaw: row.counterparty,
-        descriptionRaw: row.description,
-        merchant,
-        categoryId: await categoryFor(q, user, row, merchant),
-        source: "sms",
-        sourceCategory: row.sourceCategory,
-        paymentMethod: row.paymentMethod,
-        raw: row.raw,
-        dedupKey,
-        status: "ok",
-        provisional: sms.hold ? "hold" : "capture",
-      })
-      .returning({ id: transactions.id })
-      )[0]!;
-    const captureId = (await q
-      .insert(captures)
-      .values({
-        userId: user.id,
-        kind: "sms",
-        state: "provisional",
-        dedupKey,
-        transactionId: inserted.id,
-        occurredAt: sms.occurredAt,
-        amountMinor: sms.amountMinor,
-        currency: sms.currency,
-        last4: sms.last4,
-        hold: sms.hold,
-        payload: { v: 1, text: sms.text, history: [{ at: new Date().toISOString(), from: null, to: "provisional", by: "user" }] },
-      })
-      .returning({ id: captures.id }))[0]!.id;
-
-    // Split first: a split alert is the user's record, so a statement row found next confirms it instead of replacing it.
-    let split: SplitView | null = null;
-    if (row.kind === "expense") {
-      const others = input.participantIds ?? [];
-      if (others.length > 0) {
-        split = await setSplit(q, user, inserted.id, { participantIds: others, mode: input.mode ?? "equal" });
-      } else if (!sms.hold) {
-        // A hold's amount is not final yet: no automatic split.
-        const auto = merchant ? (await autoSplitParticipants(q, user)).get(merchant) : undefined;
-        if (auto) split = await applySplit(q, user, inserted.id, { participantIds: auto, mode: "equal" }, { markEdited: false, rememberMerchant: false });
-      }
-    }
-    await runMatching(q, user, { by: "user", newCaptureIds: [captureId] });
-
-    const after = (await q.select().from(transactions).where(eq(transactions.id, inserted.id)).limit(1))[0]!;
-    const capture = (await q.select({ state: captures.state, review: captures.review }).from(captures).where(eq(captures.id, captureId)).limit(1))[0]!;
-    if (split) split = await getSplit(q, user, inserted.id);
-    return {
-      transactionId: inserted.id,
-      split,
-      myShareMinor: myShareMinor(after, split?.rows ?? []),
-      alreadyAdded: false,
-      duplicateOfId: after.duplicateOfId,
-      captureId,
-      state: capture.state,
-      review: capture.review,
-    };
+  return await createCapture(db, user, {
+    kind: "sms",
+    row: smsToRow(sms),
+    dedupKey: smsDedupKey(sms),
+    hold: sms.hold,
+    last4: sms.last4,
+    text: sms.text,
+    participantIds: input.participantIds,
+    mode: input.mode,
   });
 }

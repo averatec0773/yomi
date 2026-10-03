@@ -450,7 +450,7 @@ describe("Plaid brokerage connections", () => {
     expect(await db.select().from(bankAccounts)).toEqual([]);
     expect(p.calls.map((c) => c.path)).toEqual(["/link/token/create", "/item/public_token/exchange"]);
 
-    await expect(syncConnection(db, user, p.provider, conn.id)).rejects.toMatchObject({ code: "bank_connection_is_brokerage", kind: "connection_is_brokerage" });
+    await expect(syncConnection(db, user, p.provider, conn.id)).rejects.toMatchObject({ code: "bank_connection_is_brokerage", kind: "conflict" });
     await expect(syncConnection(db, user, p.provider, conn.id)).rejects.toBeInstanceOf(BankSyncError);
     expect(await syncAll(db, user, p.provider)).toEqual({ results: [], errors: [] });
     expect(p.calls.some((c) => c.path === "/transactions/sync")).toBe(false);

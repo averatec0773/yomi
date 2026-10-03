@@ -1,7 +1,7 @@
 import { accounts, bankAccounts, bankConnections, type Db, transactions } from "@yomi/db";
-import { CodedError, type MessageParams, type NormalizedRow, type Notice, notice, type ParseResult } from "@yomi/importers";
+import { CodedError, type ErrorKind, type MessageParams, type NormalizedRow, type Notice, notice, type ParseResult } from "@yomi/importers";
 import { and, asc, eq, inArray, isNull } from "@yomi/db/orm";
-import type { AccountSpec } from "../import/accounts";
+import { type AccountSpec, ensureAccount } from "../import/accounts";
 import { sha256Hex } from "../import/dedup";
 import { cleanMerchant } from "../import/merchant";
 import { type LockReason, lockReason } from "../ledger/lock";
@@ -15,22 +15,9 @@ import type { CurrentUser } from "../user";
 import { getLinkSession, markExchanged, parseExchanged, publicTokenHash, recordLinkSession } from "./link-session-store";
 import { BankProviderError, type BankProvider, type ConnectionKind, type ProviderAccount, type ProviderConnection, type ProviderRow } from "./provider";
 
-export type BankSyncErrorKind =
-  | "connection_not_found"
-  | "connection_disconnected"
-  | "connection_paused"
-  | "wrong_provider"
-  | "wrong_environment"
-  | "connection_is_brokerage";
-
 export class BankSyncError extends CodedError {
-  constructor(
-    readonly kind: BankSyncErrorKind,
-    code: string,
-    message: string,
-    params: MessageParams = {},
-  ) {
-    super(code, message, params);
+  constructor(kind: ErrorKind, code: string, message: string, params: MessageParams = {}) {
+    super(kind, code, message, params);
     this.name = "BankSyncError";
   }
 }
@@ -111,36 +98,13 @@ async function getConnection(db: Db, user: CurrentUser, id: number): Promise<Con
     .from(bankConnections)
     .where(and(eq(bankConnections.userId, user.id), eq(bankConnections.id, id)))
     .limit(1))[0];
-  if (!c) throw new BankSyncError("connection_not_found", "bank_connection_not_found", `Bank connection #${id} does not exist`, { id });
+  if (!c) throw new BankSyncError("not_found", "bank_connection_not_found", `Bank connection #${id} does not exist`, { id });
   return c;
-}
-
-/** Ledger account for a provider account: an existing one with the same kind + institution + last four, else a new one. */
-async function ensureLedgerAccount(db: Q, user: CurrentUser, spec: AccountSpec): Promise<number> {
-  const match = (await db
-    .select({ id: accounts.id })
-    .from(accounts)
-    .where(
-      and(
-        eq(accounts.userId, user.id),
-        eq(accounts.kind, spec.kind),
-        spec.institution == null ? isNull(accounts.institution) : eq(accounts.institution, spec.institution),
-        spec.last4 == null ? isNull(accounts.last4) : eq(accounts.last4, spec.last4),
-      ),
-    )
-    .orderBy(asc(accounts.id))
-    .limit(1))[0];
-  if (match) return match.id;
-  return (await db
-    .insert(accounts)
-    .values({ userId: user.id, ...spec })
-    .returning({ id: accounts.id })
-    )[0]!.id;
 }
 
 async function upsertBankAccounts(tx: Q, user: CurrentUser, connId: number, providerAccounts: readonly ProviderAccount[]): Promise<void> {
   for (const a of providerAccounts) {
-    const accountId = await ensureLedgerAccount(tx, user, ledgerSpec(a));
+    const accountId = await ensureAccount(tx, user, ledgerSpec(a));
     await tx.insert(bankAccounts)
       .values({
         userId: user.id,
@@ -371,7 +335,7 @@ function tokenEnvironmentFallback(token: string): string | null {
 
 export async function getConnectionSummary(db: Db, user: CurrentUser, id: number, provider?: BankProvider | null): Promise<BankConnectionSummary> {
   const s = (await listConnections(db, user, provider)).find((c) => c.id === id);
-  if (!s) throw new BankSyncError("connection_not_found", "bank_connection_not_found", `Bank connection #${id} does not exist`, { id });
+  if (!s) throw new BankSyncError("not_found", "bank_connection_not_found", `Bank connection #${id} does not exist`, { id });
   return s;
 }
 
@@ -397,7 +361,7 @@ function environmentUnavailable(env: string, what: "new" | "connection"): BankSy
   const secretVar = `PLAID_SECRET_${env.toUpperCase()}`;
   const subject = what === "new" ? "The bank to connect" : "This connection";
   return new BankSyncError(
-    "wrong_environment",
+    "conflict",
     what === "new" ? "bank_environment_unavailable_new" : "bank_environment_unavailable_connection",
     `${subject} is in the ${environment} environment, but ${secretVar} is not configured`,
     { environment, secretVar },
@@ -405,7 +369,7 @@ function environmentUnavailable(env: string, what: "new" | "connection"): BankSy
 }
 
 function disconnected(): BankSyncError {
-  return new BankSyncError("connection_disconnected", "bank_connection_disconnected", "This bank connection is disconnected; connect the bank again");
+  return new BankSyncError("conflict", "bank_connection_disconnected", "This bank connection is disconnected; connect the bank again");
 }
 
 function assertEnvironmentAvailable(provider: BankProvider, accessToken: string): void {
@@ -444,13 +408,13 @@ export async function syncConnection(
 ): Promise<SyncResult> {
   const conn = await getConnection(db, user, connectionId);
   if (conn.status === "disconnected") throw disconnected();
-  if (conn.status === "paused") throw new BankSyncError("connection_paused", "bank_connection_paused", "Syncing is paused for this bank connection; resume it first");
-  if (conn.provider !== provider.id) throw new BankSyncError("wrong_provider", "bank_wrong_provider", `Connection #${conn.id} belongs to ${conn.provider}`, {
+  if (conn.status === "paused") throw new BankSyncError("conflict", "bank_connection_paused", "Syncing is paused for this bank connection; resume it first");
+  if (conn.provider !== provider.id) throw new BankSyncError("conflict", "bank_wrong_provider", `Connection #${conn.id} belongs to ${conn.provider}`, {
       id: conn.id,
       provider: conn.provider,
     });
   if (conn.kind === "brokerage") {
-    throw new BankSyncError("connection_is_brokerage", "bank_connection_is_brokerage", `Connection #${conn.id} is a brokerage login; it syncs holdings, not transactions`, {
+    throw new BankSyncError("conflict", "bank_connection_is_brokerage", `Connection #${conn.id} is a brokerage login; it syncs holdings, not transactions`, {
       id: conn.id,
     });
   }
@@ -707,7 +671,7 @@ export async function disconnectConnection(
       try {
         await provider.disconnect(pc);
       } catch (e) {
-        if (!(e instanceof BankProviderError && e.kind === "reconnect")) throw e;
+        if (!(e instanceof BankProviderError && e.reason === "reconnect")) throw e;
       }
     }
     await db.update(bankConnections)
@@ -723,7 +687,7 @@ export async function disconnectConnection(
  */
 export async function pauseConnection(db: Db, user: CurrentUser, connectionId: number, provider?: BankProvider | null): Promise<BankConnectionSummary> {
   const conn = await getConnection(db, user, connectionId);
-  if (conn.status === "disconnected") throw new BankSyncError("connection_disconnected", "bank_connection_disconnected_pause", "This bank connection is disconnected and cannot be paused");
+  if (conn.status === "disconnected") throw new BankSyncError("conflict", "bank_connection_disconnected_pause", "This bank connection is disconnected and cannot be paused");
   if (conn.status !== "paused") await db.update(bankConnections).set({ status: "paused" }).where(eq(bankConnections.id, conn.id));
   return await getConnectionSummary(db, user, conn.id, provider);
 }

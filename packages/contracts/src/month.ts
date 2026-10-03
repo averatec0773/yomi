@@ -1,6 +1,5 @@
 import { z } from "zod";
-import { CurrencyCode } from "./common";
-import { MonthString } from "./ledger";
+import { CurrencyCode, MonthString } from "./common";
 
 export const CategoryShare = z.object({
   categoryId: z.int().nullable(),

@@ -1,9 +1,10 @@
 import type { SplitItem, SplitView, TransactionItem } from "@yomi/contracts";
 import { splitEqual } from "@yomi/core/money";
+import { myShareMinor } from "@yomi/core/share";
 
 /**
- * Client mirror of the split rules in packages/core (split/splits.ts, ledger/share.ts), used only to
- * paint the optimistic state; the server response replaces it right after.
+ * Client mirror of the split rules in packages/core (split/splits.ts), used only to paint the optimistic state; the
+ * server response replaces it right after. My share comes from core's spending rule (ledger/share.ts) itself.
  */
 
 export type SplitMode = "equal" | "full" | "exact";
@@ -13,17 +14,6 @@ export interface SplitState {
   payerId: number;
   /** Non-self participants sharing the row (a friend payer with owed 0 is not listed). */
   participantIds: number[];
-}
-
-export function countsAsSpending(t: Pick<TransactionItem, "kind" | "status" | "duplicateOfId" | "provisional">): boolean {
-  return (t.kind === "expense" || t.kind === "refund") && t.status === "ok" && t.duplicateOfId == null && t.provisional !== "hold";
-}
-
-export function myShareOf(t: TransactionItem, splits: readonly SplitItem[]): number {
-  if (!countsAsSpending(t)) return 0;
-  if (splits.length === 0) return -t.amountMinor;
-  const mine = splits.find((s) => s.isSelf)?.owedMinor ?? 0;
-  return t.amountMinor > 0 ? -mine : mine;
 }
 
 /** Rows that take participant chips: open, non-duplicate expenses. */
@@ -107,7 +97,7 @@ export function toggledSplits(t: TransactionItem, participantId: number, selfId:
 }
 
 export function withSplits(t: TransactionItem, splits: SplitItem[]): TransactionItem {
-  return { ...t, splits, myShareMinor: myShareOf(t, splits), suggestedParticipantIds: splits.length ? [] : t.suggestedParticipantIds };
+  return { ...t, splits, myShareMinor: myShareMinor(t, splits), suggestedParticipantIds: splits.length ? [] : t.suggestedParticipantIds };
 }
 
 export function withSplitView(t: TransactionItem, view: SplitView | null): TransactionItem {

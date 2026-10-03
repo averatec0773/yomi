@@ -7,7 +7,9 @@ import { getDisplayName } from "../settings/profile";
 import type { CurrentUser } from "../user";
 import { type AaEvent, aaAccounts, aaEvents } from "./balances";
 import { coverageOf, type ItemStatus, itemRowsOf, settledOnDates } from "./items";
-import { addDays, assertCurrency, assertDate, getParticipant, type Q, SplitError, todayLocal } from "./internal";
+import { userToday } from "../settings/time-zone";
+import { addDays } from "../time/day";
+import { assertCurrency, assertDate, getParticipant, type Q, SplitError } from "./internal";
 
 /**
  * What a statement shows besides the items themselves; shared by the text, the print view, the dialog and the CSV.
@@ -430,7 +432,7 @@ export async function statementText(
     entries.push(entry);
     if (e.status !== "covered") openItems.push(entry);
   }
-  const recentSince = opts.recentSince ? assertDate(opts.recentSince) : addDays(opts.today ?? todayLocal(), -STATEMENT_RECENT_DAYS);
+  const recentSince = opts.recentSince ? assertDate(opts.recentSince) : addDays(opts.today ?? (await userToday(db, user)), -STATEMENT_RECENT_DAYS);
   const recent: StatementRecentSettlement[] = events
     .filter((e): e is Extract<AaEvent, { type: "settlement" }> => e.type === "settlement" && !e.opening && e.date >= recentSince)
     .reverse()

@@ -4,6 +4,7 @@ import { eq } from "@yomi/db/orm";
 import { describe, expect, it } from "vitest";
 import { seed } from "../seed";
 import { setPaymentMethods } from "../settings/payment";
+import { DEFAULT_TIME_ZONE, occurredOnFor } from "../time/zone";
 import { getCurrentUser } from "../user";
 import {
   archiveParticipant,
@@ -808,5 +809,35 @@ describe("candidates: double credit and FX", () => {
     });
     [c] = await settlementCandidates(db, user, { today: "2026-09-29" });
     expect(c).toMatchObject({ suggestedCurrency: "USD", suggestedAmountMinor: 5000 });
+  });
+});
+
+describe("split dates follow the user's time zone", () => {
+  // 09:00 in Beijing on Oct 1 is the evening of Sep 30 in America/Chicago, the default zone.
+  const BEIJING_MORNING = "2026-10-01T09:00:00+08:00";
+  const inZone = (occurredAt: string) => ({ occurredAt, occurredOn: occurredOnFor(occurredAt, "wechat", DEFAULT_TIME_ZONE) });
+
+  it("a +08:00 row is dated by the user's day on the statement, as a settlement and in a month's suggestions", async () => {
+    const { db } = await freshDb();
+    const a = await createParticipant(db, user, "室友", [wx("A-Wang")]);
+    const dinner = await addTx(db, { amountMinor: -10000, ...inZone(BEIJING_MORNING) });
+    await toggleParticipant(db, user, dinner, a.id);
+    const st = await statementText(db, user, a.id, "CNY", { scope: "all", today: "2026-10-02" });
+    expect(st.entries.map((e) => [e.transactionId, e.date])).toEqual([[dinner, "2026-09-30"]]);
+
+    const transfer = await addTx(db, { amountMinor: 5000, counterpartyRaw: "A-Wang", sourceCategory: "转账", ...inZone(BEIJING_MORNING) });
+    expect((await markAsSettlement(db, user, transfer, { participantId: a.id })).settledOn).toBe("2026-09-30");
+
+    const rent = await addTx(db, { amountMinor: -48000, categoryId: await catId(db, "居住"), ...inZone(BEIJING_MORNING) });
+    expect((await unsplitSuggestions(db, user, { month: "2026-09" })).map((s) => s.transactionId)).toContain(rent);
+    expect((await unsplitSuggestions(db, user, { month: "2026-10" })).map((s) => s.transactionId)).not.toContain(rent);
+  });
+
+  it("an unknown sender stays a candidate for 90 days counted in the user's days", async () => {
+    const { db } = await freshDb();
+    // Jul 2 in Chicago: 90 days before Sep 30.
+    const stranger = await addTx(db, { amountMinor: 1200, counterpartyRaw: "路人", sourceCategory: "转账", ...inZone("2026-07-03T09:00:00+08:00") });
+    expect((await settlementCandidates(db, user, { today: "2026-09-30" })).map((c) => c.transactionId)).toEqual([stranger]);
+    expect(await settlementCandidates(db, user, { today: "2026-10-01" })).toEqual([]);
   });
 });

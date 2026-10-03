@@ -2,7 +2,7 @@ import { captures, type CaptureState, type Db, importBatches, transactions } fro
 import { and, desc, eq, inArray, isNotNull, like, max, min, or } from "@yomi/db/orm";
 import { getTimeZone } from "../settings/time-zone";
 import { loadSplits } from "../ledger/transactions";
-import { addDays, daysInclusive } from "../stats/period";
+import { addDays, dayDiff, daysInclusive } from "../time/day";
 import { todayIn } from "../time/zone";
 import type { CurrentUser } from "../user";
 import { type MatchReason, PDF_WINDOW, runMatching } from "./match";
@@ -173,7 +173,7 @@ export async function listReview(q: Db, user: CurrentUser, opts: { today?: strin
           currency: t.currency,
           merchant: t.merchant || t.counterpartyRaw,
           reasons: x.reasons as MatchReason[],
-          daysAfter: Math.round((Date.parse(t.occurredOn) - Date.parse(occurredOn)) / 86_400_000),
+          daysAfter: dayDiff(occurredOn, t.occurredOn),
           amountDiffMinor: t.currency === c.currency ? Math.abs(t.amountMinor) - Math.abs(c.amountMinor) : 0,
         },
       ];
@@ -194,7 +194,7 @@ export interface ResolveResult {
 }
 
 function invalid(id: number, action: string): CaptureError {
-  return new CaptureError("invalid", "capture_action_invalid", `"${action}" does not apply to capture #${id} now`, { id, action });
+  return new CaptureError("conflict", "capture_action_invalid", `"${action}" does not apply to capture #${id} now`, { id, action });
 }
 
 async function applyAction(q: Db, user: CurrentUser, c: CaptureRow, action: ReviewAction, candidateId?: number): Promise<void> {
@@ -204,7 +204,7 @@ async function applyAction(q: Db, user: CurrentUser, c: CaptureRow, action: Revi
     case "link": {
       if (!choosing) throw invalid(c.id, action);
       if (candidateId === undefined || !(c.payload.candidates ?? []).some((x) => x.id === candidateId)) {
-        throw new CaptureError("invalid", "capture_candidate_invalid", `Transaction #${candidateId} is not a candidate of capture #${c.id}`, { id: c.id });
+        throw new CaptureError("conflict", "capture_candidate_invalid", `Transaction #${candidateId} is not a candidate of capture #${c.id}`, { id: c.id });
       }
       await supersede(q, user, c.id, candidateId, { by });
       return;

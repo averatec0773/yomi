@@ -48,27 +48,27 @@ describe("Flex client polling", () => {
     const s = fakeFlex([sendOk(), ...Array.from({ length: 20 }, () => fail("1019"))]);
     const err = await s.client({ maxWaitMs: 30_000 }).fetchStatement().catch((e: unknown) => e);
     expect(err).toBeInstanceOf(FlexError);
-    expect((err as FlexError).kind).toBe("in_progress_timeout");
+    expect(err).toMatchObject({ kind: "timeout", code: "invest_flex_in_progress_timeout" });
     expect((err as FlexError).flexCode).toBe("1019");
   });
 
-  it("maps token expired / invalid / IP restriction / invalid query to kinds without retrying", async () => {
-    for (const [code, kind] of [
-      ["1012", "token_expired"],
-      ["1015", "token_invalid"],
-      ["1013", "ip_restricted"],
-      ["1014", "query_invalid"],
+  it("maps token expired / invalid / IP restriction / invalid query to codes without retrying", async () => {
+    for (const [code, yomiCode] of [
+      ["1012", "invest_ibkr_token_expired"],
+      ["1015", "invest_ibkr_token_invalid"],
+      ["1013", "invest_ibkr_ip_restricted"],
+      ["1014", "invest_ibkr_query_invalid"],
     ] as const) {
       const s = fakeFlex([fail(code)]);
       const err = (await s.client().fetchStatement().catch((e: unknown) => e)) as FlexError;
-      expect([err.kind, err.flexCode, s.calls.length, err.code.startsWith("invest_ibkr_"), err.params.flexCode]).toEqual([kind, code, 1, true, code]);
+      expect([err.kind, err.code, err.flexCode, s.calls.length, err.params.flexCode]).toEqual(["conflict", yomiCode, code, 1, code]);
       expect(err.message).not.toContain("tok123");
     }
   });
 
   it("treats HTTP errors and non-XML as unavailable", async () => {
     const s = fakeFlex([{ status: 503, body: "busy" }]);
-    expect(((await s.client().fetchStatement().catch((e: unknown) => e)) as FlexError).kind).toBe("unavailable");
+    expect(await s.client().fetchStatement().catch((e: unknown) => e)).toMatchObject({ kind: "unavailable", code: "invest_ibkr_unavailable" });
     expect(() => readFlexAnswer("<html")).toThrow(FlexError);
   });
 
@@ -118,7 +118,7 @@ describe("Flex period override", () => {
     for (const range of bad) {
       const s = fakeFlex([sendOk(), xml]);
       const err = (await s.client().fetchStatement(range).catch((e: unknown) => e)) as FlexError;
-      expect([err instanceof FlexError, err.kind, err.code, err.params.max, s.calls.length]).toEqual([true, "range_invalid", "invest_ibkr_range_invalid", 365, 0]);
+      expect([err instanceof FlexError, err.kind, err.code, err.params.max, s.calls.length]).toEqual([true, "invalid", "invest_ibkr_range_invalid", 365, 0]);
     }
   });
 });

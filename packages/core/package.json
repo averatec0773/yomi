@@ -14,6 +14,7 @@
     ".": "./src/index.ts",
     "./access": "./src/access/index.ts",
     "./money": "./src/money.ts",
+    "./share": "./src/ledger/share.ts",
     "./time": "./src/time/zone.ts",
     "./payment": "./src/payment.ts",
     "./phone": "./src/phone.ts"

@@ -76,7 +76,7 @@ describe("ledger api", () => {
     expect(TransactionItem.parse(await patched.json())).toMatchObject({ note: "switch game" });
     expect((await app.request(`/api/transactions/${a}`, json("PATCH", { bogus: 1 }))).status).toBe(400);
     expect((await app.request(`/api/transactions/999`, json("PATCH", { note: "x" }))).status).toBe(404);
-    expect((await app.request(`/api/transactions/${a}`, json("PATCH", { categoryId: await cat("工资") }))).status).toBe(422);
+    expect((await app.request(`/api/transactions/${a}`, json("PATCH", { categoryId: await cat("工资") }))).status).toBe(400);
 
     const set = await app.request(`/api/transactions/${b}/category`, json("POST", { categoryId: await cat("娱乐"), applyToMerchant: true }));
     expect(SetCategoryResult.parse(await set.json())).toEqual({ affected: 2 });

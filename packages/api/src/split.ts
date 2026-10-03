@@ -1,7 +1,6 @@
 import {
   AcceptSuggestionsBody,
   AcceptSuggestionsResult,
-  ApiError,
   ApplyAutoSplitBody,
   ApplyAutoSplitResult,
   BalanceList,
@@ -24,6 +23,7 @@ import {
   MarkSettlementBody,
   MerchantRule,
   MerchantRuleList,
+  MerchantRulesQuery,
   MerchantSuggestBody,
   MerchantSuggestResult,
   OpenItemList,
@@ -31,6 +31,7 @@ import {
   OpeningBalanceBody,
   Participant,
   ParticipantList,
+  ParticipantsQuery,
   PatchParticipantBody,
   RecordSettlementBody,
   RevertSuggestionsResult,
@@ -39,19 +40,19 @@ import {
   Settlement,
   SettleAllBody,
   SettlementList,
+  SettlementsQuery,
   SharedNote,
   SharedNoteBody,
   SplitResult,
   Statement,
   StatementQuery,
   SuggestionList,
+  SuggestionsQuery,
   ToggleParticipantBody,
   UnclaimedCounterpartyList,
   UnsplitSummary,
 } from "@yomi/contracts";
 import {
-  CodedError,
-  type MessageParams,
   acceptSuggestions,
   addIdentity,
   applyAutoSplitToExisting,
@@ -85,93 +86,23 @@ import {
   setSplit,
   settleAll,
   settlementCandidates,
-  SplitError,
   statementText,
   toggleParticipantResult,
   unsplitSuggestions,
   unsplitSummary,
 } from "@yomi/core";
 import type { Db } from "@yomi/db";
-import { type Context, Hono } from "hono";
-import type { ContentfulStatusCode } from "hono/utils/http-status";
-
-const SPLIT_ERROR_STATUS: Record<SplitError["kind"], ContentfulStatusCode> = {
-  not_found: 404,
-  invalid: 400,
-  conflict: 409,
-};
-
-interface Schema<T> {
-  safeParse(
-    v: unknown,
-  ): { success: true; data: T } | { success: false; error: { issues: { path: PropertyKey[]; message: string }[] } };
-}
-
-/** Thrown by `readJson`/`readQuery` and turned into a 400 by the error handler. */
-export class BadRequest extends CodedError {
-  constructor(code: string, message: string, params: MessageParams = {}) {
-    super(code, message, params);
-    this.name = "BadRequest";
-  }
-}
-
-/** Body of an error response: English message, stable code, params for the UI's translation. */
-export function errorBody(err: CodedError): ApiError {
-  return { error: err.message, code: err.code, params: err.params };
-}
-
-function issuesText(issues: { path: PropertyKey[]; message: string }[], root: string): string {
-  return issues.map((i) => `${i.path.map(String).join(".") || root}: ${i.message}`).join("; ");
-}
-
-export async function readJson<T>(c: Context, schema: Schema<T>): Promise<T> {
-  let raw: unknown;
-  try {
-    raw = await c.req.json();
-  } catch {
-    throw new BadRequest("invalid_json", "The request body is not valid JSON");
-  }
-  const parsed = schema.safeParse(raw);
-  if (!parsed.success) {
-    const details = issuesText(parsed.error.issues, "body");
-    throw new BadRequest("validation_failed", `Invalid request: ${details}`, { details });
-  }
-  return parsed.data;
-}
-
-export function readQuery<T>(c: Context, schema: Schema<T>): T {
-  const parsed = schema.safeParse(c.req.query());
-  if (!parsed.success) {
-    const details = issuesText(parsed.error.issues, "query");
-    throw new BadRequest("validation_failed", `Invalid request: ${details}`, { details });
-  }
-  return parsed.data;
-}
-
-export function idParam(c: Context, name = "id"): number {
-  const id = Number(c.req.param(name));
-  if (!Number.isInteger(id) || id <= 0) throw new BadRequest("invalid_id", `Invalid ${name}`, { name });
-  return id;
-}
-
-/** Shared error mapping for split and quick routes. */
-export function withSplitErrors(r: Hono): Hono {
-  r.onError((err, c) => {
-    if (err instanceof SplitError) return c.json(errorBody(err), SPLIT_ERROR_STATUS[err.kind]);
-    if (err instanceof BadRequest) return c.json(errorBody(err), 400);
-    throw err;
-  });
-  return r;
-}
+import { Hono } from "hono";
+import { idParam, readJson, readQuery } from "./http";
 
 export function splitRoutes(deps: { getDb: () => Db | Promise<Db> }): Hono {
-  const r = withSplitErrors(new Hono());
+  const r = new Hono();
   const db = async () => await deps.getDb();
   const user = () => getCurrentUser();
 
   // participants
   r.get("/participants", async (c) => {
-    const includeArchived = ["1", "true"].includes(c.req.query("includeArchived") ?? "");
+    const { includeArchived } = readQuery(c, ParticipantsQuery);
     return c.json({ participants: await listParticipants(await db(), user(), { includeArchived }) } satisfies ParticipantList);
   });
   r.post("/participants", async (c) => {
@@ -232,11 +163,7 @@ export function splitRoutes(deps: { getDb: () => Db | Promise<Db> }): Hono {
 
   // settlements
   r.get("/settlements", async (c) => {
-    const pid = c.req.query("participantId");
-    const participantId = pid === undefined || pid === "" ? undefined : Number(pid);
-    if (participantId !== undefined && !(Number.isInteger(participantId) && participantId > 0)) {
-      throw new BadRequest("invalid_id", "Invalid participantId", { name: "participantId" });
-    }
+    const { participantId } = readQuery(c, SettlementsQuery);
     return c.json({ settlements: await listSettlements(await db(), user(), participantId) } satisfies SettlementList);
   });
   r.post("/settlements", async (c) => {
@@ -294,8 +221,7 @@ export function splitRoutes(deps: { getDb: () => Db | Promise<Db> }): Hono {
     return c.json((await setSharedNote(await db(), user(), id, body.sharedNote)) satisfies SharedNote);
   });
   r.get("/split/suggestions", async (c) => {
-    const month = c.req.query("month");
-    if (month !== undefined && !/^\d{4}-\d{2}$/.test(month)) throw new BadRequest("invalid_month", "month must be YYYY-MM", { value: month });
+    const { month } = readQuery(c, SuggestionsQuery);
     return c.json({ suggestions: await unsplitSuggestions(await db(), user(), { month }) } satisfies SuggestionList);
   });
   r.post("/split/accept-suggestions", async (c) => {
@@ -315,8 +241,8 @@ export function splitRoutes(deps: { getDb: () => Db | Promise<Db> }): Hono {
 
   // merchant rules: auto-split
   r.get("/merchant-rules", async (c) => {
-    const autoSplitOnly = ["1", "true"].includes(c.req.query("autoSplit") ?? "");
-    return c.json({ rules: await listMerchantRules(await db(), user(), { autoSplitOnly }) } satisfies MerchantRuleList);
+    const { autoSplit } = readQuery(c, MerchantRulesQuery);
+    return c.json({ rules: await listMerchantRules(await db(), user(), { autoSplitOnly: autoSplit }) } satisfies MerchantRuleList);
   });
   r.post("/merchant-rules/auto-split", async (c) => {
     const { merchant, ...body } = await readJson(c, SetAutoSplitBody);

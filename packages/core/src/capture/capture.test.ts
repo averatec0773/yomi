@@ -11,6 +11,7 @@ import { seed } from "../seed";
 import { createParticipant, setSplit } from "../split";
 import { rangeOverview } from "../stats/range";
 import { getCurrentUser } from "../user";
+import { createCapture } from "./create";
 import { type AuthorityRow, evaluate, type OpenCapture, planMatches, runMatching } from "./match";
 import { listReview, resolveReview, resolveReviewBulk, undoCapture } from "./review";
 import { supersede } from "./supersede";
@@ -100,6 +101,22 @@ describe("capturing an SMS", () => {
     expect(await cap(db, h.captureId)).toMatchObject({ state: "superseded", authorityId: p.transactionId });
     expect(await tx(db, h.transactionId)).toMatchObject({ duplicateOfId: p.transactionId, provisional: null });
     expect(await usd(db)).toMatchObject({ count: 1, spendingMinor: 2350, holds: { count: 0 } });
+  });
+
+  it("createCapture takes any kind of capture through the same account, category, split and matching steps", async () => {
+    const db = await freshDb();
+    const roommate = await createParticipant(db, user, "室友");
+    const r = row("sms", { amountMinor: -1800, occurredAt: "2026-10-02T12:00:00+08:00" });
+    const c = await createCapture(db, user, { kind: "screenshot", row: r, dedupKey: "shot:1", hold: false, last4: "3141", participantIds: [roommate.id] });
+    expect(c).toMatchObject({ alreadyAdded: false, state: "provisional", myShareMinor: 900 });
+    const t = await tx(db, c.transactionId);
+    const dining = (await db.select().from(categories).where(eq(categories.name, "餐饮")).limit(1))[0]!;
+    expect(t).toMatchObject({ provisional: "capture", categoryId: dining.id, merchant: "Uber" });
+    expect(await cap(db, c.captureId)).toMatchObject({ kind: "screenshot", last4: "3141", payload: { v: 1 } });
+    // The statement row arrives: the split capture stays primary and is confirmed, as an SMS would be.
+    await pdf(db, { amountMinor: -1800, occurredAt: "2026-10-02T12:00:00+08:00" });
+    expect((await cap(db, c.captureId)).state).toBe("confirmed");
+    expect(await createCapture(db, user, { kind: "screenshot", row: r, dedupKey: "shot:1", hold: false, last4: "3141" })).toMatchObject({ alreadyAdded: true });
   });
 });
 

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { FLEX_SECTION_IDS, type FlexSectionId } from "@yomi/importers";
 import type { Db } from "@yomi/db";
 import { type Q, readSetting, writeSetting } from "../settings/store";
+import { daysInclusive } from "../time/day";
 import type { CurrentUser } from "../user";
 
 /** user_settings key (plain JSON, no secret): which Flex sections the IBKR pulls had, see `IbkrSectionsRecord`. */
@@ -47,13 +48,6 @@ export function ibkrQueryKey(queryId: string): string {
   return createHash("sha256").update(`yomi-ibkr-query:${queryId.trim()}`).digest("hex").slice(0, 16);
 }
 
-const dayMs = (d: string) => Date.parse(`${d}T00:00:00Z`);
-
-/** Days in a window, both ends included. */
-export function windowDays(from: string, to: string): number {
-  return Math.round((dayMs(to) - dayMs(from)) / 86_400_000) + 1;
-}
-
 /**
  * The record after one more pull. Account Information, Open Positions, Cash Report and NAV in Base appear on every
  * statement of a query that has them (empty ones included), so the latest pull decides. Trades and Cash Transactions
@@ -64,7 +58,7 @@ export function windowDays(from: string, to: string): number {
 export function nextSectionsRecord(prev: IbkrSectionsRecord | null, pull: IbkrPullSections): IbkrSectionsRecord {
   const base = prev && prev.query === pull.query ? prev : null;
   const had = new Set(pull.present);
-  const long = windowDays(pull.from, pull.to) >= IBKR_ACTIVITY_WINDOW_DAYS;
+  const long = daysInclusive(pull.from, pull.to) >= IBKR_ACTIVITY_WINDOW_DAYS;
   const sections = FLEX_SECTION_IDS.map((id): IbkrSectionItem => {
     if (had.has(id)) return { id, state: "present" };
     if (!IBKR_ACTIVITY_SECTIONS.includes(id) || long) return { id, state: "missing" };

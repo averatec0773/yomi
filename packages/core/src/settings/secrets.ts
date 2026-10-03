@@ -85,7 +85,7 @@ export function identifierView(r: ResolvedSecret): IdentifierFieldView {
 /** A save or remove that is not allowed (a field set by env, an invalid value). `code` is stable for the UI. */
 export class SecretSettingError extends CodedError {
   constructor(code: "secret_set_by_env" | "secret_invalid", message: string, params: Record<string, string> = {}) {
-    super(code, message, params);
+    super("conflict", code, message, params);
     this.name = "SecretSettingError";
   }
 }

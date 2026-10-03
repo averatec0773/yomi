@@ -16,6 +16,7 @@ import type {
   TransactionItem,
 } from "@yomi/contracts";
 import type { ShortcutBindings } from "@yomi/contracts/shortcuts";
+import { myShareMinor } from "@yomi/core/share";
 import { CheckCheckIcon, ReceiptTextIcon, SearchXIcon, SplitIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -41,7 +42,7 @@ import { useShortcuts } from "@/lib/shortcuts";
 import { BulkBar } from "./bulk-bar";
 import { categoriesFor } from "./category-menu";
 import { PersonBalance, SpendStrip } from "./spend-strip";
-import { buildSplits, canSplit, myShareOf, splitStateOf, toggledSplits, withSplits, withSplitView } from "./split-math";
+import { buildSplits, canSplit, splitStateOf, toggledSplits, withSplits, withSplitView } from "./split-math";
 import { TxDetails } from "./tx-details";
 import { TxRow } from "./tx-row";
 import { TxToolbar } from "./tx-toolbar";
@@ -487,7 +488,7 @@ export function TxView({
           [id],
           (x) => {
             const next = { ...x, kind };
-            return { ...next, myShareMinor: myShareOf(next, x.splits) };
+            return { ...next, myShareMinor: myShareMinor(next, x.splits) };
           },
           async () => new Map([[id, await apiFetch<TransactionItem>(`/transactions/${id}`, { method: "PATCH", json: { kind } })]]),
         );
@@ -638,7 +639,7 @@ export function TxView({
       ids,
       (x) => {
         const next = { ...x, kind: "transfer" as const };
-        return { ...next, myShareMinor: myShareOf(next, x.splits) };
+        return { ...next, myShareMinor: myShareMinor(next, x.splits) };
       },
       async () => {
         const res = await apiFetch<BulkUpdateResult>("/transactions/bulk", { json: { ids, kind: "transfer" } });

@@ -1,12 +1,12 @@
 import { z } from "zod";
 import { CaptureState } from "./capture";
-import { CurrencyCode, MessageParams } from "./common";
+import { CurrencyCode, DateString, MessageParams } from "./common";
 import { CreatedEntry, SplitMode } from "./split";
 
 export const QuickParseBody = z.object({
   text: z.string().min(1),
-  /** Optional overrides; the server defaults to its local today and CNY. */
-  today: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  /** Optional overrides; the server defaults to today in the user's time zone and CNY. */
+  today: DateString.optional(),
   defaultCurrency: CurrencyCode.optional(),
 });
 export type QuickParseBody = z.infer<typeof QuickParseBody>;
@@ -48,7 +48,7 @@ export const QuickDraft = z.object({
   amountMinor: z.int().positive().nullable(),
   currency: CurrencyCode,
   description: z.string(),
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  date: DateString,
   participantIds: z.array(z.int()),
   payerId: z.int().nullable(),
   mode: SplitMode,
@@ -65,7 +65,7 @@ export const QuickCreateBody = QuickDraft.extend({
   errors: z.array(QuickError).optional(),
   /** The pasted alert, re-parsed on the server when the draft came from one (the draft's sms is only a preview). */
   smsText: z.string().min(1).max(2000).optional(),
-  today: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  today: DateString.optional(),
 });
 export type QuickCreateBody = z.infer<typeof QuickCreateBody>;
 

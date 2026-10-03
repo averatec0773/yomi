@@ -1,5 +1,7 @@
-import { accounts } from "@yomi/db";
+import { accounts, type Db } from "@yomi/db";
 import { BOA_CARD_METHOD, type NormalizedRow, type SourceId } from "@yomi/importers";
+import { asc, eq } from "@yomi/db/orm";
+import type { CurrentUser } from "../user";
 
 export type AccountKind = "wallet" | "debit_card" | "credit_card";
 
@@ -71,9 +73,34 @@ export function resolveAccountSpec(row: NormalizedRow, currency: string): Accoun
   return { ...WALLETS[row.source], currency };
 }
 
-/** Identity of an account, matching the table's unique (kind, institution, last4, name). */
+/** A spec's full identity, the table's unique (kind, institution, last4, name); dedup keys are scoped by it. */
 export function accountKey(a: { kind: string; institution: string | null; last4: string | null; name: string }): string {
   return [a.kind, a.institution ?? "", a.last4 ?? "", a.name].join("|");
+}
+
+/**
+ * Which ledger account a spec means: the same kind, institution and last four. The name is a label, so a card that
+ * Alipay calls 储蓄卡, WeChat 借记卡 and bank sync "Debit 1234" is one account, not three.
+ */
+export function accountMatchKey(a: { kind: string; institution: string | null; last4: string | null }): string {
+  return [a.kind, a.institution ?? "", a.last4 ?? ""].join("|");
+}
+
+/** The user's account id per match key; the oldest wins where earlier versions created several. */
+export async function loadAccountIds(q: Db, user: CurrentUser): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  for (const a of await q.select().from(accounts).where(eq(accounts.userId, user.id)).orderBy(asc(accounts.id))) {
+    const key = accountMatchKey(a);
+    if (!out.has(key)) out.set(key, a.id);
+  }
+  return out;
+}
+
+/** The ledger account for `spec`, created when none matches. Import, SMS capture and bank sync all resolve accounts by this rule. */
+export async function ensureAccount(q: Db, user: CurrentUser, spec: AccountSpec): Promise<number> {
+  const found = (await loadAccountIds(q, user)).get(accountMatchKey(spec));
+  if (found != null) return found;
+  return (await q.insert(accounts).values({ userId: user.id, ...spec }).returning({ id: accounts.id }))[0]!.id;
 }
 
 export type AccountRow = typeof accounts.$inferSelect;

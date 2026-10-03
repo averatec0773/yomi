@@ -1,7 +1,7 @@
 import { FLEX_MAX_RANGE_DAYS, FlexError, type FlexRange, type InvestStatement } from "@yomi/importers";
 import { InvestError, type InvestErrorCode } from "./errors";
 import type { IbkrPullKind } from "./pull-log";
-import { addDays } from "./time";
+import { addDays } from "../time/day";
 
 export const IBKR_TOKEN_ENV = "IBKR_FLEX_TOKEN";
 export const IBKR_QUERY_ENV = "IBKR_FLEX_QUERY_ID";

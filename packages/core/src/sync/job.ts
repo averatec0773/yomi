@@ -1,5 +1,5 @@
-import { type Db, jobs } from "@yomi/db";
-import { and, eq, lt, ne, or } from "@yomi/db/orm";
+import type { Db } from "@yomi/db";
+import { claimJob, finishJob, loadJob } from "../jobs";
 import { secretsHealth } from "../secrets/tokens";
 import type { CurrentUser } from "../user";
 import type { BankProvider } from "./provider";
@@ -8,9 +8,6 @@ import { syncAll, type SyncAllResult, syncAwaitingFirstData } from "./sync";
 
 export const BANK_SYNC_JOB = "bank-sync";
 export const BANK_SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000;
-const RETRY_AFTER_FAILURE_MS = 30 * 60 * 1000;
-/** A `running` row older than this is left over from a crashed process and may be taken over. */
-const STALE_RUNNING_MS = 30 * 60 * 1000;
 
 export type BankSyncJobOutcome = (
   | { ran: true; result: SyncAllResult }
@@ -44,49 +41,28 @@ export async function runBankSyncJob(
   } catch {
     // per-session errors are stored on the session rows; never block the sync itself
   }
-  await db.insert(jobs).values({ userId: user.id, name: BANK_SYNC_JOB, status: "idle" }).onConflictDoNothing();
-  const job = (await db
-    .select()
-    .from(jobs)
-    .where(and(eq(jobs.userId, user.id), eq(jobs.name, BANK_SYNC_JOB)))
-    .limit(1))[0]!;
+  const job = await loadJob(db, user, BANK_SYNC_JOB);
   const t0 = now();
   if (!opts.force && job.runAfter && job.runAfter > t0.toISOString()) {
     // Not due, but new connections whose first data was not ready yet are retried every tick.
     const awaiting = await syncAwaitingFirstData(db, user, provider, { now, backup: opts.backup }).catch(() => null);
     return { ran: false, reason: "not_due", recovery, awaiting };
   }
-
-  const staleBefore = new Date(Date.now() - STALE_RUNNING_MS).toISOString();
-  const claimed = await db
-    .update(jobs)
-    .set({ status: "running" })
-    .where(and(eq(jobs.id, job.id), or(ne(jobs.status, "running"), lt(jobs.updatedAt, staleBefore))))
-    .returning({ id: jobs.id });
-  if (claimed.length === 0) return { ran: false, reason: "running", recovery };
+  if (!(await claimJob(db, job))) return { ran: false, reason: "running", recovery };
 
   try {
     const result = await syncAll(db, user, provider, { now, backup: opts.backup });
     const done = now();
-    await db.update(jobs)
-      .set({
-        status: "idle",
-        cursor: done.toISOString(),
-        runAfter: new Date(done.getTime() + BANK_SYNC_INTERVAL_MS).toISOString(),
-        attempts: 0,
-        lastError: result.errors.length ? result.errors.map((e) => `#${e.connectionId}: ${e.message}`).join("; ") : null,
-      })
-      .where(eq(jobs.id, job.id));
+    await finishJob(db, job, {
+      failed: false,
+      now: done,
+      cursor: done.toISOString(),
+      runAfter: new Date(done.getTime() + BANK_SYNC_INTERVAL_MS).toISOString(),
+      lastError: result.errors.length ? result.errors.map((e) => `#${e.connectionId}: ${e.message}`).join("; ") : null,
+    });
     return { ran: true, result, recovery };
   } catch (e) {
-    await db.update(jobs)
-      .set({
-        status: "failed",
-        attempts: job.attempts + 1,
-        lastError: e instanceof Error ? e.message : String(e),
-        runAfter: new Date(now().getTime() + RETRY_AFTER_FAILURE_MS).toISOString(),
-      })
-      .where(eq(jobs.id, job.id));
+    await finishJob(db, job, { failed: true, now: now(), lastError: e instanceof Error ? e.message : String(e) });
     throw e;
   }
 }

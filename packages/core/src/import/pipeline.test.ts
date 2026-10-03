@@ -108,6 +108,22 @@ describe("account resolution", () => {
     expect(await db.select().from(accounts)).toHaveLength(3);
   });
 
+  it("puts one card on one account whatever each source calls it", async () => {
+    const db = await freshDb();
+    // As bank sync would have named it.
+    const [synced] = await db
+      .insert(accounts)
+      .values({ userId: user.id, name: "ICBC Debit 1234", kind: "debit_card", institution: "工商银行", last4: "1234", currency: "CNY" })
+      .returning();
+    const alipay = [row({ source: "alipay", amountMinor: -100, externalId: "a1", paymentMethod: "工商银行储蓄卡(1234)" })];
+    const wechat = [row({ source: "wechat", amountMinor: -200, externalId: "w1", paymentMethod: "工商银行借记卡(1234)" })];
+    expect((await previewImport(db, user, fakeParse("alipay", alipay), bytes("a"), "a.csv")).accountsToCreate).toEqual([]);
+    await commitImport(db, user, fakeParse("alipay", alipay), bytes("a"), "a.csv");
+    await commitImport(db, user, fakeParse("wechat", wechat), bytes("w"), "w.xlsx");
+    expect(await db.select().from(accounts)).toHaveLength(1);
+    expect(new Set((await db.select().from(transactions)).map((t) => t.accountId))).toEqual(new Set([synced!.id]));
+  });
+
   it("uses the first row currency for ICBC PDF accounts", async () => {
     const db = await freshDb();
     const rows = [
@@ -293,7 +309,7 @@ describe("status, categories and batches", () => {
     expect(preview).toMatchObject({ alreadyImported: true, existingBatchId: 1, newCount: 0 });
     await expect(commitImport(db, user, fakeParse("alipay", rows), bytes("same"), "x.csv")).rejects.toMatchObject({
       name: "ImportError",
-      kind: "already_imported",
+      kind: "conflict",
       code: "import_already_imported",
       params: { batchId: 1 },
     });

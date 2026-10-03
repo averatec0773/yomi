@@ -1,8 +1,6 @@
 import { z } from "zod";
-import { MessageParams, Notice } from "./common";
+import { CurrencyCode, DateString, MessageParams, Notice } from "./common";
 
-const IsoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD");
-const Currency = z.string().regex(/^[A-Z]{3}$/);
 export const InvestProvider = z.enum(["ibkr", "plaid"]);
 export type InvestProvider = z.infer<typeof InvestProvider>;
 
@@ -25,7 +23,7 @@ export const InvestAccountView = z.object({
   name: z.string(),
   currency: z.string(),
   bankConnectionId: z.int().nullable(),
-  latestAsOf: IsoDate.nullable(),
+  latestAsOf: DateString.nullable(),
 });
 export type InvestAccountView = z.infer<typeof InvestAccountView>;
 export const InvestAccountList = z.object({ accounts: z.array(InvestAccountView) });
@@ -33,9 +31,9 @@ export type InvestAccountList = z.infer<typeof InvestAccountList>;
 
 /** GET /api/invest/overview?asOf=YYYY-MM-DD&currency=CNY */
 export const InvestOverviewQuery = z.object({
-  asOf: IsoDate.optional(),
+  asOf: DateString.optional(),
   /** Also total everything in this currency (FX from Frankfurter, cached daily). */
-  currency: Currency.optional(),
+  currency: CurrencyCode.optional(),
 });
 export type InvestOverviewQuery = z.infer<typeof InvestOverviewQuery>;
 
@@ -73,8 +71,8 @@ export const InvestAccountOverview = z.object({
   name: z.string(),
   currency: z.string(),
   bankConnectionId: z.int().nullable(),
-  asOf: IsoDate.nullable(),
-  previousAsOf: IsoDate.nullable(),
+  asOf: DateString.nullable(),
+  previousAsOf: DateString.nullable(),
   /** When the snapshot shown was written (ISO time). */
   syncedAt: z.string().nullable(),
   totals: z.array(CurrencyTotalsView),
@@ -100,7 +98,7 @@ export const ConvertedTotalsView = z.object({
 export type ConvertedTotalsView = z.infer<typeof ConvertedTotalsView>;
 
 export const InvestOverview = z.object({
-  asOf: IsoDate.nullable(),
+  asOf: DateString.nullable(),
   accounts: z.array(InvestAccountOverview),
   totals: z.array(CurrencyTotalsView),
   converted: ConvertedTotalsView.nullable(),
@@ -116,7 +114,7 @@ export type InvestSyncBody = z.infer<typeof InvestSyncBody>;
 export const InvestSyncItemView = z.object({
   provider: InvestProvider,
   connectionId: z.int().nullable(),
-  asOf: IsoDate,
+  asOf: DateString,
   accounts: z.int(),
   positions: z.int(),
   cashBalances: z.int(),
@@ -127,11 +125,11 @@ export const InvestSyncItemView = z.object({
   totals: z.record(z.string(), z.int()),
   warnings: z.array(Notice),
   /** IBKR: the trading day whose statement should exist by now; null for Plaid. */
-  expectedAsOf: IsoDate.nullable(),
+  expectedAsOf: DateString.nullable(),
   /** True when IBKR returned a statement older than expectedAsOf (not published yet, or a holiday). */
   stale: z.boolean(),
   /** IBKR: the activity window asked for (both days inclusive); null for Plaid. */
-  range: z.object({ from: IsoDate, to: IsoDate }).nullable(),
+  range: z.object({ from: DateString, to: DateString }).nullable(),
 });
 export type InvestSyncItemView = z.infer<typeof InvestSyncItemView>;
 

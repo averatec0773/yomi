@@ -1,11 +1,11 @@
 // Account balance snapshots: writers (Plaid balances, ICBC statement balance, starting balance, daily
 // carry-forward) and the reader that turns them into daily balances per account and currency.
 import { accountBalanceSnapshots, accounts, bankAccounts, type BalanceSource, type Db, importBatches, jobs, transactions } from "@yomi/db";
-import { CodedError, decimalToMinor, type MessageParams, type NormalizedRow } from "@yomi/importers";
+import { CodedError, decimalToMinor, type ErrorKind, type MessageParams, type NormalizedRow } from "@yomi/importers";
 import { and, asc, eq, gt, isNull, lte, sum } from "@yomi/db/orm";
 import { minorDigits } from "../money";
 import { getTimeZone } from "../settings/time-zone";
-import { addDays, isDate } from "../stats/period";
+import { addDays, isDate } from "../time/day";
 import type { ProviderAccount } from "../sync/provider";
 import { clockNow, todayIn } from "../time/zone";
 import type { CurrentUser } from "../user";
@@ -15,13 +15,8 @@ type Q = Db;
 export type AssetsErrorCode = "assets_account_not_found" | "assets_invalid_date" | "assets_invalid_amount";
 
 export class AssetsError extends CodedError {
-  constructor(
-    readonly kind: "not_found" | "invalid_input",
-    code: AssetsErrorCode,
-    message: string,
-    params: MessageParams = {},
-  ) {
-    super(code, message, params);
+  constructor(kind: ErrorKind, code: AssetsErrorCode, message: string, params: MessageParams = {}) {
+    super(kind, code, message, params);
     this.name = "AssetsError";
   }
 }
@@ -255,8 +250,8 @@ async function getAccount(q: Q, user: CurrentUser, id: number): Promise<AccountR
  */
 export async function setStartingBalance(db: Db, user: CurrentUser, accountId: number, input: StartingBalanceInput | null): Promise<AccountRow> {
   if (input) {
-    if (!isDate(input.on)) throw new AssetsError("invalid_input", "assets_invalid_date", `Invalid date: ${input.on}`, { date: input.on });
-    if (!Number.isSafeInteger(input.amountMinor)) throw new AssetsError("invalid_input", "assets_invalid_amount", "Invalid amount");
+    if (!isDate(input.on)) throw new AssetsError("invalid", "assets_invalid_date", `Invalid date: ${input.on}`, { date: input.on });
+    if (!Number.isSafeInteger(input.amountMinor)) throw new AssetsError("invalid", "assets_invalid_amount", "Invalid amount");
   }
   return await db.transaction(async (tx) => {
     const a = await getAccount(tx, user, accountId);

@@ -1,24 +1,9 @@
 import { z } from "zod";
 import { CaptureInfo, ProvisionalTotals } from "./capture";
-import { CurrencyCode } from "./common";
-
-export const MonthString = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "YYYY-MM");
-export type MonthString = z.infer<typeof MonthString>;
-
-/** A real calendar date 'YYYY-MM-DD'. */
-export const DateString = z
-  .string()
-  .regex(/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/, "YYYY-MM-DD")
-  .refine((s) => {
-    const [y, m, d] = s.split("-").map(Number) as [number, number, number];
-    return d <= new Date(Date.UTC(y, m, 0)).getUTCDate();
-  }, "no such date");
-export type DateString = z.infer<typeof DateString>;
+import { CurrencyCode, DateString, Id, MonthString, QueryFlag, QueryId } from "./common";
 
 export const TransactionKind = z.enum(["expense", "income", "transfer", "refund"]);
 export type TransactionKind = z.infer<typeof TransactionKind>;
-
-const Id = z.coerce.number().int().positive();
 
 /** GET /api/transactions query string. */
 export const TransactionQuery = z.object({
@@ -28,12 +13,12 @@ export const TransactionQuery = z.object({
   /** Last day, inclusive. */
   to: DateString.optional(),
   q: z.string().optional(),
-  categoryId: Id.optional(),
+  categoryId: QueryId.optional(),
   kind: TransactionKind.optional(),
-  participantId: Id.optional(),
-  uncategorized: z.stringbool().optional(),
+  participantId: QueryId.optional(),
+  uncategorized: QueryFlag.optional(),
   /** Unsplit expenses of my own accounts (backfill triage). */
-  unsplit: z.stringbool().optional(),
+  unsplit: QueryFlag.optional(),
   limit: z.coerce.number().int().min(1).max(5000).optional(),
   offset: z.coerce.number().int().min(0).optional(),
 });
@@ -117,7 +102,7 @@ export type TransactionPage = z.infer<typeof TransactionPage>;
 
 export const TransactionPatch = z
   .object({
-    categoryId: z.int().positive().nullable().optional(),
+    categoryId: Id.nullable().optional(),
     kind: TransactionKind.optional(),
     note: z.string().max(500).nullable().optional(),
     merchant: z.string().trim().min(1).max(200).optional(),
@@ -127,8 +112,8 @@ export type TransactionPatch = z.infer<typeof TransactionPatch>;
 
 export const BulkUpdateInput = z
   .object({
-    ids: z.array(z.int().positive()).min(1).max(2000),
-    categoryId: z.int().positive().nullable().optional(),
+    ids: z.array(Id).min(1).max(2000),
+    categoryId: Id.nullable().optional(),
     kind: TransactionKind.optional(),
   })
   .strict()
@@ -140,7 +125,7 @@ export const BulkUpdateResult = z.object({ updated: z.int().nonnegative(), skipp
 export type BulkUpdateResult = z.infer<typeof BulkUpdateResult>;
 
 export const SetCategoryInput = z
-  .object({ categoryId: z.int().positive(), applyToMerchant: z.boolean().default(false) })
+  .object({ categoryId: Id, applyToMerchant: z.boolean().default(false) })
   .strict();
 export type SetCategoryInput = z.infer<typeof SetCategoryInput>;
 

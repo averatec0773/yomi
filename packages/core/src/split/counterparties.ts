@@ -10,7 +10,10 @@ import {
   normalizeIdentity,
   TEXT_MATCH_KINDS,
 } from "./identities";
-import { dayNumber, type Q, SplitError, todayLocal } from "./internal";
+import { getTimeZone } from "../settings/time-zone";
+import { dayNumber } from "../time/day";
+import { localDate, todayIn } from "../time/zone";
+import { type Q, SplitError } from "./internal";
 import { createParticipant } from "./participants";
 
 /** WeChat 交易类型 / Alipay 交易分类 values that mean a person-to-person transfer. */
@@ -190,7 +193,8 @@ export interface UnclaimedCounterparty {
  * (a month-old group counts half).
  */
 export async function listUnclaimedCounterparties(db: Q, user: CurrentUser, opts: { today?: string } = {}): Promise<UnclaimedCounterparty[]> {
-  const today = dayNumber(opts.today ?? todayLocal());
+  const timeZone = await getTimeZone(db, user);
+  const today = dayNumber(opts.today ?? todayIn(timeZone));
   const bound = new Set(
     (await db
       .select({ kind: participantIdentities.kind, normalized: participantIdentities.normalized })
@@ -255,7 +259,7 @@ export async function listUnclaimedCounterparties(db: Q, user: CurrentUser, opts
   }
 
   const score = (g: UnclaimedCounterparty) => {
-    const age = Math.max(0, today - dayNumber(g.lastAt));
+    const age = Math.max(0, today - dayNumber(localDate(g.lastAt, timeZone)));
     return (g.inCount + g.outCount) / (1 + age / 30);
   };
   return [...groups.values()]

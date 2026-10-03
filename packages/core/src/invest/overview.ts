@@ -1,7 +1,7 @@
 import { bankConnections, type Db, holdingSnapshots, investmentAccounts, securities } from "@yomi/db";
 import { and, asc, eq, lt, lte, max } from "@yomi/db/orm";
 import type { CurrentUser } from "../user";
-import { convertMinor, crossRate, type FxTable } from "./fx";
+import { convertMinor, convertWithFx, crossRate, type FxFailure, type FxTable } from "./fx";
 
 export interface PositionView {
   positionKey: string;
@@ -214,6 +214,25 @@ export function convertOverview(o: PortfolioOverview, currency: string, fx: FxTa
     if (t.currency !== to) out.fx.rates.push({ from: t.currency, rate: crossRate(t.currency, to, fx) });
   }
   return out;
+}
+
+/**
+ * The holdings overview on `asOf` (default: the latest snapshot), totalled in `currency` too when asked for. An FX
+ * failure leaves `converted` null and fills `fxError`, as net worth does. What GET /api/invest/overview and MCP read.
+ */
+export async function investOverview(
+  db: Db,
+  user: CurrentUser,
+  opts: { asOf?: string; currency?: string },
+  deps: { fetch?: typeof fetch; now?: () => Date } = {},
+): Promise<PortfolioOverview & { fxError: FxFailure | null }> {
+  const o = await portfolioOverview(db, user, { asOf: opts.asOf });
+  const currency = opts.currency;
+  if (!currency || o.totals.length === 0) return { ...o, fxError: null };
+  const fxError = await convertWithFx(db, user, [...overviewCurrencies(o), currency], deps, (fx) => {
+    o.converted = convertOverview(o, currency, fx);
+  });
+  return { ...o, fxError };
 }
 
 export interface InvestmentAccountSummary {

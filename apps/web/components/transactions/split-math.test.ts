@@ -1,6 +1,6 @@
 import type { TransactionItem } from "@yomi/contracts";
 import { describe, expect, it } from "vitest";
-import { isOn, myShareOf, splitStateOf, toggledSplits, withSplits } from "./split-math";
+import { isOn, splitStateOf, toggledSplits, withSplits } from "./split-math";
 
 const SELF = 1;
 const names: Record<number, string> = { 1: "我", 2: "室友", 3: "小李" };
@@ -72,6 +72,6 @@ describe("optimistic split math", () => {
     expect(splitStateOf(full, SELF)?.mode).toBe("full");
     const t = withSplits(full, toggledSplits(full, 3, SELF, nameOf));
     expect(t.splits.find((s) => s.isSelf)?.owedMinor).toBe(0);
-    expect(myShareOf({ ...t, kind: "transfer" }, t.splits)).toBe(0);
+    expect(withSplits({ ...t, kind: "transfer" }, t.splits).myShareMinor).toBe(0);
   });
 });

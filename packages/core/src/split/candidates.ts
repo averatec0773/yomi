@@ -1,18 +1,17 @@
 import { settlements, transactions } from "@yomi/db";
 import { and, desc, eq, inArray, isNull, ne, or } from "@yomi/db/orm";
 import { convertFromRate, normalizeRate } from "../money";
+import { userToday } from "../settings/time-zone";
+import { addDays, dayNumber } from "../time/day";
 import type { CurrentUser } from "../user";
 import { balances } from "./balances";
 import { isP2P, learnIdentityFromRow, makeMatcher, P2P_SOURCES, partyName, peopleForMatching } from "./counterparties";
 import {
-  addDays,
   assertCurrency,
-  dayNumber,
   getParticipant,
   getTransaction,
   type Q,
   SplitError,
-  todayLocal,
 } from "./internal";
 import { recordSettlement, type Settlement } from "./settlements";
 
@@ -52,13 +51,14 @@ export interface SettlementCandidate {
  * transfers (BoA / Plaid) to a matched participant are candidates too, with a negative amount ("I pay them back").
  */
 export async function settlementCandidates(db: Q, user: CurrentUser, opts: { today?: string } = {}): Promise<SettlementCandidate[]> {
-  const today = opts.today ?? todayLocal();
+  const today = opts.today ?? (await userToday(db, user));
   const since = addDays(today, -UNKNOWN_WINDOW_DAYS);
   const matchParticipant = makeMatcher(await peopleForMatching(db, user));
   const rows = (await db
     .select({
       id: transactions.id,
       occurredAt: transactions.occurredAt,
+      occurredOn: transactions.occurredOn,
       source: transactions.source,
       sourceCategory: transactions.sourceCategory,
       counterparty: transactions.counterpartyRaw,
@@ -95,8 +95,8 @@ export async function settlementCandidates(db: Q, user: CurrentUser, opts: { tod
     bal.filter((b) => b.participantId === pid).map((b) => ({ currency: b.currency, owedToMeMinor: b.owedToMeMinor }));
 
   const allSettlements = await db.select().from(settlements).where(eq(settlements.userId, user.id));
-  const coveredBy = (pid: number, amountMinor: number, currency: string, occurredAt: string) => {
-    const day = dayNumber(occurredAt);
+  const coveredBy = (pid: number, amountMinor: number, currency: string, occurredOn: string) => {
+    const day = dayNumber(occurredOn);
     const hit = allSettlements.find(
       (s) =>
         s.participantId === pid &&
@@ -123,7 +123,7 @@ export async function settlementCandidates(db: Q, user: CurrentUser, opts: { tod
     const m = r.match;
     if (!m && r.amountMinor < 0) continue;
     if (!m) {
-      if (r.occurredAt.slice(0, 10) < since) continue;
+      if (r.occurredOn < since) continue;
       unknown.push({
         transactionId: r.id,
         occurredAt: r.occurredAt,
@@ -159,7 +159,7 @@ export async function settlementCandidates(db: Q, user: CurrentUser, opts: { tod
       suggestedAmountMinor: useOther ? (rate === null ? null : Math.round(r.amountMinor * rate)) : r.amountMinor,
       suggestedCurrency: useOther ? other.currency : r.currency,
       balances: bs,
-      possiblyCovered: r.amountMinor > 0 ? coveredBy(m.id, r.amountMinor, r.currency, r.occurredAt) : null,
+      possiblyCovered: r.amountMinor > 0 ? coveredBy(m.id, r.amountMinor, r.currency, r.occurredOn) : null,
     });
   }
   return [...matched, ...unknown];
@@ -216,7 +216,7 @@ export async function markAsSettlement(db: Q, user: CurrentUser, txId: number, i
       originalAmountMinor: differs ? t.amountMinor : null,
       originalCurrency: differs ? t.currency : null,
       fxRate: rate,
-      settledOn: t.occurredAt.slice(0, 10),
+      settledOn: t.occurredOn,
       note: input.note ?? null,
       transactionId: t.id,
     });

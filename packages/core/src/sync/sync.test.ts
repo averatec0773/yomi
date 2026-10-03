@@ -351,7 +351,7 @@ describe("syncConnection", () => {
     p.fail("ITEM_LOGIN_REQUIRED");
     const err = await syncConnection(db, user, p.provider, conn.id, { backup: false }).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(BankProviderError);
-    expect(err).toMatchObject({ kind: "reconnect", code: "ITEM_LOGIN_REQUIRED" });
+    expect(err).toMatchObject({ reason: "reconnect", providerCode: "ITEM_LOGIN_REQUIRED" });
     const c = (await listConnections(db, user))[0]!;
     expect(c.status).toBe("error");
     expect(c.lastError).toContain("ITEM_LOGIN_REQUIRED");
@@ -367,7 +367,7 @@ describe("syncConnection", () => {
     const { db, p, conn } = await setup();
     await db.update(bankConnections).set({ accessToken: "access-production-999" });
     await expect(syncConnection(db, user, p.provider, conn.id, { backup: false })).rejects.toMatchObject({
-      kind: "wrong_environment",
+      kind: "conflict",
       code: "bank_environment_unavailable_connection",
       params: { environment: "Production", secretVar: "PLAID_SECRET_PRODUCTION" },
       message: "This connection is in the Production environment, but PLAID_SECRET_PRODUCTION is not configured",
@@ -434,7 +434,7 @@ describe("two environments at once", () => {
     await expect(syncConnection(db, user, prodOnly, sbConn.id, { backup: false })).rejects.toThrow(
       "This connection is in the Sandbox environment, but PLAID_SECRET_SANDBOX is not configured",
     );
-    await expect(createLinkToken(db, user, prodOnly, { connectionId: sbConn.id })).rejects.toMatchObject({ kind: "wrong_environment" });
+    await expect(createLinkToken(db, user, prodOnly, { connectionId: sbConn.id })).rejects.toMatchObject({ kind: "conflict", code: "bank_environment_unavailable_connection" });
     await expect(createLinkToken(db, user, prodOnly, { environment: "sandbox" })).rejects.toMatchObject({ code: "bank_environment_unavailable_new" });
     expect(await stored(db, "sb2")).toBeUndefined();
 
@@ -479,7 +479,7 @@ describe("pauseConnection / resumeConnection", () => {
     expect((await pauseConnection(db, user, conn.id)).status).toBe("paused");
     expect((await db.select().from(bankConnections).limit(1))[0]!.accessToken).not.toBe("");
 
-    await expect(syncConnection(db, user, p.provider, conn.id, { backup: false })).rejects.toMatchObject({ kind: "connection_paused", code: "bank_connection_paused" });
+    await expect(syncConnection(db, user, p.provider, conn.id, { backup: false })).rejects.toMatchObject({ kind: "conflict", code: "bank_connection_paused" });
     expect((await syncAll(db, user, p.provider, { backup: false })).results).toHaveLength(0);
     // Due (startup catch-up) and the every-tick first-data retry: neither touches a paused Item.
     const now = () => new Date("2026-09-29T00:00:00Z");
@@ -499,7 +499,7 @@ describe("pauseConnection / resumeConnection", () => {
     await disconnectConnection(db, user, p.provider, conn.id);
     await expect(pauseConnection(db, user, conn.id)).rejects.toThrow(expect.objectContaining({ code: "bank_connection_disconnected_pause" }));
     await expect(resumeConnection(db, user, conn.id)).rejects.toThrow(expect.objectContaining({ code: "bank_connection_disconnected" }));
-    await expect(pauseConnection(db, user, 999)).rejects.toThrow(expect.objectContaining({ kind: "connection_not_found", code: "bank_connection_not_found" }));
+    await expect(pauseConnection(db, user, 999)).rejects.toThrow(expect.objectContaining({ kind: "not_found", code: "bank_connection_not_found" }));
   });
 });
 

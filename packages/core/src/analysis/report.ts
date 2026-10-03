@@ -6,7 +6,8 @@ import { LedgerError } from "../ledger/errors";
 import { countsAsSpending } from "../ledger/share";
 import { loadRangeRows, type SpendingRow } from "../ledger/transactions";
 import { getTimeZone } from "../settings/time-zone";
-import { addDays, assertRange, type DateRange, daysInclusive, isDate } from "../stats/period";
+import { assertRange, type DateRange } from "../stats/period";
+import { addDays, daysInclusive, isDate, weekdayOf } from "../time/day";
 import { type RangeCurrencyOverview, rangeOverview } from "../stats/range";
 import { clockNow, localDate, todayIn } from "../time/zone";
 import type { CurrentUser } from "../user";
@@ -38,7 +39,7 @@ import {
   type UnusualItem,
   unusualItems,
 } from "./insights";
-import { DEFAULT_WEEK_START, type PeriodKind, periodKindOf, typicalRanges, weekdayOf } from "./period";
+import { type AnalysisPreset, DEFAULT_WEEK_START, type PeriodKind, periodKindOf, resolveAnalysisPeriod, typicalRanges } from "./period";
 
 /** A spending row of the day on the Day view. */
 export interface DayRow {
@@ -225,7 +226,7 @@ export async function analysisReport(
   const timeZone = await getTimeZone(db, user);
   const now = opts.now ?? clockNow();
   const today = opts.today ?? todayIn(timeZone, now);
-  if (!isDate(today)) throw new LedgerError("invalid_input", "invalid_date", `Invalid date: ${today}`, { value: today });
+  if (!isDate(today)) throw new LedgerError("invalid", "invalid_date", `Invalid date: ${today}`, { value: today });
   const weekStart = opts.weekStart ?? DEFAULT_WEEK_START;
   const kind = periodKindOf(range, weekStart);
 
@@ -317,4 +318,29 @@ export async function analysisReport(
     sourceTotals: sourceTotals(inPeriod, await loadPlaidLogins(db, user)),
     latestOn: await latestCountedDay(db, user, today),
   };
+}
+
+/** An Analysis request as the API and MCP receive it: one of a period kind (with an optional date), a preset or a range. */
+export interface AnalysisSelection {
+  period?: PeriodKind;
+  date?: string;
+  preset?: AnalysisPreset;
+  from?: string;
+  to?: string;
+}
+
+/** The report for a request, resolved against today in the user's zone (`today` pins it); this month when it names no period. */
+export async function analysisFor(
+  db: Db,
+  user: CurrentUser,
+  sel: AnalysisSelection,
+  opts: { today?: string; env?: NodeJS.ProcessEnv } = {},
+): Promise<AnalysisReport> {
+  const today = opts.today ?? todayIn(await getTimeZone(db, user));
+  const { period, date, preset, from, to } = sel;
+  const range = resolveAnalysisPeriod(
+    period ? { period, date } : preset ? { preset } : from !== undefined && to !== undefined ? { from, to } : { period: "month" },
+    today,
+  );
+  return await analysisReport(db, user, range, { today, env: opts.env });
 }

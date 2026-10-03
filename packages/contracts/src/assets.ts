@@ -1,9 +1,7 @@
 import { z } from "zod";
-import { Notice } from "./common";
+import { CurrencyCode, DateString, Notice } from "./common";
 import { InvestSyncResult } from "./invest";
 
-const IsoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD");
-const Currency = z.string().regex(/^[A-Z]{3}$/);
 export const NetWorthRange = z.enum(["1m", "3m", "1y", "all"]);
 export type NetWorthRange = z.infer<typeof NetWorthRange>;
 export const BalanceSource = z.enum(["plaid", "statement", "derived", "manual"]);
@@ -11,9 +9,9 @@ export const BalanceSource = z.enum(["plaid", "statement", "derived", "manual"])
 /** GET /api/assets/net-worth?asOf=YYYY-MM-DD&currency=USD&range=3m */
 export const NetWorthQuery = z.object({
   /** Default: today in the user's time zone. */
-  asOf: IsoDate.optional(),
+  asOf: DateString.optional(),
   /** Also total everything in this currency (Frankfurter rate, stated with its date). */
-  currency: Currency.optional(),
+  currency: CurrencyCode.optional(),
   range: NetWorthRange.optional(),
 });
 export type NetWorthQuery = z.infer<typeof NetWorthQuery>;
@@ -39,24 +37,24 @@ export const AccountBalanceView = z.object({
   currency: z.string(),
   class: z.enum(["cash", "card"]),
   plaidLinked: z.boolean(),
-  startingBalance: z.object({ amountMinor: z.int(), on: IsoDate }).nullable(),
+  startingBalance: z.object({ amountMinor: z.int(), on: DateString }).nullable(),
   balances: z.array(
     z.object({
       currency: z.string(),
       balanceMinor: z.int(),
       changeMinor: z.int().nullable(),
       source: BalanceSource.nullable(),
-      sourceAsOf: IsoDate.nullable(),
+      sourceAsOf: DateString.nullable(),
     }),
   ),
 });
 export type AccountBalanceView = z.infer<typeof AccountBalanceView>;
 
 export const NetWorthView = z.object({
-  asOf: IsoDate,
+  asOf: DateString,
   range: NetWorthRange,
-  from: IsoDate,
-  firstDate: IsoDate.nullable(),
+  from: DateString,
+  firstDate: DateString.nullable(),
   currencies: z.array(CurrencyNetWorthView),
   converted: NetWorthPartsView.extend({
     currency: z.string(),
@@ -66,7 +64,7 @@ export const NetWorthView = z.object({
   fxError: Notice.nullable(),
   series: z.array(
     z.object({
-      date: IsoDate,
+      date: DateString,
       byCurrency: z.record(z.string(), NetWorthPartsView),
       converted: NetWorthPartsView.nullable(),
       /** Per currency, the parts known that day; a part not listed is unknown, not zero. */
@@ -78,7 +76,7 @@ export const NetWorthView = z.object({
   /** Trades, dividends and cash deposits or withdrawals of investment accounts over the series. */
   flows: z.array(
     z.object({
-      date: IsoDate,
+      date: DateString,
       type: z.enum(["buy", "sell", "dividend", "transfer"]),
       symbol: z.string().nullable(),
       amountMinor: z.int(),
@@ -94,14 +92,14 @@ export type NetWorthView = z.infer<typeof NetWorthView>;
 
 /** PUT /api/accounts/:id/starting-balance: the balance at the end of `on` (account currency), or `{ clear: true }`. */
 export const StartingBalanceBody = z.union([
-  z.object({ amountMinor: z.int(), on: IsoDate }).strict(),
+  z.object({ amountMinor: z.int(), on: DateString }).strict(),
   z.object({ clear: z.literal(true) }).strict(),
 ]);
 export type StartingBalanceBody = z.infer<typeof StartingBalanceBody>;
 
 export const StartingBalanceResult = z.object({
   id: z.int(),
-  startingBalance: z.object({ amountMinor: z.int(), on: IsoDate }).nullable(),
+  startingBalance: z.object({ amountMinor: z.int(), on: DateString }).nullable(),
 });
 export type StartingBalanceResult = z.infer<typeof StartingBalanceResult>;
 

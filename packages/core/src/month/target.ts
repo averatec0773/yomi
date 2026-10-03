@@ -1,7 +1,7 @@
 import { type Db, monthlyTargets } from "@yomi/db";
 import { and, eq, isNull } from "@yomi/db/orm";
 import { LedgerError } from "../ledger/errors";
-import { isMonth } from "../ledger/share";
+import { isMonth } from "../time/day";
 import type { CurrentUser } from "../user";
 
 export interface TargetItem {
@@ -21,7 +21,7 @@ export interface MonthTarget {
 }
 
 export function assertMonth(month: string) {
-  if (!isMonth(month)) throw new LedgerError("invalid_input", "invalid_month", `Invalid month: ${month}`, { value: month });
+  if (!isMonth(month)) throw new LedgerError("invalid", "invalid_month", `Invalid month: ${month}`, { value: month });
 }
 
 /** Month-specific target if set, else the default (month null). */
@@ -44,8 +44,8 @@ export async function setMonthlyTarget(
 ): Promise<TargetItem> {
   const { month, amountMinor, currency } = input;
   if (month != null) assertMonth(month);
-  if (!Number.isSafeInteger(amountMinor) || amountMinor < 0) throw new LedgerError("invalid_input", "target_amount_invalid", "The target must be a non-negative integer (minor units)");
-  if (!/^[A-Z]{3}$/.test(currency)) throw new LedgerError("invalid_input", "invalid_currency", `Invalid currency: ${currency}`, { value: currency });
+  if (!Number.isSafeInteger(amountMinor) || amountMinor < 0) throw new LedgerError("invalid", "target_amount_invalid", "The target must be a non-negative integer (minor units)");
+  if (!/^[A-Z]{3}$/.test(currency)) throw new LedgerError("invalid", "invalid_currency", `Invalid currency: ${currency}`, { value: currency });
   const where = and(eq(monthlyTargets.userId, user.id), month == null ? isNull(monthlyTargets.month) : eq(monthlyTargets.month, month));
   return await db.transaction(async (tx) => {
     const existing = (await tx.select({ id: monthlyTargets.id }).from(monthlyTargets).where(where).limit(1))[0];

@@ -1,6 +1,7 @@
-import { categories, type Db, merchantRules, transactions } from "@yomi/db";
+import { type Db, transactions } from "@yomi/db";
 import { and, eq } from "@yomi/db/orm";
 import { resolveCategoryId } from "../import/categorize";
+import { categoryContext, loadCategorySources } from "../import/category-context";
 import { cleanMerchant } from "../import/merchant";
 import type { CurrentUser } from "../user";
 
@@ -24,17 +25,7 @@ const REBATE = /REBATE|CASH\s?BACK/i;
 export async function recategorizeUnedited(db: Db, user: CurrentUser): Promise<RecategorizeResult> {
   const userId = user.id;
   return await db.transaction(async (tx) => {
-    const cats = await tx.select().from(categories).where(eq(categories.userId, userId));
-    const idByName = new Map(cats.map((c) => [c.name, c.id]));
-    const kindById = new Map(cats.map((c) => [c.id, c.kind]));
-    const rules = new Map(
-      (await tx
-        .select({ merchant: merchantRules.merchant, categoryId: merchantRules.categoryId })
-        .from(merchantRules)
-        .where(eq(merchantRules.userId, userId))
-        )
-        .map((r) => [r.merchant, r.categoryId]),
-    );
+    const sources = await loadCategorySources(tx, user);
     const rows = (await tx
       .select({
         id: transactions.id,
@@ -61,12 +52,7 @@ export async function recategorizeUnedited(db: Db, user: CurrentUser): Promise<R
     }
     // Latest purchase category per merchant, filled as purchases are resolved (newest first).
     const purchaseCategory = new Map<string, number>();
-    const ctx = {
-      idByName,
-      kindById,
-      ruleCategoryId: (m: string) => rules.get(m) ?? null,
-      inheritedCategoryId: (m: string) => purchaseCategory.get(m) ?? null,
-    };
+    const ctx = categoryContext(sources, (m) => purchaseCategory.get(m) ?? null);
     // Manual rows were categorized at entry time; only imported rows are re-derived.
     const unedited = rows.filter((r) => r.userEditedAt == null && r.source !== "manual");
     const kindFixed = new Set<number>();

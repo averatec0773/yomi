@@ -3,8 +3,9 @@ import { and, count, desc, eq, gte, inArray, isNull, like, lt, lte, ne, or, type
 import { parseAmountToMinor } from "../money";
 import type { CurrentUser } from "../user";
 import { LedgerError } from "./errors";
-import { countsAsSpending, isMonth, monthRange, myShareMinor } from "./share";
-import { addDays, isDate } from "../stats/period";
+import { isMonth, monthRange } from "../time/day";
+import { countsAsSpending, myShareMinor } from "./share";
+import { addDays, isDate } from "../time/day";
 import { unsplitConditions } from "./unsplit";
 import { type SplitSuggestion, suggestSplits } from "../split/suggest";
 
@@ -135,16 +136,16 @@ async function buildWhere(db: Db, userId: number, f: TransactionFilter): Promise
   const conds: (SQL | undefined)[] = [eq(transactions.userId, userId)];
   if (f.id !== undefined) conds.push(eq(transactions.id, f.id));
   if (f.month !== undefined) {
-    if (!isMonth(f.month)) throw new LedgerError("invalid_input", "invalid_month", `Invalid month: ${f.month}`, { value: f.month });
+    if (!isMonth(f.month)) throw new LedgerError("invalid", "invalid_month", `Invalid month: ${f.month}`, { value: f.month });
     const { start, end } = monthRange(f.month);
     conds.push(gte(transactions.occurredOn, start), lt(transactions.occurredOn, end));
   }
   if (f.from !== undefined) {
-    if (!isDate(f.from)) throw new LedgerError("invalid_input", "invalid_start_date", `Invalid start date: ${f.from}`, { value: f.from });
+    if (!isDate(f.from)) throw new LedgerError("invalid", "invalid_start_date", `Invalid start date: ${f.from}`, { value: f.from });
     conds.push(gte(transactions.occurredOn, f.from));
   }
   if (f.to !== undefined) {
-    if (!isDate(f.to)) throw new LedgerError("invalid_input", "invalid_end_date", `Invalid end date: ${f.to}`, { value: f.to });
+    if (!isDate(f.to)) throw new LedgerError("invalid", "invalid_end_date", `Invalid end date: ${f.to}`, { value: f.to });
     conds.push(lte(transactions.occurredOn, f.to));
   }
   const q = f.q?.trim();
@@ -381,14 +382,14 @@ export function provisionalTotals(rows: readonly SpendingRow[], currency: string
 
 /** All rows of a month with their splits and my share. */
 export async function loadMonthRows(db: Db, userId: number, month: string): Promise<SpendingRow[]> {
-  if (!isMonth(month)) throw new LedgerError("invalid_input", "invalid_month", `Invalid month: ${month}`, { value: month });
+  if (!isMonth(month)) throw new LedgerError("invalid", "invalid_month", `Invalid month: ${month}`, { value: month });
   const { start, end } = monthRange(month);
   return await loadRowsBetween(db, userId, start, end);
 }
 
 /** All rows from `from` through `to` (inclusive dates), with their splits and my share. */
 export async function loadRangeRows(db: Db, userId: number, from: string, to: string): Promise<SpendingRow[]> {
-  if (!isDate(from) || !isDate(to)) throw new LedgerError("invalid_input", "invalid_range", `Invalid date range: ${from} ~ ${to}`, { from, to });
+  if (!isDate(from) || !isDate(to)) throw new LedgerError("invalid", "invalid_range", `Invalid date range: ${from} ~ ${to}`, { from, to });
   return await loadRowsBetween(db, userId, from, addDays(to, 1));
 }
 
@@ -445,4 +446,16 @@ export async function monthTotalsForList(db: Db, user: CurrentUser, month: strin
 /** Spending per currency for the list header over a date range (same rule as the stats page). */
 export async function rangeTotalsForList(db: Db, user: CurrentUser, from: string, to: string): Promise<CurrencyTotal[]> {
   return spendingByCurrency(await loadRangeRows(db, user.id, from, to));
+}
+
+/**
+ * A page of the list with the spending totals of the range (from and to) or month it asks for; none for other
+ * filters. What GET /api/transactions and the MCP read return.
+ */
+export async function transactionPage(db: Db, user: CurrentUser, filter: TransactionFilter): Promise<TransactionPage & { totals?: CurrencyTotal[] }> {
+  const page = await listTransactions(db, user, filter);
+  const { month, from, to } = filter;
+  if (from !== undefined && to !== undefined) return { ...page, totals: await rangeTotalsForList(db, user, from, to) };
+  if (month) return { ...page, totals: await monthTotalsForList(db, user, month) };
+  return page;
 }

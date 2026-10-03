@@ -1,9 +1,7 @@
 import { z } from "zod";
-import { CurrencyCode } from "./common";
+import { CurrencyCode, DateString, Id } from "./common";
 
 // Captures (a pasted card SMS) and their review queue. Shaped so the v0.3 MCP tools can return the same objects.
-
-const Day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
 export const CaptureKind = z.enum(["sms", "screenshot", "agent", "manual", "plaid_pending"]);
 export type CaptureKind = z.infer<typeof CaptureKind>;
@@ -45,7 +43,7 @@ export const ReviewCapture = z.object({
   kind: CaptureKind,
   transactionId: z.int(),
   occurredAt: z.string(),
-  occurredOn: Day,
+  occurredOn: DateString,
   amountMinor: z.int(),
   currency: CurrencyCode,
   last4: z.string().nullable(),
@@ -59,7 +57,7 @@ export const MatchCandidate = z.object({
   transactionId: z.int(),
   source: z.string(),
   occurredAt: z.string(),
-  occurredOn: Day,
+  occurredOn: DateString,
   amountMinor: z.int(),
   currency: CurrencyCode,
   merchant: z.string(),
@@ -72,7 +70,7 @@ export const MatchCandidate = z.object({
 export type MatchCandidate = z.infer<typeof MatchCandidate>;
 
 export const StaleReason = z.discriminatedUnion("reason", [
-  z.object({ reason: z.literal("covered"), source: z.literal("icbc_pdf"), through: Day }),
+  z.object({ reason: z.literal("covered"), source: z.literal("icbc_pdf"), through: DateString }),
   z.object({ reason: z.literal("age"), days: z.int().nonnegative() }),
 ]);
 export type StaleReason = z.infer<typeof StaleReason>;
@@ -105,7 +103,7 @@ export type ReviewAction = z.infer<typeof ReviewAction>;
 
 /** POST /api/review/:captureId */
 export const ResolveBody = z
-  .object({ action: ReviewAction, candidateId: z.int().positive().optional() })
+  .object({ action: ReviewAction, candidateId: Id.optional() })
   .strict()
   .refine((b) => b.action !== "link" || b.candidateId !== undefined, { message: "link needs candidateId", path: ["candidateId"] });
 export type ResolveBody = z.infer<typeof ResolveBody>;
@@ -114,7 +112,7 @@ export const BulkReviewAction = z.enum(["keep_separate", "keep_final", "discard"
 export type BulkReviewAction = z.infer<typeof BulkReviewAction>;
 
 /** POST /api/review/bulk: one action on several items, all or nothing. */
-export const BulkResolveBody = z.object({ captureIds: z.array(z.int().positive()).min(1).max(500), action: BulkReviewAction }).strict();
+export const BulkResolveBody = z.object({ captureIds: z.array(Id).min(1).max(500), action: BulkReviewAction }).strict();
 export type BulkResolveBody = z.infer<typeof BulkResolveBody>;
 
 /** Result of a resolution or an undo (POST /api/captures/:captureId/undo). */

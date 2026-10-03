@@ -1,5 +1,4 @@
 import {
-  type ApiError,
   type BankConfig as BankConfigView,
   type BankConnectionList,
   type BankConnectionView,
@@ -18,8 +17,6 @@ import {
 import {
   type BankConfig,
   type BankProvider,
-  BankProviderError,
-  BankSyncError,
   connectWithPublicToken,
   createLinkToken,
   disconnectConnection,
@@ -32,15 +29,13 @@ import {
   pauseConnection,
   recoverLinkSessions,
   resumeConnection,
-  SecretKeyError,
   CodedError,
   syncConnection,
   syncHoldings,
 } from "@yomi/core";
 import type { Db } from "@yomi/db";
 import { Hono } from "hono";
-import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { BadRequest, errorBody, idParam, readJson } from "./split";
+import { BadRequest, idParam, readJson } from "./http";
 
 export interface BankDeps {
   /** Plaid setup (env, then Settings); tests inject their own. */
@@ -51,32 +46,6 @@ export interface BankDeps {
   log?: (line: string) => void;
 }
 
-const SYNC_ERROR_STATUS: Record<BankSyncError["kind"], ContentfulStatusCode> = {
-  connection_not_found: 404,
-  connection_disconnected: 409,
-  connection_paused: 409,
-  wrong_provider: 409,
-  wrong_environment: 409,
-  connection_is_brokerage: 409,
-};
-
-const PROVIDER_ERROR_STATUS: Record<BankProviderError["kind"], ContentfulStatusCode> = {
-  reconnect: 409,
-  rate_limited: 429,
-  unavailable: 502,
-  other: 502,
-};
-
-class NotConfigured extends CodedError {}
-
-function safeJson(text: string): unknown {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return null;
-  }
-}
-
 /** Routes under /api/bank: config, link token, public token exchange, connections, sync, pause/resume, disconnect. */
 export function bankRoutes(deps: { getDb: () => Db | Promise<Db> } & BankDeps): Hono {
   const r = new Hono();
@@ -84,24 +53,11 @@ export function bankRoutes(deps: { getDb: () => Db | Promise<Db> } & BankDeps): 
   const config = deps.config ?? (async () => await resolvePlaidConfig(await deps.getDb()));
   const getProvider = deps.provider ?? (async () => await resolvePlaidProvider(await deps.getDb()));
 
-  r.onError((err, c) => {
-    if (err instanceof NotConfigured) return c.json(errorBody(err), 409);
-    if (err instanceof BadRequest) return c.json(errorBody(err), 400);
-    if (err instanceof BankSyncError) return c.json(errorBody(err), SYNC_ERROR_STATUS[err.kind]);
-    // Missing, wrong or malformed YOMI_SECRET_KEY (code bank_secret_*): nothing was changed.
-    if (err instanceof SecretKeyError) return c.json(errorBody(err), 409);
-    if (err instanceof BankProviderError) {
-      const body: ApiError = { error: err.message, code: `bank_provider_${err.kind}`, params: { detail: err.message } };
-      return c.json(body, PROVIDER_ERROR_STATUS[err.kind]);
-    }
-    throw err;
-  });
-
   async function provider(): Promise<BankProvider> {
     const p = await getProvider();
     if (!p) {
       const missing = (await config()).missing.join(", ");
-      throw new NotConfigured("bank_not_configured", `Bank sync is not configured yet; missing: ${missing}`, { missing });
+      throw new CodedError("conflict", "bank_not_configured", `Bank sync is not configured yet; missing: ${missing}`, { missing });
     }
     return p;
   }
@@ -128,8 +84,7 @@ export function bankRoutes(deps: { getDb: () => Db | Promise<Db> } & BankDeps): 
   r.get("/connections", async (c) => c.json({ connections: await connections(await deps.getDb()) } satisfies BankConnectionList));
 
   r.post("/link-token", async (c) => {
-    const text = await c.req.text();
-    const body = text.trim() ? await readJson(c, LinkTokenBody) : {};
+    const body = await readJson(c, LinkTokenBody, { optional: true });
     const p = await provider();
     if (body.environment && body.connectionId == null) assertAvailable(p, body.environment);
     const out = await createLinkToken(await deps.getDb(), getCurrentUser(), p, {
@@ -188,8 +143,7 @@ export function bankRoutes(deps: { getDb: () => Db | Promise<Db> } & BankDeps): 
   });
 
   r.post("/link-sessions/recover", async (c) => {
-    const text = await c.req.text();
-    const body: LinkRecoverBody = text.trim() ? await readJson(c, LinkRecoverBody) : {};
+    const body = await readJson(c, LinkRecoverBody, { optional: true });
     const out = await recoverLinkSessions(await deps.getDb(), getCurrentUser(), await provider(), {
       sessionId: body.sessionId,
       linkSessionId: body.linkSessionId,
@@ -213,19 +167,16 @@ export function bankRoutes(deps: { getDb: () => Db | Promise<Db> } & BankDeps): 
   // institution name exactly, so a stray request or a UI bug cannot delete a connection.
   r.delete("/connections/:id", async (c) => {
     const id = idParam(c);
-    const text = await c.req.text();
-    const body = text.trim() ? DisconnectBody.safeParse(safeJson(text)) : null;
     const db = await deps.getDb();
     const user = getCurrentUser();
     const conn = await getConnectionSummary(db, user, id, await getProvider());
-    if (!body?.success || !disconnectConfirmMatches(conn.institutionName, body.data.confirm)) {
-      const confirm = disconnectConfirmText(conn.institutionName);
-      throw new BadRequest(
-        "bank_disconnect_confirm",
-        `Deleting this connection needs a confirmation in the request body: { "confirm": "${confirm}" }`,
-        { confirm },
-      );
-    }
+    const confirm = disconnectConfirmText(conn.institutionName);
+    const unconfirmed = () =>
+      new BadRequest("bank_disconnect_confirm", `Deleting this connection needs a confirmation in the request body: { "confirm": "${confirm}" }`, {
+        confirm,
+      });
+    const body = await readJson(c, DisconnectBody, { optional: true, invalid: unconfirmed });
+    if (!disconnectConfirmMatches(conn.institutionName, body.confirm)) throw unconfirmed();
     const out = await disconnectConnection(db, user, await provider(), id);
     return c.json(out as BankConnectionView);
   });

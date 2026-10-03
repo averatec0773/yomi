@@ -1,5 +1,5 @@
 // IBKR Flex Web Service v3 client (built-in fetch, no SDK). See README.md for the verified facts.
-import { CodedError, type MessageParams } from "../errors";
+import { CodedError, type ErrorKind, type MessageParams } from "../errors";
 import { child, parseXml, type XmlElement } from "../util/xml";
 
 export const FLEX_SEND_REQUEST_URL = "https://ndcdyn.interactivebrokers.com/AccountManagement/FlexWebService/SendRequest";
@@ -31,15 +31,27 @@ export const FLEX_ERROR_CODES: Record<FlexErrorKind, string> = {
   other: "invest_ibkr_error",
 };
 
-/** A Flex failure. `flexCode` is IBKR's ErrorCode (e.g. "1012") when the service sent one. */
+const FLEX_ERROR_KINDS: Record<FlexErrorKind, ErrorKind> = {
+  token_expired: "conflict",
+  token_invalid: "conflict",
+  ip_restricted: "conflict",
+  query_invalid: "conflict",
+  rate_limited: "rate_limited",
+  in_progress_timeout: "timeout",
+  unavailable: "unavailable",
+  range_invalid: "invalid",
+  other: "unavailable",
+};
+
+/** A Flex failure (`code` from FLEX_ERROR_CODES). `flexCode` is IBKR's ErrorCode (e.g. "1012") when the service sent one. */
 export class FlexError extends CodedError {
   constructor(
-    readonly kind: FlexErrorKind,
+    flexKind: FlexErrorKind,
     readonly flexCode: string | null,
     message: string,
     params: MessageParams = {},
   ) {
-    super(FLEX_ERROR_CODES[kind], message, { ...(flexCode ? { flexCode } : {}), ...params });
+    super(FLEX_ERROR_KINDS[flexKind], FLEX_ERROR_CODES[flexKind], message, { ...(flexCode ? { flexCode } : {}), ...params });
     this.name = "FlexError";
   }
 }
