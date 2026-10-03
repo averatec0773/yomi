@@ -1,6 +1,7 @@
 import { bankConnections, type Db, jobs } from "@yomi/db";
-import { and, eq, lt, ne, or } from "@yomi/db/orm";
+import { and, eq } from "@yomi/db/orm";
 import { writeDailyBalanceSnapshots } from "../assets/balances";
+import { claimJob, finishJob, loadJob } from "../jobs";
 import type { BankProvider } from "../sync/provider";
 import type { CurrentUser } from "../user";
 import { InvestError } from "./errors";
@@ -11,8 +12,6 @@ import { investErrorOf, syncHoldings, type InvestSyncResult } from "./sync";
 import { lastCompletedTradingDay, retryWindowClosed } from "./time";
 
 export const HOLDINGS_SYNC_JOB = "holdings-sync";
-const RETRY_AFTER_FAILURE_MS = 30 * 60 * 1000;
-const STALE_RUNNING_MS = 30 * 60 * 1000;
 /** A statement older than expected is asked for again at most this often. */
 export const IBKR_RETRY_EVERY_MS = 2 * 60 * 60 * 1000;
 /** Flex rate limit guard: the scheduler never pulls one token more often than this. */
@@ -132,12 +131,7 @@ export async function runHoldingsSyncJob(
   deps: { ibkr: IbkrSource | null; plaid: BankProvider | null; now?: () => Date; force?: boolean },
 ): Promise<HoldingsJobOutcome> {
   const now = deps.now ?? (() => new Date());
-  await db.insert(jobs).values({ userId: user.id, name: HOLDINGS_SYNC_JOB, status: "idle" }).onConflictDoNothing();
-  const job = (await db
-    .select()
-    .from(jobs)
-    .where(and(eq(jobs.userId, user.id), eq(jobs.name, HOLDINGS_SYNC_JOB)))
-    .limit(1))[0]!;
+  const job = await loadJob(db, user, HOLDINGS_SYNC_JOB);
   const t0 = now();
   if (!deps.force && job.runAfter && job.runAfter > t0.toISOString()) return { ran: false, reason: "backoff" };
   const state = parseHoldingsState(job.cursor);
@@ -150,14 +144,7 @@ export async function runHoldingsSyncJob(
         latestIbkrSnapshot: await latestSnapshotDate(db, user, "ibkr"),
       });
   if (due.length === 0) return { ran: false, reason: "not_due" };
-
-  const staleBefore = new Date(t0.getTime() - STALE_RUNNING_MS).toISOString();
-  const claimed = await db
-    .update(jobs)
-    .set({ status: "running" })
-    .where(and(eq(jobs.id, job.id), or(ne(jobs.status, "running"), lt(jobs.updatedAt, staleBefore))))
-    .returning({ id: jobs.id });
-  if (claimed.length === 0) return { ran: false, reason: "running" };
+  if (!(await claimJob(db, job))) return { ran: false, reason: "running" };
 
   const result: InvestSyncResult = { results: [], errors: [], skipped: [] };
   const next: HoldingsJobState = { ...state };
@@ -179,15 +166,8 @@ export async function runHoldingsSyncJob(
     }
   }
   const failed = result.errors.length > 0;
-  await db.update(jobs)
-    .set({
-      status: failed ? "failed" : "idle",
-      cursor: JSON.stringify(next),
-      attempts: failed ? job.attempts + 1 : 0,
-      lastError: failed ? result.errors.map((e) => `${e.provider}${e.connectionId != null ? ` #${e.connectionId}` : ""}: ${e.code}`).join("; ") : null,
-      runAfter: failed ? new Date(now().getTime() + RETRY_AFTER_FAILURE_MS).toISOString() : null,
-    })
-    .where(eq(jobs.id, job.id));
+  const lastError = failed ? result.errors.map((e) => `${e.provider}${e.connectionId != null ? ` #${e.connectionId}` : ""}: ${e.code}`).join("; ") : null;
+  await finishJob(db, job, { failed, now: now(), cursor: JSON.stringify(next), lastError });
   return { ran: true, expected, providers: due, result };
 }
 
@@ -221,12 +201,7 @@ export async function pullIbkrHistory(
     throw new InvestError("invest_ibkr_not_configured", "IBKR_FLEX_TOKEN and IBKR_FLEX_QUERY_ID must be set", { missing: "IBKR_FLEX_TOKEN, IBKR_FLEX_QUERY_ID" });
   }
   const now = deps.now ?? (() => clockNow());
-  await db.insert(jobs).values({ userId: user.id, name: HOLDINGS_SYNC_JOB, status: "idle" }).onConflictDoNothing();
-  const job = (await db
-    .select()
-    .from(jobs)
-    .where(and(eq(jobs.userId, user.id), eq(jobs.name, HOLDINGS_SYNC_JOB)))
-    .limit(1))[0]!;
+  const job = await loadJob(db, user, HOLDINGS_SYNC_JOB);
   const t0 = now();
   const state = parseHoldingsState(job.cursor);
   const ibkrFailed = job.status === "failed" && /(^|;)\s*ibkr:/.test(job.lastError ?? "");
@@ -237,40 +212,25 @@ export async function pullIbkrHistory(
   if (Number.isFinite(last) && t0.getTime() - last < IBKR_MIN_SPACING_MS) {
     throw new InvestError("invest_ibkr_pull_too_soon", "IBKR was pulled less than 10 minutes ago", { minutes: minutesUntil(last + IBKR_MIN_SPACING_MS, t0) });
   }
-  const staleBefore = new Date(t0.getTime() - STALE_RUNNING_MS).toISOString();
-  const claimed = await db
-    .update(jobs)
-    .set({ status: "running" })
-    .where(and(eq(jobs.id, job.id), or(ne(jobs.status, "running"), lt(jobs.updatedAt, staleBefore))))
-    .returning({ id: jobs.id });
-  if (claimed.length === 0) throw new InvestError("invest_ibkr_pull_running", "A holdings pull is running");
+  if (!(await claimJob(db, job))) throw new InvestError("invest_ibkr_pull_running", "A holdings pull is running");
 
   const expected = lastCompletedTradingDay(t0);
   const others = withoutIbkr(job.lastError);
+  const cursor = (received: string | null) =>
+    JSON.stringify({ ...state, ibkr: nextIbkrState(state.ibkr, expected, received, t0.toISOString()) } satisfies HoldingsJobState);
   try {
     const r = await syncHoldings(db, user, { provider: "ibkr", ibkrHistoryDays: opts.days, ibkrPull: "history" }, { ibkr: deps.ibkr, now });
     const received = r.results.find((x) => x.provider === "ibkr")?.asOf ?? null;
-    await db.update(jobs)
-      .set({
-        status: others ? "failed" : "idle",
-        cursor: JSON.stringify({ ...state, ibkr: nextIbkrState(state.ibkr, expected, received, t0.toISOString()) } satisfies HoldingsJobState),
-        attempts: others ? job.attempts : 0,
-        lastError: others,
-        runAfter: others ? job.runAfter : null,
-      })
-      .where(eq(jobs.id, job.id));
+    if (others) {
+      // Another provider's failure stays as it was (attempts, retry time); only the IBKR cursor moves.
+      await db.update(jobs).set({ status: "failed", cursor: cursor(received), lastError: others }).where(eq(jobs.id, job.id));
+    } else {
+      await finishJob(db, job, { failed: false, now: now(), cursor: cursor(received), lastError: null });
+    }
     return r;
   } catch (e) {
     const code = investErrorOf(e, "ibkr").code;
-    await db.update(jobs)
-      .set({
-        status: "failed",
-        cursor: JSON.stringify({ ...state, ibkr: nextIbkrState(state.ibkr, expected, null, t0.toISOString()) } satisfies HoldingsJobState),
-        attempts: job.attempts + 1,
-        lastError: [others, `ibkr: ${code}`].filter(Boolean).join("; "),
-        runAfter: new Date(now().getTime() + RETRY_AFTER_FAILURE_MS).toISOString(),
-      })
-      .where(eq(jobs.id, job.id));
+    await finishJob(db, job, { failed: true, now: now(), cursor: cursor(null), lastError: [others, `ibkr: ${code}`].filter(Boolean).join("; ") });
     throw e;
   }
 }
