@@ -1,11 +1,11 @@
 import {
   balances,
+  countReview,
   getCurrentUser,
   listCategories,
   listMerchantRules,
   listMonths,
   listParticipants,
-  listReview,
   listTransactions,
   monthRangeOf,
   rangeTotalsForList,
@@ -57,7 +57,7 @@ export default async function TransactionsPage({ searchParams }: PageProps<"/tra
   };
 
   const filtered = Boolean(filters.q || filters.categoryId || filters.participantId || filters.uncategorized || filters.unsplit);
-  const [page, periodTotal, totals, participants, categories, autoSplitRules, allBalances, review] = await Promise.all([
+  const [page, periodTotal, totals, participants, categories, autoSplitRules, allBalances, reviewCount] = await Promise.all([
     listTransactions(db, user, {
       ...range,
       q: filters.q || undefined,
@@ -74,7 +74,7 @@ export default async function TransactionsPage({ searchParams }: PageProps<"/tra
     listCategories(db, user),
     listMerchantRules(db, user, { autoSplitOnly: true }),
     filters.participantId ? balances(db, user) : [],
-    listReview(db, user),
+    countReview(db, user, { today }),
   ]);
   const items = filters.showAll ? page.items : page.items.filter((t) => t.status === "ok" && t.duplicateOfId == null);
 
@@ -103,7 +103,7 @@ export default async function TransactionsPage({ searchParams }: PageProps<"/tra
         autoSplitMerchants={autoSplitRules.map((r) => r.merchant)}
         balances={allBalances.filter((b) => b.participantId === filters.participantId)}
         today={today}
-        reviewCount={review.total}
+        reviewCount={reviewCount}
       />
     </>
   );
