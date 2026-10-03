@@ -2,7 +2,7 @@ import { BulkResolveBody, ResolveBody, type ResolveResult, type ReviewList } fro
 import { getCurrentUser, getTimeZone, listReview, resolveReview, resolveReviewBulk, todayIn, undoCapture } from "@yomi/core";
 import type { Db } from "@yomi/db";
 import { Hono } from "hono";
-import { idParam, readJson } from "./split";
+import { idParam, readJson } from "./http";
 
 /**
  * The capture review queue (thin over core/capture; the v0.3 MCP tools call the same functions):

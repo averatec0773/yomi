@@ -1,5 +1,4 @@
 import {
-  type ApiError,
   IbkrSaveInput,
   IbkrTestInput,
   type IbkrTestResult,
@@ -27,7 +26,7 @@ import {
 } from "@yomi/core";
 import type { Db } from "@yomi/db";
 import { type Context, Hono } from "hono";
-import { BadRequest, readJson } from "./split";
+import { BadRequest, readJson, readParam } from "./http";
 
 export interface SecretsDeps {
   getDb: () => Db | Promise<Db>;
@@ -146,11 +145,8 @@ export function secretsRoutes(deps: SecretsDeps): Hono {
 
   r.delete("/plaid/:field", async (c) => {
     assertSecure(c);
-    const field = PlaidKeyField.safeParse(c.req.param("field"));
-    if (!field.success) {
-      return c.json({ error: "field must be clientId, sandbox or production", code: "validation_failed", params: { details: "field" } } satisfies ApiError, 400);
-    }
-    await removePlaidKey(await deps.getDb(), field.data, log, getCurrentUser());
+    const field = readParam(c, "field", PlaidKeyField);
+    await removePlaidKey(await deps.getDb(), field, log, getCurrentUser());
     return c.json((await view()) satisfies SecretsView);
   });
 

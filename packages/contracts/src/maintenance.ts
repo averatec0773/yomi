@@ -1,6 +1,5 @@
 import { z } from "zod";
-import { Locale } from "./common";
-import { DateString } from "./ledger";
+import { DateString, Locale } from "./common";
 import { optionalEmail, optionalPhone } from "./payment";
 import { IbkrSectionItem } from "./secrets";
 

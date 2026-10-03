@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DateString } from "./ledger";
+import { DateString } from "./common";
 
 /**
  * Credentials entered in Settings (IBKR Flex per user, Plaid developer keys per instance). Secrets are write-only:

@@ -35,7 +35,7 @@ import {
 } from "@yomi/core";
 import type { Db } from "@yomi/db";
 import { Hono } from "hono";
-import { BadRequest, idParam, readJson } from "./split";
+import { BadRequest, idParam, readJson } from "./http";
 
 export interface BankDeps {
   /** Plaid setup (env, then Settings); tests inject their own. */
@@ -44,14 +44,6 @@ export interface BankDeps {
   provider?: () => BankProvider | null | Promise<BankProvider | null>;
   /** Server-side log line sink (default console.log). */
   log?: (line: string) => void;
-}
-
-function safeJson(text: string): unknown {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return null;
-  }
 }
 
 /** Routes under /api/bank: config, link token, public token exchange, connections, sync, pause/resume, disconnect. */
@@ -92,8 +84,7 @@ export function bankRoutes(deps: { getDb: () => Db | Promise<Db> } & BankDeps): 
   r.get("/connections", async (c) => c.json({ connections: await connections(await deps.getDb()) } satisfies BankConnectionList));
 
   r.post("/link-token", async (c) => {
-    const text = await c.req.text();
-    const body = text.trim() ? await readJson(c, LinkTokenBody) : {};
+    const body = await readJson(c, LinkTokenBody, { optional: true });
     const p = await provider();
     if (body.environment && body.connectionId == null) assertAvailable(p, body.environment);
     const out = await createLinkToken(await deps.getDb(), getCurrentUser(), p, {
@@ -152,8 +143,7 @@ export function bankRoutes(deps: { getDb: () => Db | Promise<Db> } & BankDeps): 
   });
 
   r.post("/link-sessions/recover", async (c) => {
-    const text = await c.req.text();
-    const body: LinkRecoverBody = text.trim() ? await readJson(c, LinkRecoverBody) : {};
+    const body = await readJson(c, LinkRecoverBody, { optional: true });
     const out = await recoverLinkSessions(await deps.getDb(), getCurrentUser(), await provider(), {
       sessionId: body.sessionId,
       linkSessionId: body.linkSessionId,
@@ -177,19 +167,16 @@ export function bankRoutes(deps: { getDb: () => Db | Promise<Db> } & BankDeps): 
   // institution name exactly, so a stray request or a UI bug cannot delete a connection.
   r.delete("/connections/:id", async (c) => {
     const id = idParam(c);
-    const text = await c.req.text();
-    const body = text.trim() ? DisconnectBody.safeParse(safeJson(text)) : null;
     const db = await deps.getDb();
     const user = getCurrentUser();
     const conn = await getConnectionSummary(db, user, id, await getProvider());
-    if (!body?.success || !disconnectConfirmMatches(conn.institutionName, body.data.confirm)) {
-      const confirm = disconnectConfirmText(conn.institutionName);
-      throw new BadRequest(
-        "bank_disconnect_confirm",
-        `Deleting this connection needs a confirmation in the request body: { "confirm": "${confirm}" }`,
-        { confirm },
-      );
-    }
+    const confirm = disconnectConfirmText(conn.institutionName);
+    const unconfirmed = () =>
+      new BadRequest("bank_disconnect_confirm", `Deleting this connection needs a confirmation in the request body: { "confirm": "${confirm}" }`, {
+        confirm,
+      });
+    const body = await readJson(c, DisconnectBody, { optional: true, invalid: unconfirmed });
+    if (!disconnectConfirmMatches(conn.institutionName, body.confirm)) throw unconfirmed();
     const out = await disconnectConnection(db, user, await provider(), id);
     return c.json(out as BankConnectionView);
   });

@@ -1,7 +1,7 @@
 import { AccessInput, type AccessResult, type ApiError } from "@yomi/contracts";
 import { accessCookieHeader, clearAccessCookieHeader, readAccessToken, tokenMatches } from "@yomi/core";
 import { type Context, Hono } from "hono";
-import { readJson } from "./split";
+import { readJson } from "./http";
 
 function isHttps(c: Context): boolean {
   const forwarded = c.req.header("x-forwarded-proto")?.split(",")[0]?.trim();

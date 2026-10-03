@@ -1,8 +1,8 @@
-import { type ApiError, MonthString, type MonthOverview, SetTargetInput, StatsQuery, type StatsResponse, type Target } from "@yomi/contracts";
+import { MonthString, type MonthOverview, SetTargetInput, StatsQuery, type StatsResponse, type Target } from "@yomi/contracts";
 import { getCurrentUser, getTimeZone, matchPreset, monthOverview, rangeOverview, resolvePeriod, setMonthlyTarget, todayIn } from "@yomi/core";
 import type { Db } from "@yomi/db";
 import { Hono } from "hono";
-import { parseJson } from "./ledger";
+import { BadRequest, readJson, readQuery } from "./http";
 
 /** Routes: GET /month/:month, GET /stats, PUT /targets (mounted under /api). */
 export function monthRoutes(deps: { getDb: () => Db | Promise<Db>; today?: () => string }): Hono {
@@ -10,17 +10,13 @@ export function monthRoutes(deps: { getDb: () => Db | Promise<Db>; today?: () =>
 
   r.get("/month/:month", async (c) => {
     const month = c.req.param("month");
-    if (!MonthString.safeParse(month).success) {
-      return c.json({ error: "The month must be YYYY-MM", code: "invalid_month", params: { value: month } } satisfies ApiError, 400);
-    }
+    if (!MonthString.safeParse(month).success) throw new BadRequest("invalid_month", "The month must be YYYY-MM", { value: month });
     return c.json((await monthOverview(await deps.getDb(), getCurrentUser(), month)) satisfies MonthOverview);
   });
 
   r.get("/stats", async (c) => {
-    const q = await parseJson(c, StatsQuery, c.req.query());
-    if (!q.ok) return q.res;
+    const { preset, from, to } = readQuery(c, StatsQuery);
     const today = deps.today?.() ?? todayIn(await getTimeZone(await deps.getDb(), getCurrentUser()));
-    const { preset, from, to } = q.data;
     const range =
       from !== undefined && to !== undefined
         ? resolvePeriod({ preset: "custom", from, to }, today)
@@ -30,9 +26,8 @@ export function monthRoutes(deps: { getDb: () => Db | Promise<Db>; today?: () =>
   });
 
   r.put("/targets", async (c) => {
-    const b = await parseJson(c, SetTargetInput);
-    if (!b.ok) return b.res;
-    return c.json((await setMonthlyTarget(await deps.getDb(), getCurrentUser(), b.data)) satisfies Target);
+    const body = await readJson(c, SetTargetInput);
+    return c.json((await setMonthlyTarget(await deps.getDb(), getCurrentUser(), body)) satisfies Target);
   });
 
   return r;

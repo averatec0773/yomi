@@ -1,5 +1,4 @@
 import {
-  type ApiError,
   BulkUpdateInput,
   type BulkUpdateResult,
   type Category,
@@ -31,53 +30,19 @@ import {
   updateTransaction,
 } from "@yomi/core";
 import type { Db } from "@yomi/db";
-import { type Context, Hono } from "hono";
-
-/** The part of a zod schema this module uses (zod itself is not an api dependency). */
-interface Schema<T> {
-  safeParse(
-    v: unknown,
-  ): { success: true; data: T } | { success: false; error: { issues: { path: PropertyKey[]; message: string }[] } };
-}
-
-type Parsed<T> = { ok: true; data: T } | { ok: false; res: Response };
-
-/** Validates a JSON body (or any value) against a schema; a 400 response on failure. */
-export async function parseJson<T>(c: Context, schema: Schema<T>, value?: unknown): Promise<Parsed<T>> {
-  let input = value;
-  if (value === undefined) {
-    try {
-      input = await c.req.json();
-    } catch {
-      return { ok: false, res: c.json({ error: "The request body is not valid JSON", code: "invalid_json" } satisfies ApiError, 400) };
-    }
-  }
-  const r = schema.safeParse(input);
-  if (!r.success) {
-    const details = r.error.issues.map((i) => `${i.path.map(String).join(".") || "body"}: ${i.message}`).join("; ");
-    return { ok: false, res: c.json({ error: `Invalid request: ${details}`, code: "validation_failed", params: { details } } satisfies ApiError, 400) };
-  }
-  return { ok: true, data: r.data };
-}
-
-export function idParam(c: Context): number | null {
-  const id = Number(c.req.param("id"));
-  return Number.isInteger(id) && id > 0 ? id : null;
-}
-
-const badId = (c: Context) => c.json({ error: "Invalid id", code: "invalid_id", params: { name: "id" } } satisfies ApiError, 400);
+import { Hono } from "hono";
+import { idParam, readJson, readQuery } from "./http";
 
 /** Routes: /transactions, /categories, /months, /ledger/recategorize (mounted under /api). */
 export function ledgerRoutes(deps: { getDb: () => Db | Promise<Db> }): Hono {
   const r = new Hono();
 
   r.get("/transactions", async (c) => {
-    const q = await parseJson(c, TransactionQuery, c.req.query());
-    if (!q.ok) return q.res;
+    const q = readQuery(c, TransactionQuery);
     const db = await deps.getDb();
     const user = getCurrentUser();
-    const page = await listTransactions(db, user, q.data);
-    const { month, from, to } = q.data;
+    const page = await listTransactions(db, user, q);
+    const { month, from, to } = q;
     const body: TransactionPage =
       from !== undefined && to !== undefined
         ? { ...page, totals: await rangeTotalsForList(db, user, from, to) }
@@ -88,47 +53,38 @@ export function ledgerRoutes(deps: { getDb: () => Db | Promise<Db> }): Hono {
   });
 
   r.post("/transactions/bulk", async (c) => {
-    const b = await parseJson(c, BulkUpdateInput);
-    if (!b.ok) return b.res;
-    const { ids, ...patch } = b.data;
+    const { ids, ...patch } = await readJson(c, BulkUpdateInput);
     return c.json((await bulkUpdate(await deps.getDb(), getCurrentUser(), ids, patch)) satisfies BulkUpdateResult);
   });
 
   r.patch("/transactions/:id", async (c) => {
     const id = idParam(c);
-    if (id == null) return badId(c);
-    const b = await parseJson(c, TransactionPatch);
-    if (!b.ok) return b.res;
-    return c.json((await updateTransaction(await deps.getDb(), getCurrentUser(), id, b.data)) satisfies TransactionItem);
+    const body = await readJson(c, TransactionPatch);
+    return c.json((await updateTransaction(await deps.getDb(), getCurrentUser(), id, body)) satisfies TransactionItem);
   });
 
   r.post("/transactions/:id/category", async (c) => {
     const id = idParam(c);
-    if (id == null) return badId(c);
-    const b = await parseJson(c, SetCategoryInput);
-    if (!b.ok) return b.res;
-    const out = await setCategory(await deps.getDb(), getCurrentUser(), id, b.data.categoryId, { applyToMerchant: b.data.applyToMerchant });
+    const body = await readJson(c, SetCategoryInput);
+    const out = await setCategory(await deps.getDb(), getCurrentUser(), id, body.categoryId, { applyToMerchant: body.applyToMerchant });
     return c.json(out satisfies SetCategoryResult);
   });
 
   r.get("/categories", async (c) => c.json({ categories: await listCategories(await deps.getDb(), getCurrentUser()) } satisfies CategoryList));
 
   r.post("/categories", async (c) => {
-    const b = await parseJson(c, CreateCategoryInput);
-    if (!b.ok) return b.res;
-    return c.json((await createCategory(await deps.getDb(), getCurrentUser(), b.data.name, b.data.kind)) satisfies Category, 201);
+    const body = await readJson(c, CreateCategoryInput);
+    return c.json((await createCategory(await deps.getDb(), getCurrentUser(), body.name, body.kind)) satisfies Category, 201);
   });
 
   r.patch("/categories/:id", async (c) => {
     const id = idParam(c);
-    if (id == null) return badId(c);
-    const b = await parseJson(c, UpdateCategoryInput);
-    if (!b.ok) return b.res;
+    const body = await readJson(c, UpdateCategoryInput);
     const db = await deps.getDb();
     const user = getCurrentUser();
     let out: Category | undefined;
-    if (b.data.name !== undefined) out = await renameCategory(db, user, id, b.data.name);
-    if (b.data.archived !== undefined) out = await archiveCategory(db, user, id, b.data.archived);
+    if (body.name !== undefined) out = await renameCategory(db, user, id, body.name);
+    if (body.archived !== undefined) out = await archiveCategory(db, user, id, body.archived);
     return c.json(out! satisfies Category);
   });
 

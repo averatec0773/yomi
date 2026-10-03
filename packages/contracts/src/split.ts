@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CurrencyCode, Locale } from "./common";
+import { CurrencyCode, Locale, MonthString, QueryFlag, QueryId } from "./common";
 import { StatementPayment } from "./payment";
 
 const Id = z.int().positive();
@@ -37,6 +37,9 @@ export type Participant = z.infer<typeof Participant>;
 
 export const ParticipantList = z.object({ participants: z.array(Participant) });
 export type ParticipantList = z.infer<typeof ParticipantList>;
+
+/** GET /api/participants query string. */
+export const ParticipantsQuery = z.object({ includeArchived: QueryFlag.optional() });
 
 export const CreateParticipantBody = z.object({
   name: z.string().min(1),
@@ -216,6 +219,9 @@ export type Settlement = z.infer<typeof Settlement>;
 
 export const SettlementList = z.object({ settlements: z.array(Settlement) });
 export type SettlementList = z.infer<typeof SettlementList>;
+
+/** GET /api/settlements query string: one participant's, or everyone's. */
+export const SettlementsQuery = z.object({ participantId: QueryId.optional() });
 
 export const RecordSettlementBody = z.object({
   participantId: Id,
@@ -497,6 +503,9 @@ export type UnsplitSuggestion = z.infer<typeof UnsplitSuggestion>;
 export const SuggestionList = z.object({ suggestions: z.array(UnsplitSuggestion) });
 export type SuggestionList = z.infer<typeof SuggestionList>;
 
+/** GET /api/split/suggestions query string. */
+export const SuggestionsQuery = z.object({ month: MonthString.optional() });
+
 export const UnsplitMonth = z.object({
   month: z.string().regex(/^\d{4}-\d{2}$/),
   count: z.int().nonnegative(),
@@ -524,6 +533,9 @@ export type MerchantRule = z.infer<typeof MerchantRule>;
 
 export const MerchantRuleList = z.object({ rules: z.array(MerchantRule) });
 export type MerchantRuleList = z.infer<typeof MerchantRuleList>;
+
+/** GET /api/merchant-rules query string: only the rules that auto-split. */
+export const MerchantRulesQuery = z.object({ autoSplit: QueryFlag.optional() });
 
 export const SetAutoSplitBody = z.object({
   merchant: z.string().trim().min(1),

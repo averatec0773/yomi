@@ -14,7 +14,7 @@ import {
 } from "@yomi/core";
 import type { Db } from "@yomi/db";
 import { Hono } from "hono";
-import { idParam, readJson, readQuery } from "./split";
+import { idParam, readJson, readQuery } from "./http";
 
 export interface AssetsDeps {
   getDb: () => Db | Promise<Db>;

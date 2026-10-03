@@ -2,7 +2,7 @@ import { AnalysisQuery, type AnalysisReport, type FreshnessResponse } from "@yom
 import { analysisReport, getCurrentUser, getTimeZone, loadSourceFacts, resolveAnalysisPeriod, sourceFreshness, todayIn } from "@yomi/core";
 import type { Db } from "@yomi/db";
 import { Hono } from "hono";
-import { parseJson } from "./ledger";
+import { readQuery } from "./http";
 
 /** Routes: GET /analysis, GET /analysis/freshness (mounted under /api). */
 export function analysisRoutes(deps: { getDb: () => Db | Promise<Db>; today?: () => string; env?: NodeJS.ProcessEnv }): Hono {
@@ -16,10 +16,8 @@ export function analysisRoutes(deps: { getDb: () => Db | Promise<Db>; today?: ()
   };
 
   r.get("/analysis", async (c) => {
-    const q = await parseJson(c, AnalysisQuery, c.req.query());
-    if (!q.ok) return q.res;
+    const { period, date, preset, from, to } = readQuery(c, AnalysisQuery);
     const { db, user, today } = await context();
-    const { period, date, preset, from, to } = q.data;
     const range = resolveAnalysisPeriod(
       period ? { period, date } : preset ? { preset } : from !== undefined && to !== undefined ? { from, to } : { period: "month" },
       today,

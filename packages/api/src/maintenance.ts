@@ -43,7 +43,7 @@ import {
 } from "@yomi/core";
 import { backupDatabase, type Db, dbTarget, pgDumpHint } from "@yomi/db";
 import { Hono } from "hono";
-import { readJson, readQuery } from "./split";
+import { readJson, readQuery } from "./http";
 
 function csv(body: string, fileName: string): Response {
   return new Response(body, {

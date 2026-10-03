@@ -30,7 +30,7 @@ import {
 } from "@yomi/core";
 import type { Db } from "@yomi/db";
 import { Hono } from "hono";
-import { BadRequest, readJson, readQuery } from "./split";
+import { readJson, readQuery } from "./http";
 
 export interface InvestDeps {
   /** IBKR Flex source (env, then Settings, resolved per request); tests inject a fake. */
@@ -86,26 +86,19 @@ export function investRoutes(deps: { getDb: () => Db | Promise<Db> } & InvestDep
   });
 
   r.post("/sync", async (c) => {
-    const text = await c.req.text();
-    const body = text.trim() ? await readJson(c, InvestSyncBody) : InvestSyncBody.parse({});
+    const body = await readJson(c, InvestSyncBody, { optional: true });
     const out = await syncHoldings(await deps.getDb(), getCurrentUser(), { provider: body.provider }, { ibkr: await getIbkr(), plaid: await getPlaid(), now: deps.now });
     return c.json(out satisfies InvestSyncResult);
   });
 
   /** "Pull history": the last `days` days of IBKR activity (1 to 365); refused while too soon after the last pull. */
   r.post("/ibkr/history", async (c) => {
-    const text = await c.req.text();
-    let raw: unknown;
-    try {
-      raw = text.trim() ? JSON.parse(text) : {};
-    } catch {
-      throw new BadRequest("invalid_json", "The request body is not valid JSON");
-    }
-    const body = IbkrHistoryBody.safeParse(raw);
-    if (!body.success) {
-      throw new InvestError("invest_ibkr_history_days_invalid", "days must be a whole number from 1 to 365", { min: IBKR_HISTORY_DAYS.min, max: IBKR_HISTORY_DAYS.max });
-    }
-    const out = await pullIbkrHistory(await deps.getDb(), getCurrentUser(), { days: body.data.days }, { ibkr: await getIbkr(), now: deps.now });
+    const { days } = await readJson(c, IbkrHistoryBody, {
+      optional: true,
+      invalid: () =>
+        new InvestError("invest_ibkr_history_days_invalid", "days must be a whole number from 1 to 365", { min: IBKR_HISTORY_DAYS.min, max: IBKR_HISTORY_DAYS.max }),
+    });
+    const out = await pullIbkrHistory(await deps.getDb(), getCurrentUser(), { days }, { ibkr: await getIbkr(), now: deps.now });
     return c.json(out satisfies InvestSyncResult);
   });
 

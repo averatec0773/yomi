@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { ProvisionalTotals } from "./capture";
-import { CurrencyCode } from "./common";
-import { DateString, MonthString } from "./ledger";
+import { CurrencyCode, DateString, MonthString } from "./common";
 import { CategoryShare } from "./month";
 
 export const StatsPreset = z.enum(["this_month", "last_month", "last_3_months", "last_6_months", "this_year", "last_year"]);

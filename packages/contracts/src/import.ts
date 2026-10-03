@@ -1,5 +1,8 @@
 import { z } from "zod";
-import { CurrencyCode, MessageParams, Notice, SourceId } from "./common";
+import { CurrencyCode, MessageParams, Notice, QueryFlag, SourceId } from "./common";
+
+/** POST /api/import/commit flags, as form fields or in the query string: force imports a file imported before. */
+export const ImportFlags = z.object({ force: QueryFlag.optional() });
 
 export const Bucket = z.object({ count: z.int().nonnegative(), minor: z.int().nonnegative() });
 export type Bucket = z.infer<typeof Bucket>;

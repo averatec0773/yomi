@@ -2,7 +2,7 @@ import { QuickCreateBody, QuickCreated, QuickDraft, QuickParseBody } from "@yomi
 import { createQuickEntry, createSmsEntry, getCurrentUser, getTimeZone, listParticipants, parseQuickEntry, todayIn } from "@yomi/core";
 import type { Db } from "@yomi/db";
 import { Hono } from "hono";
-import { readJson } from "./split";
+import { readJson } from "./http";
 
 export function quickRoutes(deps: { getDb: () => Db | Promise<Db> }): Hono {
   const r = new Hono();
