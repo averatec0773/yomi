@@ -22,7 +22,7 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  const { locale, t } = await getI18n();
+  const { locale } = await getI18n();
   const db = await getDb();
   const user = getCurrentUser();
   const zone = await getTimeZoneSetting(db, user);
@@ -35,7 +35,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
         <script dangerouslySetInnerHTML={{ __html: SIDEBAR_BOOT }} />
       </head>
       <body className="min-h-screen">
-        <I18nProvider locale={locale} t={t}>
+        <I18nProvider locale={locale}>
           <ThemeProvider theme={theme}>
           <TimeZoneProvider timeZone={zone.timeZone} isSet={zone.isSet}>
           <ShortcutsProvider overrides={shortcuts}>
