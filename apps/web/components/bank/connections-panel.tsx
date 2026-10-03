@@ -1,5 +1,5 @@
 import { ChartCandlestickIcon, LandmarkIcon } from "lucide-react";
-import { getCurrentUser, ibkrSecretsView, listConnections, plaidSecretsView, resolvePlaidConfig, resolvePlaidProvider, secretKeyInfo, secretsHealth, settingsStatus } from "@yomi/core";
+import { getCurrentUser, ibkrSecretsView, listConnections, plaidSecretsView, resolvePlaidConfig, resolvePlaidProvider, secretKeyInfo, secretsHealth } from "@yomi/core";
 import type { BankConnectionView, SecretsView } from "@yomi/contracts";
 import { EmptyState } from "@/components/ui-kit/empty-state";
 import { ListCard } from "@/components/ui-kit/list-card";
@@ -10,15 +10,16 @@ import { ConnectionRow } from "./bank-connections";
 import { ConnectActions, PlaidSetup } from "./connect-actions";
 import { DeveloperKeys } from "./developer-keys";
 import { ResumePendingExchange } from "./connect-bank-button";
-import { IbkrRow } from "./ibkr-row";
+import { IbkrRow, type IbkrStatusView } from "./ibkr-row";
 
 /**
  * Settings > Connections: connect actions (or the Plaid setup line), then every connected source in
  * two cards, Banks (Plaid bank logins) and Brokerages (Interactive Brokers through Flex, Plaid
  * brokerage logins), one privacy line, then the collapsed "Developer keys" group (Plaid keys for a self-hosted
  * install). Credentials resolve env first, then Settings; values never reach the page, only set / last 4 / source.
+ * `ibkr` comes from the page's settingsStatus, so it runs once per render.
  */
-export async function ConnectionsPanel() {
+export async function ConnectionsPanel({ ibkr }: { ibkr: IbkrStatusView }) {
   const { t } = await getI18n();
   const c = t.connections;
   const db = await getDb();
@@ -27,7 +28,6 @@ export async function ConnectionsPanel() {
   const cfg = await resolvePlaidConfig(db);
   const connections = (await listConnections(db, user, await resolvePlaidProvider(db))) as BankConnectionView[];
   const secrets = await secretsHealth(db);
-  const { ibkr } = await settingsStatus(db, user);
   const k = secretKeyInfo();
   const keyInfo: SecretsView["key"] = { source: k.source, state: k.state, file: k.file };
   const ibkrSecrets = await ibkrSecretsView(db, user);

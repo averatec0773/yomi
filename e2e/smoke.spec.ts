@@ -1,5 +1,5 @@
 import type { Locator, Page } from "@playwright/test";
-import { expect, expectNoHScroll, openRowPopover, pinClock, test } from "./fixtures";
+import { expect, expectNoHScroll, pinClock, test } from "./fixtures";
 
 /** "$1,234.56" → 123456 (minor units), from the element's text. */
 async function minorOf(el: Locator): Promise<number> {
@@ -25,7 +25,9 @@ test("transactions: split popover splits a row with 室友 and it sticks", async
   await expect(page.getByRole("region", { name: "Your share, September" })).toContainText("$");
   const target = await plainRow(page);
   const id = await target.getAttribute("data-tx-id");
-  const dialog = await openRowPopover(page, target, target.getByRole("button", { name: "Split", exact: true }));
+  await target.hover();
+  await target.getByRole("button", { name: "Split", exact: true }).click();
+  const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("Split ·");
   await expect(dialog.getByRole("checkbox", { name: "Me" })).toBeDisabled();
   const saved = page.waitForResponse((r) => r.url().includes(`/api/transactions/${id}/`) && r.request().method() === "POST");
@@ -123,6 +125,35 @@ test("time zone: settings shows the zone and regroups days when it changes", asy
   await page.getByPlaceholder("Search time zones").fill("Chicago");
   await page.getByRole("option", { name: "America/Chicago" }).click();
   await expect(picker).toHaveText("America/Chicago");
+});
+
+test("time zone: today is the user's day, not the server's, in day headers and Quick Add", async ({ page }) => {
+  const hydrationErrors: string[] = [];
+  page.on("console", (m) => {
+    if (m.type() === "error" && /hydrat|#418|#425/i.test(m.text())) hydrationErrors.push(m.text());
+  });
+  const pickZone = async (search: string, zone: string) => {
+    await page.goto("/settings");
+    const picker = page.getByTestId("time-zone-picker");
+    await picker.click();
+    await page.getByPlaceholder("Search time zones").fill(search);
+    await page.getByRole("option", { name: zone }).click();
+    await expect(picker).toHaveText(zone);
+  };
+  // Kiritimati (UTC+14) is already Oct 1 at the pinned instant, noon Sep 30 in Chicago (the servers' and browser's zone).
+  await pickZone("Kiritimati", "Pacific/Kiritimati");
+  await page.goto("/transactions?month=2026-09");
+  // Busy Bee Cafe (Sep 29, 21:14 Beijing time) falls on Sep 30 there: yesterday for the user, today by the server's clock.
+  const day = page.getByRole("rowgroup").filter({ has: page.getByRole("row").filter({ hasText: "Busy Bee Cafe" }) });
+  await expect(day.locator("> div").first()).toContainText(/^Yesterday/);
+  const parsed = page.waitForRequest((r) => r.url().includes("/api/quick/parse"));
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await page.getByRole("textbox", { name: "Add", exact: true }).fill("coffee 4");
+  expect((await parsed).postDataJSON().today).toBe("2026-10-01");
+  await page.keyboard.press("Escape");
+  expect(hydrationErrors).toEqual([]);
+  // Back to Chicago so the rest of the run sees the same days.
+  await pickZone("Chicago", "America/Chicago");
 });
 
 test("bulk: split three rows with 室友, then remove it", async ({ page }) => {
@@ -345,7 +376,9 @@ test("auto-split: enable from the split popover, split the existing rows, /split
   const n = merchants.filter((m) => m === merchant).length;
 
   const row = rows.filter({ hasText: merchant }).first();
-  const dialog = await openRowPopover(page, row, row.getByRole("button", { name: /^Split/ }).first());
+  await row.hover();
+  await row.getByRole("button", { name: /^Split/ }).first().click();
+  const dialog = page.getByRole("dialog");
   await dialog.getByRole("checkbox", { name: "室友" }).check();
   const auto = dialog.getByRole("checkbox", { name: `Split ${merchant} like this from now on` });
   await expect(auto).toBeEnabled();

@@ -17,6 +17,7 @@ import { useLocale, useT } from "@/i18n/client";
 import { noticeText } from "@/i18n/errors";
 import { apiFetch } from "@/lib/api";
 import { relativeTime } from "@/lib/relative-time";
+import { useHydrated } from "@/lib/use-media";
 import { cn } from "@/lib/utils";
 import { DisconnectDialog } from "./disconnect-dialog";
 import { syncSummary } from "./labels";
@@ -44,18 +45,19 @@ export function BankConnections({ connections, environments }: { connections: Ba
   );
 }
 
-/** "Synced 2 hours ago" with the absolute time (and how often it syncs) on hover. */
+/**
+ * "Synced 2 hours ago" with the absolute time (and how often it syncs) on hover. Both read the viewer's clock and
+ * zone, so they render after hydration.
+ */
 export function SyncedAt({ at, note }: { at: string | null; note?: string }) {
   const t = useT();
   const locale = useLocale();
+  const hydrated = useHydrated();
   const c = t.connections;
   if (!at) return <span title={note}>{c.neverSynced}</span>;
+  if (!hydrated) return <span />;
   const title = [fmt(c.lastSynced, { time: shortDateTime(at, locale) }), note].filter(Boolean).join(" · ");
-  return (
-    <span title={title} suppressHydrationWarning>
-      {fmt(c.synced, { time: relativeTime(at, locale, c.justNow) })}
-    </span>
-  );
+  return <span title={title}>{fmt(c.synced, { time: relativeTime(at, locale, c.justNow) })}</span>;
 }
 
 /** One Plaid login (bank or brokerage): sync, pause or resume, reconnect after an error, and the typed disconnect. */

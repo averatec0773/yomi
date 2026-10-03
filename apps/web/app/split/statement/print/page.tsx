@@ -19,7 +19,8 @@ import { type Dictionary, fmt, getDictionary, toLocale } from "@/i18n";
 import { categoryLabel } from "@/i18n/categories";
 import { rich } from "@/i18n/rich";
 import { getDb } from "@/lib/db";
-import { dayLabel, todayLocal } from "@/lib/month";
+import { dayLabel } from "@/lib/month";
+import { getToday } from "@/lib/settings";
 import { cn } from "@/lib/utils";
 
 type Search = Record<string, string | string[] | undefined>;
@@ -181,9 +182,10 @@ export default async function StatementPrintPage({ searchParams }: PageProps<"/s
   const st = t.split.statement;
   const m = (minor: number, currency = s?.currency ?? "USD") => formatMinor(minor, currency);
   const day = (d: string) => dayLabel(d, locale, { year: true });
-  const today = day(todayLocal());
+  const isoToday = await getToday();
+  const today = day(isoToday);
   const mine = s?.show.includes("myshare") ?? false;
-  const settledDay = (d: string) => dayLabel(d, locale, { year: d.slice(0, 4) !== todayLocal().slice(0, 4) });
+  const settledDay = (d: string) => dayLabel(d, locale, { year: d.slice(0, 4) !== isoToday.slice(0, 4) });
 
   if (!s) {
     return (
@@ -300,7 +302,7 @@ export default async function StatementPrintPage({ searchParams }: PageProps<"/s
           <PaperToggle participantId={s.participantId} whitePaper={!screenColors} label={st.optWhitePaper} />
           <div className="flex flex-wrap items-center gap-2 max-sm:grid max-sm:w-full max-sm:grid-cols-2">
             <ImageButtons
-              fileName={statementImageName(s.participantName, s.participantId, s.currency, todayLocal())}
+              fileName={statementImageName(s.participantName, s.participantId, s.currency, isoToday)}
               labels={{
                 save: p.saveImage,
                 copy: p.copyImage,

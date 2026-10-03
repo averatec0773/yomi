@@ -3,6 +3,7 @@
 import { createContext, type ReactNode, use } from "react";
 import { DEFAULT_LOCALE, LOCALE_COOKIE, type Locale } from "./config";
 import { type Dictionary, en } from "./en";
+import { getDictionary } from "./index";
 
 const I18nContext = createContext<{ locale: Locale; t: Dictionary }>({ locale: DEFAULT_LOCALE, t: en });
 
@@ -13,8 +14,12 @@ export function getClientDictionary(): Dictionary {
   return current;
 }
 
-/** Mounted once in the root layout with the request's locale and dictionary. */
-export function I18nProvider({ locale, t, children }: { locale: Locale; t: Dictionary; children: ReactNode }) {
+/**
+ * Mounted once in the root layout with the request's locale. Both dictionaries come from the client bundle (one cached
+ * chunk), so neither is serialized into every page and router refresh.
+ */
+export function I18nProvider({ locale, children }: { locale: Locale; children: ReactNode }) {
+  const t = getDictionary(locale);
   current = t;
   return <I18nContext value={{ locale, t }}>{children}</I18nContext>;
 }

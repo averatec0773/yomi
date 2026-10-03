@@ -3,7 +3,7 @@
 import { formatMinor, minorDigits, parseAmountToMinor, splitEqual } from "@yomi/core/money";
 import type { SharedNote } from "@yomi/contracts";
 import { CheckIcon, MessageSquareTextIcon, PlusIcon, UsersIcon } from "lucide-react";
-import { type KeyboardEvent, type ReactNode, useEffect, useState } from "react";
+import { type KeyboardEvent, type ReactNode, type RefObject, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui-kit/button";
 import { Money } from "@/components/money";
@@ -633,16 +633,16 @@ function BulkPanel({
 const content = "max-h-(--radix-popover-content-available-height) w-[min(340px,calc(100vw-2rem))] gap-0 overflow-y-auto rounded-2xl border border-line-strong bg-raised p-4 text-body shadow-dialog ring-0";
 const edge = 8;
 
-/**
- * The AA popover for one row. `trigger` is the part of the slot that toggles it; `anchor` wraps the whole
- * slot so the popover lines up with it (the suggestion pill has a second, accept-only button inside).
- */
-
 /** "$35.60" when every share is the same, else the distinct shares largest first: "$35.60 / $35.59" (cents that do not divide). */
 function shareAmounts(parts: number[], currency: string): string {
   return [...new Set(parts)].sort((a, b) => b - a).map((m) => formatMinor(m, currency)).join(" / ");
 }
 
+/**
+ * The AA popover for one row. `triggerRef` is the button in the slot that toggles it (a press on it is not an outside
+ * click, so it closes instead of closing and reopening); an `AaAnchor` among the children wraps the whole slot so the
+ * popover lines up with it (the suggestion pill has a second, accept-only button inside).
+ */
 export function AaRowPopover({
   tx,
   others,
@@ -651,6 +651,7 @@ export function AaRowPopover({
   autoSplit,
   open,
   onOpenChange,
+  triggerRef,
   actions,
   children,
 }: {
@@ -661,13 +662,22 @@ export function AaRowPopover({
   autoSplit: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  triggerRef: RefObject<HTMLElement | null>;
   actions: RowActions;
   children: ReactNode;
 }) {
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
       {children}
-      <PopoverContent align="end" collisionPadding={edge} className={content} onCloseAutoFocus={(e) => e.preventDefault()}>
+      <PopoverContent
+        align="end"
+        collisionPadding={edge}
+        className={content}
+        onInteractOutside={(e) => {
+          if (triggerRef.current?.contains(e.target as Node)) e.preventDefault();
+        }}
+        onCloseAutoFocus={(e) => e.preventDefault()}
+      >
         {open && (
           <RowPanel tx={tx} others={others} selfId={selfId} nameOf={nameOf} autoSplit={autoSplit} actions={actions} />
         )}
@@ -676,7 +686,7 @@ export function AaRowPopover({
   );
 }
 
-export { PopoverAnchor as AaAnchor, PopoverTrigger as AaTrigger };
+export { PopoverAnchor as AaAnchor };
 
 export function AaBulkPopover({
   rows,

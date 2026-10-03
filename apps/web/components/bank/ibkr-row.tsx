@@ -15,6 +15,7 @@ import { errorText } from "@/i18n/errors";
 import { apiFetch } from "@/lib/api";
 import { dayLabel } from "@/lib/month";
 import { relativeTime } from "@/lib/relative-time";
+import { useHydrated } from "@/lib/use-media";
 import { cn } from "@/lib/utils";
 import { INVESTMENTS_HREF, SyncedAt } from "./bank-connections";
 import { IbkrHistoryDialog } from "./ibkr-history-dialog";
@@ -46,6 +47,7 @@ function expiryText(expiry: SecretsView["ibkr"]["expiry"], t: ReturnType<typeof 
 function SectionsDetail({ check }: { check: IbkrStatusView["sectionCheck"] }) {
   const t = useT();
   const locale = useLocale();
+  const hydrated = useHydrated();
   const i = t.connections.ibkr;
   if (!check) return <p className="text-meta text-3" data-testid="ibkr-sections-detail">{i.sectionsNotChecked}</p>;
   const unknown = check.sections.some((s) => s.state === "unknown");
@@ -55,10 +57,15 @@ function SectionsDetail({ check }: { check: IbkrStatusView["sectionCheck"] }) {
         <ChevronRightIcon className="size-3.5 shrink-0 transition-transform duration-[120ms] group-open:rotate-90" aria-hidden />
         <span className="min-w-0">
           {sectionsSummary(check.sections, t)}
-          <span className="text-3"> · </span>
-          <span title={shortDateTime(check.at, locale)} suppressHydrationWarning>
-            {fmt(i.sectionsChecked, { time: relativeTime(check.at, locale, t.connections.justNow) })}
-          </span>
+          {/* Reads the viewer's clock and zone, so it renders after hydration. */}
+          {hydrated && (
+            <>
+              <span className="text-3"> · </span>
+              <span title={shortDateTime(check.at, locale)}>
+                {fmt(i.sectionsChecked, { time: relativeTime(check.at, locale, t.connections.justNow) })}
+              </span>
+            </>
+          )}
         </span>
       </summary>
       <div className="mt-1.5 flex flex-col gap-1.5 pl-5">

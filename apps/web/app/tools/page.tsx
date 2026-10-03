@@ -4,7 +4,7 @@ import { ToolsHub } from "@/components/tools/tools-hub";
 import { PageHeader } from "@/components/ui-kit/page-header";
 import { getI18n } from "@/i18n/server";
 import { getDb } from "@/lib/db";
-import { todayLocal } from "@/lib/month";
+import { getToday } from "@/lib/settings";
 
 export async function generateMetadata() {
   const { t } = await getI18n();
@@ -25,7 +25,7 @@ export default async function ToolsPage() {
     // Narrow like the other Tools pages; wide enough for two columns of sections from 1200px. Sections live in ToolsHub.
     <div className="max-w-narrow min-[1200px]:max-w-list">
       <PageHeader title={t.tools.title} />
-      <ToolsHub people={people} currencies={currencies} today={todayLocal()} />
+      <ToolsHub people={people} currencies={currencies} today={await getToday()} />
     </div>
   );
 }

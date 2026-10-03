@@ -17,9 +17,8 @@ import { accountLabel } from "@/i18n/accounts";
 import { categoryLabel } from "@/i18n/categories";
 import { useT } from "@/i18n/client";
 import { displayDescription, sourceTermLabel } from "@/i18n/source-terms";
-import { useIsDesktop } from "@/lib/use-media";
 import { cn } from "@/lib/utils";
-import { AaAnchor, AaRowPopover, AaTrigger } from "./aa-popover";
+import { AaAnchor, AaRowPopover } from "./aa-popover";
 import { CategoryMenu } from "./category-menu";
 import { canSplit, splitStateOf } from "./split-math";
 import { suggestionReason } from "./suggestion";
@@ -40,6 +39,8 @@ export interface TxRowProps {
   done?: boolean;
   /** The merchant's rule splits new rows automatically. */
   autoSplit?: boolean;
+  /** The md layout and up (TxView's one useIsDesktop). */
+  desktop: boolean;
 }
 
 const marker =
@@ -76,6 +77,10 @@ function AaSlot({
   const suggested = suggestion?.participantIds ?? [];
   const onOpenChange = (o: boolean) => actions.openPanel(tx.id, o ? "split" : null);
   const icon = <UsersIcon className="size-3.5 shrink-0 max-md:hidden" aria-hidden />;
+  // A plain button, not Radix's PopoverTrigger: the popover is controlled, and a PopoverTrigger beside the custom
+  // anchor below rewraps itself after hydration, remounting every row's button.
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const trigger = { ref: triggerRef, "aria-haspopup": "dialog", "aria-expanded": open, onClick: () => onOpenChange(!open) } as const;
 
   let body: ReactNode;
   if (state) {
@@ -83,33 +88,31 @@ function AaSlot({
     const names = state.participantIds.map(nameOf).join(t.common.listSep);
     const payer = nameOf(state.payerId);
     body = (
-      <AaTrigger asChild>
-        <button
-          type="button"
-          aria-label={friendPaid ? fmt(s.friendPaidAria, { name: payer }) : fmt(s.withAria, { names })}
-          title={friendPaid ? fmt(s.friendPaidTitle, { name: payer }) : fmt(s.withTitle, { names })}
-          className={cn(marker, "hit relative bg-primary-soft font-medium text-primary-soft-foreground hover:brightness-110 md:w-full")}
-        >
-          {icon}
-          <span className="truncate">{friendPaid ? fmt(s.friendPaid, { name: payer }) : fmt(s.people, { count: state.participantIds.length + 1 })}</span>
-        </button>
-      </AaTrigger>
+      <button
+        type="button"
+        {...trigger}
+        aria-label={friendPaid ? fmt(s.friendPaidAria, { name: payer }) : fmt(s.withAria, { names })}
+        title={friendPaid ? fmt(s.friendPaidTitle, { name: payer }) : fmt(s.withTitle, { names })}
+        className={cn(marker, "hit relative bg-primary-soft font-medium text-primary-soft-foreground hover:brightness-110 md:w-full")}
+      >
+        {icon}
+        <span className="truncate">{friendPaid ? fmt(s.friendPaid, { name: payer }) : fmt(s.people, { count: state.participantIds.length + 1 })}</span>
+      </button>
     );
   } else if (suggested.length > 0) {
     const names = suggested.map(nameOf).join(t.common.listSep);
     const reason = suggestion ? suggestionReason(suggestion, t, nameOf) : null;
     body = (
       <span className={cn(marker, "gap-0 border border-dashed border-line-strong px-0 text-2 max-md:px-0 md:w-full")}>
-        <AaTrigger asChild>
-          <button
-            type="button"
-            aria-label={s.settings}
-            title={s.settingsTitle}
-            className="hit relative inline-flex h-full shrink-0 items-center gap-1 rounded-l-full pr-1 pl-2.5 hover:text-primary max-md:pr-2"
-          >
-            <UsersIcon className="size-3.5" aria-hidden />
-          </button>
-        </AaTrigger>
+        <button
+          type="button"
+          {...trigger}
+          aria-label={s.settings}
+          title={s.settingsTitle}
+          className="hit relative inline-flex h-full shrink-0 items-center gap-1 rounded-l-full pr-1 pl-2.5 hover:text-primary max-md:pr-2"
+        >
+          <UsersIcon className="size-3.5" aria-hidden />
+        </button>
         <button
           type="button"
           aria-label={fmt(s.suggestAria, { names })}
@@ -153,23 +156,22 @@ function AaSlot({
     );
   } else {
     body = (
-      <AaTrigger asChild>
-        <button
-          type="button"
-          aria-label={s.label}
-          title={s.title}
-          className={cn(
-            marker,
-            "border border-transparent text-2 hover:border-border hover:text-foreground focus-visible:opacity-100",
-            // Phones: no faint marker on every row (the row menu has Split); it stays as the popover's anchor.
-            "max-md:pointer-events-none max-md:h-0 max-md:overflow-hidden max-md:border-0 max-md:opacity-0",
-            open || focused ? "md:opacity-100" : "md:opacity-0 md:group-hover/row:opacity-100",
-          )}
-        >
-          {icon}
-          {s.label}
-        </button>
-      </AaTrigger>
+      <button
+        type="button"
+        {...trigger}
+        aria-label={s.label}
+        title={s.title}
+        className={cn(
+          marker,
+          "border border-transparent text-2 hover:border-border hover:text-foreground focus-visible:opacity-100",
+          // Phones: no faint marker on every row (the row menu has Split); it stays as the popover's anchor.
+          "max-md:pointer-events-none max-md:h-0 max-md:overflow-hidden max-md:border-0 max-md:opacity-0",
+          open || focused ? "md:opacity-100" : "md:opacity-0 md:group-hover/row:opacity-100",
+        )}
+      >
+        {icon}
+        {s.label}
+      </button>
     );
   }
 
@@ -182,6 +184,7 @@ function AaSlot({
       autoSplit={autoSplit}
       open={open}
       onOpenChange={onOpenChange}
+      triggerRef={triggerRef}
       actions={actions}
     >
       <AaAnchor asChild>
@@ -223,10 +226,9 @@ function NoteEditor({ tx, onDone }: { tx: Tx; onDone: (note: string | null | und
 
 const badge = "shrink-0 rounded-sm bg-tile px-1.5 text-hint font-normal";
 
-function TxRowImpl({ tx, others, selfId, nameOf, categories, selected, focused, selecting, panel, actions, done, autoSplit }: TxRowProps) {
+function TxRowImpl({ tx, others, selfId, nameOf, categories, selected, focused, selecting, panel, actions, done, autoSplit, desktop }: TxRowProps) {
   const t = useT();
   const r = t.transactions.row;
-  const desktop = useIsDesktop();
   const splittable = canSplit(tx);
   const hidden = tx.status !== "ok" || tx.duplicateOfId != null;
   const transfer = tx.kind === "transfer";
@@ -453,6 +455,7 @@ export const TxRow = memo(TxRowImpl, (a, b) =>
   a.panel === b.panel &&
   a.done === b.done &&
   a.autoSplit === b.autoSplit &&
+  a.desktop === b.desktop &&
   a.actions === b.actions &&
   a.nameOf === b.nameOf &&
   a.selfId === b.selfId,

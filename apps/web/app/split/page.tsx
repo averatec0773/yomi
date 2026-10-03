@@ -27,7 +27,7 @@ import { PageHeader } from "@/components/ui-kit/page-header";
 import { UsersIcon } from "lucide-react";
 import { getI18n } from "@/i18n/server";
 import { getDb } from "@/lib/db";
-import { todayLocal } from "@/lib/month";
+import { getToday } from "@/lib/settings";
 
 export async function generateMetadata() {
   const { t } = await getI18n();
@@ -39,7 +39,7 @@ export default async function SplitPage() {
   const { t } = await getI18n();
   const db = await getDb();
   const user = getCurrentUser();
-  const today = todayLocal();
+  const today = await getToday();
 
   const participants = await listParticipants(db, user, { includeArchived: true });
   const others = participants.filter((p) => !p.isSelf);

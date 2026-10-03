@@ -18,3 +18,14 @@ export function useIsDesktop(): boolean {
     () => true,
   );
 }
+
+const noSubscribe = () => () => {};
+
+/** False on the server and while hydrating, true after: for text that depends on the viewer's clock ("5 minutes ago"). */
+export function useHydrated(): boolean {
+  return useSyncExternalStore(
+    noSubscribe,
+    () => true,
+    () => false,
+  );
+}
