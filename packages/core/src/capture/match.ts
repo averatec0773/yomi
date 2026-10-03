@@ -1,7 +1,7 @@
-import { accounts, type CaptureCandidate, captures, type Db, transactions } from "@yomi/db";
+import { accounts, type CaptureCandidate, type CapturePayload, captures, type Db, transactions } from "@yomi/db";
 import { and, eq, gte, inArray, isNull, lte, or } from "@yomi/db/orm";
 import { parsePaymentMethod } from "../import/accounts";
-import { lockReason } from "../ledger/lock";
+import { splitAndSettledIds } from "../ledger/lock";
 import { addDays, dayDiff } from "../time/day";
 import type { CurrentUser } from "../user";
 import { supersede } from "./supersede";
@@ -233,7 +233,7 @@ export function planMatches(caps: readonly OpenCapture[], auths: readonly Author
 }
 
 /** Open captures of the user with their row's day, merchant and lock. */
-async function loadOpenCaptures(q: Db, user: CurrentUser, newIds: ReadonlySet<number>): Promise<(OpenCapture & { review: string | null; candidates: CaptureCandidate[] })[]> {
+async function loadOpenCaptures(q: Db, user: CurrentUser, newIds: ReadonlySet<number>): Promise<(OpenCapture & { review: string | null; payload: CapturePayload })[]> {
   const rows = await q
     .select({
       id: captures.id,
@@ -254,27 +254,23 @@ async function loadOpenCaptures(q: Db, user: CurrentUser, newIds: ReadonlySet<nu
     .from(captures)
     .innerJoin(transactions, eq(transactions.id, captures.transactionId))
     .where(and(eq(captures.userId, user.id), eq(captures.state, "provisional")));
-  const out = [];
-  for (const r of rows) {
-    const locked = r.note != null || r.sharedNote != null || (await lockReason(q, user.id, { id: r.transactionId!, userEditedAt: r.userEditedAt })) != null;
-    out.push({
-      id: r.id,
-      transactionId: r.transactionId!,
-      occurredAt: r.occurredAt,
-      occurredOn: r.occurredOn,
-      amountMinor: r.amountMinor,
-      currency: r.currency,
-      last4: r.last4,
-      hold: r.hold,
-      merchant: r.merchant,
-      locked,
-      rejected: r.payload.rejected ?? [],
-      isNew: newIds.has(r.id),
-      review: r.review,
-      candidates: r.payload.candidates ?? [],
-    });
-  }
-  return out;
+  const locks = await splitAndSettledIds(q, user.id, rows.map((r) => r.transactionId!));
+  return rows.map((r) => ({
+    id: r.id,
+    transactionId: r.transactionId!,
+    occurredAt: r.occurredAt,
+    occurredOn: r.occurredOn,
+    amountMinor: r.amountMinor,
+    currency: r.currency,
+    last4: r.last4,
+    hold: r.hold,
+    merchant: r.merchant,
+    locked: r.note != null || r.sharedNote != null || r.userEditedAt != null || locks.split.has(r.transactionId!) || locks.settled.has(r.transactionId!),
+    rejected: r.payload.rejected ?? [],
+    isNew: newIds.has(r.id),
+    review: r.review,
+    payload: r.payload,
+  }));
 }
 
 /**
@@ -284,7 +280,15 @@ async function loadOpenCaptures(q: Db, user: CurrentUser, newIds: ReadonlySet<nu
  */
 async function loadAuthorities(q: Db, user: CurrentUser, caps: readonly OpenCapture[], newIds: ReadonlySet<number>): Promise<AuthorityRow[]> {
   if (caps.length === 0) return [];
-  const days = caps.map((c) => c.occurredOn).sort();
+  // Each capture's widest window (a near miss before a statement row, after a posted hold); overlapping ones merge.
+  const windows: { from: string; to: string }[] = [];
+  for (const day of caps.map((c) => c.occurredOn).sort()) {
+    const from = addDays(day, PDF_WINDOW.from - NEAR_EXTRA_DAYS);
+    const to = addDays(day, HOLD_WINDOW.to + NEAR_EXTRA_DAYS);
+    const last = windows.at(-1);
+    if (last && from <= last.to) last.to = to;
+    else windows.push({ from, to });
+  }
   const currencies = [...new Set(caps.map((c) => c.currency))];
   const rows = await q
     .select({
@@ -310,8 +314,7 @@ async function loadAuthorities(q: Db, user: CurrentUser, caps: readonly OpenCapt
         isNull(transactions.duplicateOfId),
         or(isNull(transactions.provisional), and(eq(transactions.source, "sms"), eq(transactions.provisional, "capture"))),
         or(inArray(transactions.currency, currencies), inArray(transactions.originalCurrency, currencies)),
-        gte(transactions.occurredOn, addDays(days[0]!, PDF_WINDOW.from - NEAR_EXTRA_DAYS)),
-        lte(transactions.occurredOn, addDays(days.at(-1)!, HOLD_WINDOW.to + NEAR_EXTRA_DAYS)),
+        or(...windows.map((w) => and(gte(transactions.occurredOn, w.from), lte(transactions.occurredOn, w.to)))),
       ),
     );
   const claimed = new Set(
@@ -382,9 +385,8 @@ async function matchOpenCaptures(
     const r = plan.reviews.get(c.id);
     if (!r) continue;
     if (r.review) toReview += 1;
-    if (r.review === c.review && sameCandidates(c.candidates, r.candidates)) continue;
-    const current = (await q.select({ payload: captures.payload }).from(captures).where(eq(captures.id, c.id)).limit(1))[0]!.payload;
-    const { candidates: _old, ...rest } = current;
+    if (r.review === c.review && sameCandidates(c.payload.candidates ?? [], r.candidates)) continue;
+    const { candidates: _old, ...rest } = c.payload;
     await q
       .update(captures)
       .set({
