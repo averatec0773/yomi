@@ -56,9 +56,9 @@
 }
 
 @theme {
-  --font-sans: "Inter", -apple-system, "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei",
+  --font-sans: -apple-system, "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei",
     system-ui, sans-serif;
-  --font-num: "Inter", "SF Pro Text", -apple-system, system-ui, sans-serif;
+  --font-num: "SF Pro Text", -apple-system, system-ui, sans-serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
 
   --text-hint: 12px;
