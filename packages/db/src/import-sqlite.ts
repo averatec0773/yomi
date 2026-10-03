@@ -49,10 +49,10 @@ export function sqliteMigrationsFolder(): string {
 }
 
 /** Tables added after v0.1: a v0.1 ledger has none of them, so the import leaves them empty. */
-const POSTGRES_ONLY_TABLES = new Set(["investment_daily_nav"]);
+const POSTGRES_ONLY_TABLES = new Set(["investment_daily_nav", "captures"]);
 
 /** Nullable columns added after v0.1 (`table.column`): a v0.1 ledger has none of them, so the import leaves them null. */
-const POSTGRES_ONLY_COLUMNS = new Set(["import_batches.period_start", "import_batches.period_end"]);
+const POSTGRES_ONLY_COLUMNS = new Set(["import_batches.period_start", "import_batches.period_end", "transactions.provisional"]);
 
 /** The ledger tables a v0.1 ledger also has (Postgres-only tables left out). */
 function schemaTables(): Map<string, PgTable> {

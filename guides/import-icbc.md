@@ -43,9 +43,9 @@ How rows are read: debits are spending; credits whose place mentions a rebate or
 3. **Card account and balance.** An account named after the card (for example 工商银行信用卡 3141) is created. The last `账户余额` on the statement is stored as the card's balance on the Assets page.
 4. **Dedup.** ICBC rows have no transaction number, so each row is keyed by card, time, amount, currency and text. Importing the same file again is refused with "This file was already imported"; importing anyway only adds rows not seen before. Overlapping exports only add new rows; two identical charges in one file are both kept.
 5. **Linking.** A new ICBC row is linked to:
-   - a pasted SMS alert for the same charge (see below), which stays the primary row so its split, category and note survive;
+   - a pasted SMS alert for the same charge (see [SMS alerts](#sms-alerts)), which it confirms;
    - otherwise, an [Alipay](import-alipay.md) or [WeChat](import-wechat.md) row paid with the same card (last four digits), same amount and currency, within 3 days. The wallet row counts and the card row is kept as its duplicate. If you import Alipay or WeChat later, the link is made then, unless you already split, settled or edited the card row (then the preview warns you).
-6. **Undo.** Each import is a batch under **Import history** on the Import page. **Revert** deletes the batch's transactions you have not edited and the balance it stored, and lets you import the file again.
+6. **Undo.** Each import is a batch under **Import history** on the Import page. **Revert** deletes the batch's transactions you have not edited and the balance it stored, puts the SMS alerts it confirmed back to provisional, and lets you import the file again.
 
 ## Import it
 
@@ -72,10 +72,13 @@ A supported alert looks like this (fictional):
 您尾号3141信用卡9月27日08:24POS支出(消费SAMPLE CAFE Houston)15.74美元。【工商银行】
 ```
 
-- yomi reads the card's last four digits, date and time (Beijing time; the year is inferred), the direction word (`支出` spending, or `收入` / `存入` / `退货` / `退款` for credits), the merchant and city, and the amount in `美元` USD, `港币`/`港元` HKD or `人民币`/`元` CNY. Text after the amount is ignored.
+- yomi reads the card's last four digits, date and time (Beijing time, placed on your own calendar day; the year is inferred), the direction word (`支出` spending, or `收入` / `存入` / `退货` / `退款` for credits), the merchant and city, and the amount in `美元` USD, `港币`/`港元` HKD or `人民币`/`元` CNY. Text after the amount is ignored.
+- A pre-authorisation (`支出(预授权额度冻结)`) is a **card hold**: it has no merchant, is marked "Card hold" on Transactions and does not count as spending until the charge posts. Analysis notes held amounts per currency ("1 card hold not counted, $28.79").
+- Any other alert is **provisional**: marked "Provisional" on Transactions and counted, with a note under the totals ("incl. $23.50 provisional (1)"). Provisional rows never move how far a source's data reaches.
 - Pasting the same alert twice does not add it twice ("This alert is already in the ledger").
-- If the PDF row (or an Alipay or WeChat row paid with that card) is already in the ledger, the alert is linked to it and counts once.
-- When you import the PDF later, its row for the same card, amount and currency within 3 days, with an overlapping merchant name, is linked to the alert. The alert stays the counted row; an empty merchant is filled in from the statement.
+- The statement row for the same charge replaces the alert: same card, the same amount and currency (or the original amount of a foreign charge), from 1 day before to 3 days after the alert in your time zone, with an overlapping merchant name. An Alipay or WeChat row paid with that card within 10 minutes does the same, and so does the next alert of the posted charge for a hold (within 7 days). This happens when you paste the alert after the row, or when the row arrives later.
+- Only a single, unambiguous pair is linked. The statement row then counts and the alert is kept as its duplicate; what the row lacks (merchant, category, note) is copied from the alert. If you split, settled or edited the alert, the alert stays the counted row and takes the statement's amount, date and account (an equal split follows the new amount).
+- Everything else goes to a review queue: "3 captures need a look" above the Transactions list, and a pointer on the import outcome. **Review** opens it: choose which of several rows is the charge or keep the alert separate, confirm a row that is a little higher than a hold (a tip) or keep both, and keep as final or discard an alert no statement row came for (14 days after it, or as soon as an imported statement of that card covers its day). **Select** acts on several items at once. Every action has Undo.
 - Alerts are not part of an import batch, so reverting a PDF batch does not remove them.
 
 Only ICBC credit card alerts are read. Other banks' messages are not supported yet.
@@ -89,6 +92,6 @@ Only ICBC credit card alerts are read. Other banks' messages are not supported y
 | "Page N: read X rows, the page declares Y" | A row could not be placed. Check that page against the PDF and add the missing row by hand; please report the layout without sharing real data. |
 | Totals off by a converted amount | Foreign charges are booked in the card's currency; the original amount is kept separately. Compare booked amounts. |
 | SMS not recognized | Paste the full message including the amount and currency. Debit card and other banks' alerts are not supported. |
-| Charge counted twice | The rows are more than 3 days apart, the amounts differ, or one was edited before linking. Fix one of them by hand. |
+| Charge counted twice | Two rows fit the alert, or the amounts or days differ a little: open **Review** on Transactions. Otherwise the rows are further apart than the matching window; fix one of them by hand. |
 
 See also: [Alipay guide](import-alipay.md), [WeChat guide](import-wechat.md), [README](../README.md).

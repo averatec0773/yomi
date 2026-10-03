@@ -30,6 +30,8 @@ function tx(over: Partial<TransactionItem> = {}): TransactionItem {
     importBatchId: null,
     duplicateOfId: null,
     userEditedAt: null,
+    provisional: null,
+    capture: null,
     splits: [],
     myShareMinor: 1001,
     suggestedParticipantIds: [],

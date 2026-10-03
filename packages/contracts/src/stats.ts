@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ProvisionalTotals } from "./capture";
 import { CurrencyCode } from "./common";
 import { DateString, MonthString } from "./ledger";
 import { CategoryShare } from "./month";
@@ -32,11 +33,11 @@ export const PeriodMetrics = z.object({
 });
 export type PeriodMetrics = z.infer<typeof PeriodMetrics>;
 
-export const RangeCurrencyOverview = PeriodMetrics.extend({
+export const RangeCurrencyOverview = PeriodMetrics.extend(ProvisionalTotals.shape).extend({
   currency: CurrencyCode,
   byCategory: z.array(CategoryShare),
   smallPayments: z.object({ thresholdMinor: z.int(), count: z.int().nonnegative(), minor: z.int() }),
-  largest: z.array(z.object({ id: z.int(), merchant: z.string(), minor: z.int(), occurredAt: z.string(), occurredOn: z.string() })),
+  largest: z.array(z.object({ id: z.int(), merchant: z.string(), minor: z.int(), occurredAt: z.string(), occurredOn: z.string(), provisional: z.boolean() })),
   sharedReceivableMinor: z.int(),
   /** Same metrics over the previous period of equal length; null when it has no spending rows. */
   previous: PeriodMetrics.nullable(),

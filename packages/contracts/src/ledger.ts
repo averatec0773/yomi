@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CaptureInfo, ProvisionalTotals } from "./capture";
 import { CurrencyCode } from "./common";
 
 export const MonthString = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "YYYY-MM");
@@ -86,6 +87,10 @@ export const TransactionItem = z.object({
   importBatchId: z.int().nullable(),
   duplicateOfId: z.int().nullable(),
   userEditedAt: z.string().nullable(),
+  /** capture: from a pasted SMS no statement has confirmed yet (counted, labelled); hold: a card hold (not counted). */
+  provisional: z.enum(["capture", "hold"]).nullable(),
+  /** The capture behind the row (a pasted SMS); null for other rows. */
+  capture: CaptureInfo.nullable(),
   splits: z.array(SplitItem),
   /** What the row adds to my spending: positive = spent, refunds negative, 0 when not counted. */
   myShareMinor: z.int(),
@@ -95,7 +100,7 @@ export const TransactionItem = z.object({
 });
 export type TransactionItem = z.infer<typeof TransactionItem>;
 
-export const CurrencyTotal = z.object({
+export const CurrencyTotal = ProvisionalTotals.extend({
   currency: CurrencyCode,
   count: z.int().nonnegative(),
   spendingMinor: z.int(),

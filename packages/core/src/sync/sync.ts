@@ -1,9 +1,10 @@
-import { accounts, bankAccounts, bankConnections, type Db, settlements, transactions, transactionSplits } from "@yomi/db";
+import { accounts, bankAccounts, bankConnections, type Db, transactions } from "@yomi/db";
 import { CodedError, type MessageParams, type NormalizedRow, type Notice, notice, type ParseResult } from "@yomi/importers";
 import { and, asc, eq, inArray, isNull } from "@yomi/db/orm";
 import type { AccountSpec } from "../import/accounts";
 import { sha256Hex } from "../import/dedup";
 import { cleanMerchant } from "../import/merchant";
+import { type LockReason, lockReason } from "../ledger/lock";
 import { commitParsed } from "../import/pipeline";
 import { openSecret, sealSecret, tryOpenSecret } from "../secrets/crypto";
 import { assertSecretsUsable } from "../secrets/tokens";
@@ -84,8 +85,7 @@ export interface SyncResult {
 
 type Q = Db;
 
-/** Why a stored row keeps its values against the provider (notice param `reason`). */
-type LockReason = "edited" | "split" | "settled";
+/** How a lock reason reads in a notice (param `reason` carries the code). */
 const LOCK_WORDS: Record<LockReason, string> = { edited: "edited by hand", split: "split", settled: "recorded as a settlement" };
 type ConnRow = typeof bankConnections.$inferSelect;
 
@@ -412,24 +412,6 @@ function assertEnvironmentAvailable(provider: BankProvider, accessToken: string)
   if (!supportsToken(provider, accessToken)) throw environmentUnavailable(provider.tokenEnvironment(accessToken)!, "connection");
 }
 
-/** Why a stored row must not be changed by the provider: split, settled or edited by me. */
-async function lockReason(q: Q, userId: number, tx: { id: number; userEditedAt: string | null }): Promise<LockReason | null> {
-  if (tx.userEditedAt != null) return "edited";
-  if ((await q.select({ id: transactionSplits.id }).from(transactionSplits).where(eq(transactionSplits.transactionId, tx.id)).limit(1))[0]) {
-    return "split";
-  }
-  if (
-    (await q
-      .select({ id: settlements.id })
-      .from(settlements)
-      .where(and(eq(settlements.userId, userId), eq(settlements.transactionId, tx.id)))
-      .limit(1))[0]
-  ) {
-    return "settled";
-  }
-  return null;
-}
-
 async function findStored(q: Q, userId: number, source: string, externalId: string) {
   return (await q
     .select()
@@ -542,6 +524,7 @@ export async function syncConnection(
         backup: opts.backup,
         noDeclared: true,
         skipIfNothingNew: true,
+        by: `sync:${conn.id}`,
         accountSpec: (r) => specByRow.get(r) ?? null,
       })
     : null;

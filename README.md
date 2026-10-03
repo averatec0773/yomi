@@ -11,7 +11,7 @@ A self-hosted personal ledger for people whose money lives in both the US and Ch
 
 ![The Transactions page with demo data, dark theme](guides/images/transactions-dark.webp)
 
-**Status:** v0.2.3, an early release used daily by its author.
+**Status:** v0.2.4, an early release used daily by its author.
 
 ## Features
 

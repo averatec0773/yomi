@@ -1,23 +1,28 @@
-import { accounts, categories, merchantRules, transactions } from "@yomi/db";
+import { accounts, type CaptureReview, captures, type CaptureState, categories, merchantRules, transactions } from "@yomi/db";
 import { type IcbcSms, looksLikeIcbcSms, type NormalizedRow, parseIcbcSms } from "@yomi/importers";
 import { and, desc, eq } from "@yomi/db/orm";
+import { runMatching } from "../capture/match";
 import { accountKey, resolveAccountSpec } from "../import/accounts";
 import { resolveCategoryId } from "../import/categorize";
 import { sha256Hex } from "../import/dedup";
 import { cleanMerchant } from "../import/merchant";
-import { findCardMatch } from "../import/sms-link";
+import { myShareMinor } from "../ledger/share";
 import { type Q, SplitError } from "../split/internal";
 import { autoSplitParticipants } from "../split/rules";
-import { applySplit, setSplit, type SplitMode, type SplitView } from "../split/splits";
+import { applySplit, getSplit, setSplit, type SplitMode, type SplitView } from "../split/splits";
 import { getTimeZone } from "../settings/time-zone";
 import { occurredOnFor } from "../time/zone";
 import type { CurrentUser } from "../user";
 
 export { looksLikeIcbcSms, parseIcbcSms };
 
-/** `sms:` + sha256(last4|datetime|amount|currency|merchant): pasting the same alert twice finds the first row. */
+/**
+ * `sms:` + sha256(last4|datetime|amount|currency|merchant): pasting the same alert twice finds the first row. A hold
+ * keys on its summary (预授权额度冻结), the merchant earlier versions read it as, so holds pasted before still match.
+ */
 export function smsDedupKey(sms: IcbcSms): string {
-  return `sms:${sha256Hex([sms.last4, sms.occurredAt, String(sms.amountMinor), sms.currency, sms.merchant].join("|"))}`;
+  const merchant = sms.hold ? `${sms.summary}${sms.merchant}` : sms.merchant;
+  return `sms:${sha256Hex([sms.last4, sms.occurredAt, String(sms.amountMinor), sms.currency, merchant].join("|"))}`;
 }
 
 /** The row an alert becomes; the account and categorization code read it like an imported statement row. */
@@ -67,6 +72,11 @@ export interface SmsEntryResult {
   alreadyAdded: boolean;
   /** The statement (or wallet) row this alert duplicates; the new row is kept but not counted. */
   duplicateOfId: number | null;
+  captureId: number;
+  /** provisional until a statement row supersedes (or, for a split row, confirms) it. */
+  state: CaptureState;
+  /** An open review the alert landed in (two statement rows fit it, or one nearly does). */
+  review: CaptureReview | null;
 }
 
 async function categoryFor(q: Q, user: CurrentUser, row: NormalizedRow, merchant: string): Promise<number | null> {
@@ -120,11 +130,11 @@ async function accountIdFor(q: Q, user: CurrentUser, row: NormalizedRow): Promis
 }
 
 /**
- * Saves a pasted ICBC card alert as a transaction (source `sms`, the "auto" entries) on the card's account.
- * Idempotent by dedup key. When the monthly PDF row (or an Alipay/WeChat row paid with the card) is already
- * in the ledger, the new row points at it as a duplicate; otherwise it becomes the primary row and a later
- * PDF import links to it. Participants split it like quick add; without them the merchant's auto-split
- * rule applies.
+ * Saves a pasted ICBC card alert as a provisional transaction (source `sms`, the "auto" entries) on the card's
+ * account, with its capture. Idempotent by dedup key. Participants split it like quick add; without them the
+ * merchant's auto-split rule applies. Then the matcher runs: when exactly one statement (or Alipay/WeChat) row
+ * already in the ledger is this charge, it supersedes the alert at once (a split alert stays primary and takes the
+ * statement's facts); ties and near misses go to the review queue. A hold (预授权) is marked and not counted.
  */
 export async function createSmsEntry(db: Q, user: CurrentUser, input: SmsEntryInput): Promise<SmsEntryResult> {
   const sms = parseIcbcSms(input.text, { today: input.today });
@@ -134,22 +144,18 @@ export async function createSmsEntry(db: Q, user: CurrentUser, input: SmsEntryIn
   const dedupKey = smsDedupKey(sms);
   return await db.transaction(async (q) => {
     const existing = (await q
-      .select({ id: transactions.id, duplicateOfId: transactions.duplicateOfId })
-      .from(transactions)
-      .where(and(eq(transactions.userId, user.id), eq(transactions.dedupKey, dedupKey)))
+      .select({ id: captures.id, transactionId: transactions.id, duplicateOfId: transactions.duplicateOfId, state: captures.state, review: captures.review })
+      .from(captures)
+      .innerJoin(transactions, eq(transactions.id, captures.transactionId))
+      .where(and(eq(captures.userId, user.id), eq(captures.dedupKey, dedupKey)))
       .limit(1))[0];
     if (existing) {
-      return { transactionId: existing.id, split: null, myShareMinor: 0, alreadyAdded: true, duplicateOfId: existing.duplicateOfId };
+      const { id: captureId, ...rest } = existing;
+      return { ...rest, captureId, split: null, myShareMinor: 0, alreadyAdded: true };
     }
 
     const row = smsToRow(sms);
     const merchant = cleanMerchant(sms.merchant);
-    const charge = { last4: sms.last4, amountMinor: sms.amountMinor, currency: sms.currency, occurredAt: sms.occurredAt, merchant };
-    const primary =
-      await findCardMatch(q, user.id, charge, ["icbc_pdf"], "sms") ??
-      // Wallet rows name the shop differently (often in Chinese), so only card, amount and date count there.
-      await findCardMatch(q, user.id, { ...charge, merchant: "" }, ["alipay", "wechat"], "sms");
-
     const inserted = (await q
       .insert(transactions)
       .values({
@@ -169,29 +175,54 @@ export async function createSmsEntry(db: Q, user: CurrentUser, input: SmsEntryIn
         paymentMethod: row.paymentMethod,
         raw: row.raw,
         dedupKey,
-        duplicateOfId: primary?.id ?? null,
         status: "ok",
+        provisional: sms.hold ? "hold" : "capture",
       })
       .returning({ id: transactions.id })
       )[0]!;
+    const captureId = (await q
+      .insert(captures)
+      .values({
+        userId: user.id,
+        kind: "sms",
+        state: "provisional",
+        dedupKey,
+        transactionId: inserted.id,
+        occurredAt: sms.occurredAt,
+        amountMinor: sms.amountMinor,
+        currency: sms.currency,
+        last4: sms.last4,
+        hold: sms.hold,
+        payload: { v: 1, text: sms.text, history: [{ at: new Date().toISOString(), from: null, to: "provisional", by: "user" }] },
+      })
+      .returning({ id: captures.id }))[0]!.id;
 
+    // Split first: a split alert is the user's record, so a statement row found next confirms it instead of replacing it.
     let split: SplitView | null = null;
-    if (!primary && row.kind === "expense") {
+    if (row.kind === "expense") {
       const others = input.participantIds ?? [];
       if (others.length > 0) {
         split = await setSplit(q, user, inserted.id, { participantIds: others, mode: input.mode ?? "equal" });
-      } else {
+      } else if (!sms.hold) {
+        // A hold's amount is not final yet: no automatic split.
         const auto = merchant ? (await autoSplitParticipants(q, user)).get(merchant) : undefined;
         if (auto) split = await applySplit(q, user, inserted.id, { participantIds: auto, mode: "equal" }, { markEdited: false, rememberMerchant: false });
       }
     }
-    const counted = primary ? 0 : -row.amountMinor;
+    await runMatching(q, user, { by: "user", newCaptureIds: [captureId] });
+
+    const after = (await q.select().from(transactions).where(eq(transactions.id, inserted.id)).limit(1))[0]!;
+    const capture = (await q.select({ state: captures.state, review: captures.review }).from(captures).where(eq(captures.id, captureId)).limit(1))[0]!;
+    if (split) split = await getSplit(q, user, inserted.id);
     return {
       transactionId: inserted.id,
       split,
-      myShareMinor: split?.myShareMinor ?? counted,
+      myShareMinor: myShareMinor(after, split?.rows ?? []),
       alreadyAdded: false,
-      duplicateOfId: primary?.id ?? null,
+      duplicateOfId: after.duplicateOfId,
+      captureId,
+      state: capture.state,
+      review: capture.review,
     };
   });
 }

@@ -4,6 +4,7 @@
 //   您尾号3141信用卡9月27日08:24POS支出(消费BUSY BEE BOBA Houston)15.74美元。【工商银行】
 //   您尾号3141信用卡9月27日08:38网上银行支出(消费)14.48美元。【工商银行】
 //   您尾号3141信用卡9月28日10:02退货收入(退货BUSY BEE BOBA Houston)15.74美元。【工商银行】  (credits: 收入 / 存入 / 退货 / 退款, inferred)
+//   您尾号3141信用卡10月2日01:26网上银行支出(预授权额度冻结)23.50美元。【工商银行】  (a card hold: pre-authorisation, no merchant)
 // The channel before the direction word (POS, 网上银行, 快捷支付, ...) is free text. Text after the amount
 // (available credit, the signature) is ignored. Currencies: 美元 USD, 港币/港元 HKD, 人民币/元 CNY.
 //
@@ -22,8 +23,10 @@ export interface IcbcSms {
   channel: string;
   /** 支出 / 收入 / 存入 / 退货 / 退款 as written. */
   directionWord: string;
-  /** The leading summary inside the parentheses (消费, 退货, 还款, ...), "" when there is none. */
+  /** The leading summary inside the parentheses (消费, 退货, 还款, 预授权额度冻结, ...), "" when there is none. */
   summary: string;
+  /** A card hold (预授权, pre-authorisation): the amount is reserved, not charged yet. */
+  hold: boolean;
   /** Merchant as written, without the trailing city ("" when the alert names none). */
   merchant: string;
   /** Trailing Title-case city split off the merchant (Houston), or null. */
@@ -41,7 +44,7 @@ const CURRENCY: Record<string, string> = { 美元: "USD", 港币: "HKD", 港元:
 
 const SMS_RE =
   /您尾号(\d{4})的?信用卡(\d{1,2})月(\d{1,2})日(\d{1,2}):(\d{2})\s*([^()\d]*?)(支出|收入|存入|退货|退款)\(([^()]*)\)\s*([\d,]+(?:\.\d{1,2})?)\s*(美元|港币|港元|人民币|元)/;
-const SUMMARY_RE = /^(消费|退货|退款|还款|存入|转入|取现|预借现金|年费|利息|返现|分期)/;
+const SUMMARY_RE = /^(预授权(?:额度冻结)?|消费|退货|退款|还款|存入|转入|取现|预借现金|年费|利息|返现|分期)/;
 const REBATE_RE = /REBATE|CASH\s?BACK|返现/i;
 
 const pad = (n: number | string) => String(n).padStart(2, "0");
@@ -122,6 +125,7 @@ export function parseIcbcSms(text: string, opts: { today: string }): IcbcSms | n
     channel: channel.trim(),
     directionWord: dirWord!,
     summary,
+    hold: summary.startsWith("预授权"),
     merchant,
     city,
     amountMinor: out ? -abs : abs,

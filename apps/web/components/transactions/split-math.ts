@@ -15,8 +15,8 @@ export interface SplitState {
   participantIds: number[];
 }
 
-export function countsAsSpending(t: Pick<TransactionItem, "kind" | "status" | "duplicateOfId">): boolean {
-  return (t.kind === "expense" || t.kind === "refund") && t.status === "ok" && t.duplicateOfId == null;
+export function countsAsSpending(t: Pick<TransactionItem, "kind" | "status" | "duplicateOfId" | "provisional">): boolean {
+  return (t.kind === "expense" || t.kind === "refund") && t.status === "ok" && t.duplicateOfId == null && t.provisional !== "hold";
 }
 
 export function myShareOf(t: TransactionItem, splits: readonly SplitItem[]): number {

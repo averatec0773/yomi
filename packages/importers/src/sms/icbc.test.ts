@@ -46,6 +46,20 @@ describe("parseIcbcSms", () => {
     expect(parseIcbcSms("您尾号3141信用卡9月1日10:05POS支出(消费X)5人民币。【工商银行】", { today })?.currency).toBe("CNY");
   });
 
+  it("reads a card hold (pre-authorisation) as a hold without a merchant", () => {
+    const text = "您尾号3141信用卡10月2日01:26网上银行支出(预授权额度冻结)23.50美元。【工商银行】";
+    expect(parseIcbcSms(text, { today: "2026-10-02" })).toMatchObject({
+      occurredAt: "2026-10-02T01:26:00+08:00",
+      channel: "网上银行",
+      summary: "预授权额度冻结",
+      hold: true,
+      merchant: "",
+      amountMinor: -2350,
+      kind: "expense",
+    });
+    expect(parseIcbcSms(POS, { today })?.hold).toBe(false);
+  });
+
   it("books credits: refunds, repayments and rebates", () => {
     expect(parseIcbcSms("您尾号3141信用卡9月28日10:02退货收入(退货BUSY BEE BOBA Houston)15.74美元。【工商银行】", { today })).toMatchObject({
       amountMinor: 1574,

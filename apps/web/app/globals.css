@@ -341,6 +341,14 @@
 }
 
 /*
+ * A modal dialog that stays open after its actions ([data-toast-actions], the capture review sheet) keeps the toasts
+ * clickable, so their Undo works; the dialog ignores clicks on them (onInteractOutside).
+ */
+body:has([data-toast-actions]) [data-sonner-toaster] {
+  pointer-events: auto;
+}
+
+/*
  * Print views (a page with [data-print-doc], e.g. /split/statement/print): no app chrome on screen or on paper. On
  * screen the document sits on a neutral well like a sheet of paper ([data-print-paper]); on paper it is the page.
  * [data-print-colors=screen] keeps the app theme and its backgrounds (print-color-adjust: exact); otherwise the paper

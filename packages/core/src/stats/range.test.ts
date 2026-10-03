@@ -148,7 +148,7 @@ describe("listTransactions from/to", () => {
     // month still works and combines with a range.
     expect((await listTransactions(db, user, { month: "2026-09", from: "2026-09-05", to: "2026-09-07" })).total).toBe(4);
     await expect(listTransactions(db, user, { from: "2026-02-30" })).rejects.toThrow(LedgerError);
-    expect(await rangeTotalsForList(db, user, "2026-07-01", "2026-09-30")).toEqual([
+    expect(await rangeTotalsForList(db, user, "2026-07-01", "2026-09-30")).toMatchObject([
       { currency: "CNY", count: 5, spendingMinor: 21500 },
       { currency: "USD", count: 2, spendingMinor: 2000 },
     ]);

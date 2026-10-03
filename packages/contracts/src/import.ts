@@ -76,6 +76,8 @@ export const ImportResult = ImportPreview.extend({
   inserted: z.int().nonnegative(),
   skippedDup: z.int().nonnegative(),
   linked: z.int().nonnegative(),
+  /** Pasted card alerts this import confirmed, and the size of the review queue after it. */
+  captures: z.object({ linked: z.int().nonnegative(), toReview: z.int().nonnegative() }),
 });
 export type ImportResult = z.infer<typeof ImportResult>;
 

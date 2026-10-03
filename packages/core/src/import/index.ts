@@ -4,4 +4,3 @@ export * from "./coverage";
 export * from "./dedup";
 export * from "./merchant";
 export * from "./pipeline";
-export * from "./sms-link";

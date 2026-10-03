@@ -1,5 +1,5 @@
 import { categories, type Db, transactions } from "@yomi/db";
-import { and, eq, gte, inArray, isNull, lt, lte, max, min } from "@yomi/db/orm";
+import { and, eq, gte, inArray, isNull, lt, lte, max, min, ne, or } from "@yomi/db/orm";
 import { investmentFlows } from "../assets/investments";
 import { netWorthData } from "../assets/net-worth";
 import { LedgerError } from "../ledger/errors";
@@ -50,6 +50,8 @@ export interface DayRow {
   occurredOn: string;
   source: string;
   categoryId: number | null;
+  /** A provisional capture (no statement row yet): shown with its label. */
+  provisional: boolean;
 }
 
 export interface AnalysisCurrency extends RangeCurrencyOverview {
@@ -142,6 +144,7 @@ async function latestCountedDay(db: Db, user: CurrentUser, today: string): Promi
         inArray(transactions.kind, ["expense", "refund", "income"]),
         eq(transactions.status, "ok"),
         isNull(transactions.duplicateOfId),
+        or(isNull(transactions.provisional), ne(transactions.provisional, "hold")),
         lte(transactions.occurredOn, today),
       ),
     );
@@ -274,6 +277,7 @@ export async function analysisReport(
         occurredOn: r.occurredOn,
         source: r.source,
         categoryId: r.categoryId,
+        provisional: r.provisional != null,
       }));
     }
     const unusual = unusualItems(inPeriod, rows, cur, { since });

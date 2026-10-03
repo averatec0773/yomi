@@ -43,6 +43,7 @@ describe("migrations", () => {
       "accounts",
       "bank_accounts",
       "bank_connections",
+      "captures",
       "categories",
       "counterparty_ignores",
       "holding_snapshots",
@@ -74,8 +75,8 @@ describe("migrations", () => {
   it("is idempotent: a second run applies nothing and logs one migration per journal entry", async () => {
     await migrate(db);
     const log = await queryRows<{ n: number }>(db, sql`select count(*)::int as n from drizzle.__drizzle_migrations`);
-    expect(log[0]!.n).toBe(3);
-    expect(await listTables(db)).toHaveLength(23);
+    expect(log[0]!.n).toBe(4);
+    expect(await listTables(db)).toHaveLength(24);
   });
 
   it("enforces foreign keys", async () => {
@@ -143,5 +144,51 @@ describe("migrations", () => {
       { source: "plaid", period_start: null, period_end: null },
       { source: "boa_csv", period_start: null, period_end: null },
     ]);
+  });
+
+  it("0003 backfills one capture per SMS row from its links, marks open ones provisional, and is idempotent", async () => {
+    await resetDb(db);
+    await db.execute(sql`insert into accounts (user_id, name, kind, institution, last4, currency, created_at) values (1, '工商银行信用卡 3141', 'credit_card', '工商银行', '3141', 'USD', 'x')`);
+    const tx = (p: { key: string; source: string; amount: number; merchant?: string; raw?: Record<string, string>; dup?: number | null }) =>
+      db.execute(sql`insert into transactions (user_id, account_id, occurred_at, occurred_on, amount_minor, currency, kind, counterparty_raw, merchant, source, payment_method, raw, dedup_key, duplicate_of_id, created_at, updated_at)
+        values (1, 1, '2026-09-27T08:24:00+08:00', '2026-09-26', ${p.amount}, 'USD', 'expense', ${p.merchant ?? ""}, ${p.merchant ?? ""}, ${p.source},
+                ${p.source === "sms" ? "工商银行信用卡(3141)" : null}, ${JSON.stringify(p.raw ?? {})}::jsonb, ${p.key}, ${p.dup ?? null}, 'c', 'x')`);
+    await tx({ key: "sms:open", source: "sms", amount: -1574, merchant: "BUSY BEE BOBA", raw: { text: "alert one", summary: "消费", merchant: "BUSY BEE BOBA" } }); // 1
+    await tx({ key: "sms:hold", source: "sms", amount: -2350, merchant: "预授权额度冻结", raw: { text: "alert two", summary: "", merchant: "预授权额度冻结" } }); // 2
+    await tx({ key: "sms:linked", source: "sms", amount: -1448, raw: { text: "alert three", summary: "消费", merchant: "" } }); // 3
+    await tx({ key: "pdf:1", source: "icbc_pdf", amount: -1448, merchant: "OPENAI", dup: 3 }); // 4
+    await tx({ key: "alipay:1", source: "alipay", amount: -900, merchant: "美团" }); // 5
+    await tx({ key: "sms:dup", source: "sms", amount: -900, raw: { text: "alert four", summary: "消费", merchant: "" }, dup: 5 }); // 6
+    await tx({ key: "manual:1", source: "manual", amount: -100, merchant: "Lunch" }); // 7
+
+    const file = readFileSync(new URL("../migrations/0003_captures.sql", import.meta.url), "utf8");
+    const backfill = file.split("--> statement-breakpoint").filter((s) => /^\s*(--[^\n]*\n\s*)*(INSERT|UPDATE)/.test(s));
+    expect(backfill).toHaveLength(3);
+    const read = async () => ({
+      captures: await queryRows<{ transaction_id: number; state: string; authority_id: number | null; last4: string; hold: boolean; text: string | null; resolved: boolean }>(
+        db,
+        sql`select transaction_id, state, authority_id, last4, hold, payload->>'text' as text, resolved_at is not null as resolved from captures order by transaction_id`,
+      ),
+      rows: await queryRows<{ id: number; provisional: string | null; merchant: string; counterparty_raw: string; description_raw: string }>(
+        db,
+        sql`select id, provisional, merchant, counterparty_raw, description_raw from transactions where source = 'sms' order by id`,
+      ),
+    });
+    for (const s of backfill) await db.execute(sql.raw(s));
+    const once = await read();
+    expect(once.captures).toEqual([
+      { transaction_id: 1, state: "provisional", authority_id: null, last4: "3141", hold: false, text: "alert one", resolved: false },
+      { transaction_id: 2, state: "provisional", authority_id: null, last4: "3141", hold: true, text: "alert two", resolved: false },
+      { transaction_id: 3, state: "confirmed", authority_id: 4, last4: "3141", hold: false, text: null, resolved: true },
+      { transaction_id: 6, state: "superseded", authority_id: 5, last4: "3141", hold: false, text: null, resolved: true },
+    ]);
+    expect(once.rows).toEqual([
+      { id: 1, provisional: "capture", merchant: "BUSY BEE BOBA", counterparty_raw: "BUSY BEE BOBA", description_raw: "" },
+      { id: 2, provisional: "hold", merchant: "", counterparty_raw: "", description_raw: "预授权额度冻结" },
+      { id: 3, provisional: null, merchant: "", counterparty_raw: "", description_raw: "" },
+      { id: 6, provisional: null, merchant: "", counterparty_raw: "", description_raw: "" },
+    ]);
+    for (const s of backfill) await db.execute(sql.raw(s));
+    expect(await read()).toEqual(once);
   });
 });

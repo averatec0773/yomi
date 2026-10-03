@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type DragEvent, useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { ReviewLine } from "@/components/capture/review-line";
 import { Button } from "@/components/ui-kit/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { errorText } from "@/i18n/errors";
@@ -30,6 +31,8 @@ interface Done {
   skippedDup: number;
   linked: number;
   autoSplit: number;
+  /** Size of the capture review queue right after this import. */
+  toReview: number;
   month: string | null;
 }
 
@@ -103,7 +106,8 @@ export function ImportFlow() {
           batchId: r.batchId,
           inserted: r.inserted,
           skippedDup: r.skippedDup,
-          linked: r.linked,
+          linked: r.linked + r.captures.linked,
+          toReview: r.captures.toReview,
           autoSplit: r.autoSplit,
           month,
         },
@@ -198,6 +202,7 @@ export function ImportFlow() {
           ))}
         </ul>
       )}
+      {done[0] && <ReviewLine count={done[0].toReview} text={t.capture.toReview} />}
 
       {current && (
         <section aria-label={f.previewLabel} className="rounded-xl border border-border bg-surface p-5">

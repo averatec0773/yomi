@@ -8,7 +8,7 @@ import { addDays, type DateRange, daysInclusive } from "../stats/period";
 /** The fields the observations read; SpendingRow has them all. */
 export type AnalysisRow = Pick<
   SpendingRow,
-  "id" | "occurredOn" | "occurredAt" | "amountMinor" | "currency" | "kind" | "status" | "duplicateOfId" | "merchant" | "categoryId" | "source" | "myShareMinor"
+  "id" | "occurredOn" | "occurredAt" | "amountMinor" | "currency" | "kind" | "status" | "duplicateOfId" | "provisional" | "merchant" | "categoryId" | "source" | "myShareMinor"
 >;
 
 const SHIFT_FLOOR: Record<string, number> = { USD: 2000, CNY: 10000 };
@@ -25,6 +25,8 @@ const spendIn = (rows: readonly AnalysisRow[], currency: string) => rows.filter(
 const isCharge = (r: AnalysisRow) => r.kind === "expense" && r.myShareMinor > 0;
 /** Manual entries name what was bought, not a merchant: they are never "new" or judged against a merchant's history. */
 const isImported = (r: AnalysisRow) => r.source !== "manual";
+/** A provisional capture is not judged: its statement row would flag the same charge again, and a hold's amount is not final. */
+const isFinal = (r: AnalysisRow) => r.provisional == null;
 const merchantKey = (m: string) => m.trim().toLowerCase();
 
 export interface Typical {
@@ -160,7 +162,7 @@ export function unusualItems(
   opts: { since?: string | null; limit?: number } = {},
 ): UnusualItem[] {
   const floor = shiftFloor(currency);
-  const charges = spendIn(period, currency).filter(isCharge);
+  const charges = spendIn(period, currency).filter((r) => isCharge(r) && isFinal(r));
   const byMerchant = new Map<string, AnalysisRow[]>();
   for (const r of spendIn(history, currency).filter(isCharge)) {
     const k = merchantKey(r.merchant);
@@ -224,7 +226,7 @@ export function newMerchants(
 ): NewMerchant[] {
   if (opts.since == null) return [];
   const groups = new Map<string, NewMerchant>();
-  for (const r of spendIn(period, currency).filter((x) => isCharge(x) && isImported(x)).sort((a, b) => a.occurredOn.localeCompare(b.occurredOn) || a.id - b.id)) {
+  for (const r of spendIn(period, currency).filter((x) => isCharge(x) && isImported(x) && isFinal(x)).sort((a, b) => a.occurredOn.localeCompare(b.occurredOn) || a.id - b.id)) {
     const name = r.merchant.trim();
     if (!name) continue;
     const g = groups.get(merchantKey(name)) ?? { merchant: name, minor: 0, count: 0, firstOn: r.occurredOn };

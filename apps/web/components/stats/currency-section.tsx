@@ -2,6 +2,7 @@ import type { AnalysisCurrency, RangeCurrencyOverview } from "@yomi/core";
 import { ChartColumnIcon, TagIcon } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { ProvisionalLabel, ProvisionalNote } from "@/components/capture/provisional";
 import { Money } from "@/components/money";
 import { ListCard } from "@/components/ui-kit/list-card";
 import { fmt, plural } from "@/i18n";
@@ -86,6 +87,7 @@ export async function CurrencySection({ data, period, days, inProgress, previous
           <div className="text-hero font-semibold tracking-[-0.02em]">
             <Money minor={data.spendingMinor} currency={cur} />
           </div>
+          <ProvisionalNote totals={data} currency={cur} />
           <div className="flex flex-col gap-y-1 text-body text-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-2">
             {compare && <Comparison data={data} inProgress={inProgress} label={previousLabel} t={t} />}
             {compare && <Dot />}
@@ -164,6 +166,7 @@ export async function CurrencySection({ data, period, days, inProgress, previous
                         {dayLabel(r.occurredOn, locale, { year: multiYear })}
                       </span>
                       <span className="min-w-0 flex-1 truncate">{r.merchant}</span>
+                      {r.provisional && <ProvisionalLabel kind="capture" />}
                       <Money minor={r.minor} currency={cur} />
                     </Link>
                   </li>
