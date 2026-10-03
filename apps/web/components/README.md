@@ -61,7 +61,7 @@ Use these instead of the raw shadcn primitives in `components/ui/`.
 
 Other shared pieces: `Money` (every amount renders from integer minor units through it), `CategoryPill`, `CategoryTile` and `sourceIcon`, `CsvLink`, the skeletons in `skeleton.tsx`, and `Guide` from `components/bank/secret-form.tsx` (numbered how-to steps with external links and a "Last checked" line, used in Settings > Connections and on the Import page).
 
-Feature folders (`transactions/`, `split/`, `stats/`, `assets/`, `bank/`, `import/`, `payment/`, `tools/`, `shell/`) hold components used by one area; read the file header comments there.
+Feature folders (`transactions/`, `split/`, `analysis/`, `assets/`, `capture/`, `bank/`, `import/`, `payment/`, `tools/`, `shell/`) hold components used by one area; read the file header comments there.
 
 ## Helpers (`lib/`)
 

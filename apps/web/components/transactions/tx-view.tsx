@@ -120,7 +120,7 @@ export function TxView({
   today: string;
   /** Items in the capture review queue (all periods). */
   reviewCount: number;
-  /** The list shows a date range (from /stats) rather than one month: copy says "this range" instead of "this month". */
+  /** The list shows a date range (from /analysis) rather than one month: copy says "this range" instead of "this month". */
   isRange?: boolean;
 }) {
   const router = useRouter();

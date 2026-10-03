@@ -87,7 +87,7 @@ export function oneCurrency(nw: NetWorth): { currency: string; parts: NetWorthPa
   return null;
 }
 
-/** "Cash flow this period −$1,191.20 · Open Stats": income minus spending per currency, from Stats. */
+/** "Cash flow this period −$1,191.20 · Open Analysis": income minus spending per currency, from Analysis. */
 export function cashFlowText(flows: { currency: string; minor: number }[] | null, t: Dictionary) {
   if (!flows || flows.length === 0) return t.assets.cashFlowNone;
   return rich(t.assets.cashFlow, {

@@ -36,7 +36,7 @@ function minorToInput(minor: number, currency: string): string {
 export function TargetEditor({ month, currency, spendingMinor, target, otherCurrencyTarget = false }: TargetEditorProps) {
   const router = useRouter();
   const t = useT();
-  const tt = t.stats.target;
+  const tt = t.analysis.target;
   const [editing, setEditing] = useState(false);
   const [amount, setAmount] = useState(target ? minorToInput(target.amountMinor, target.currency) : "");
   const [cur, setCur] = useState(target?.currency ?? currency);

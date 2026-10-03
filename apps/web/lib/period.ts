@@ -1,4 +1,4 @@
-/** Period labels for /stats and ranged /transactions. Pure, usable on server and client. */
+/** Period labels for /analysis and ranged /transactions. Pure, usable on server and client. */
 
 import type { Locale } from "../i18n/config";
 import type { Dictionary } from "../i18n/en";
@@ -60,12 +60,12 @@ export function rangeLabel(from: string, to: string, locale: Locale): string {
  * "the previous 3 months", "the previous 10 days".
  */
 export function previousLabel(from: string, to: string, lengthDays: number, t: Dictionary): string {
-  if (lengthDays === 7 && utcDate(from).getUTCDay() === 1) return t.stats.previous.week;
+  if (lengthDays === 7 && utcDate(from).getUTCDay() === 1) return t.analysis.previous.week;
   const months = wholeMonthCount(from, to);
-  if (months === 1) return t.stats.previous.month;
-  if (months === 12 && from.slice(5, 7) === "01") return t.stats.previous.year;
-  if (months != null) return plural(t.stats.previous.months, months);
-  return plural(t.stats.previous.days, lengthDays);
+  if (months === 1) return t.analysis.previous.month;
+  if (months === 12 && from.slice(5, 7) === "01") return t.analysis.previous.year;
+  if (months != null) return plural(t.analysis.previous.months, months);
+  return plural(t.analysis.previous.days, lengthDays);
 }
 
 /** 'YYYY-MM' → 'Sep' / '9月', with the year when asked: 'Jan 2026' / '2026年1月'. */

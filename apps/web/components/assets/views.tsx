@@ -52,7 +52,7 @@ export interface AssetsViewProps {
   holdingsConverted: ConvertedTotals | null;
   fx: FxTable | null;
   cashFlow: { currency: string; minor: number }[] | null;
-  statsHref: string;
+  analysisHref: string;
   activity: InvestmentActivity[];
   brokerages: BankConnectionView[];
   plaid: { configured: boolean; defaultEnvironment: "sandbox" | "production"; environments: ("sandbox" | "production")[] };
@@ -174,9 +174,9 @@ export function AllView(p: AssetsViewProps) {
   );
 }
 
-function CashFlowLink({ cashFlow, statsHref, t }: AssetsViewProps) {
+function CashFlowLink({ cashFlow, analysisHref, t }: AssetsViewProps) {
   return (
-    <Link href={statsHref} className="inline-flex w-fit items-center gap-1.5 text-body text-primary underline-offset-4 hover:underline" data-testid="assets-cash-flow">
+    <Link href={analysisHref} className="inline-flex w-fit items-center gap-1.5 text-body text-primary underline-offset-4 hover:underline" data-testid="assets-cash-flow">
       <span>{cashFlowText(cashFlow, t)}</span>
       <ArrowRightIcon className="size-3.5" aria-hidden />
     </Link>

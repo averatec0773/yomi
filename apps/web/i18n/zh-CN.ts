@@ -628,7 +628,7 @@ export const zhCN: Dictionary = {
       settleAria: "结算 {name} {currency}",
     },
   },
-  stats: {
+  analysis: {
     title: "分析",
     netWorthChange: "本期净资产变化：{amount}",
     netWorthLink: "资产",
@@ -690,8 +690,6 @@ export const zhCN: Dictionary = {
       over: "超出 {amount}",
       left: "还剩 {amount}",
     },
-  },
-  analysis: {
     kinds: { label: "查看方式", day: "日", week: "周", month: "月", year: "年" },
     soFar: "{label} · 截至目前",
     insightsFor: "{currency} 变化与提醒",

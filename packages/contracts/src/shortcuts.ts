@@ -9,6 +9,7 @@ import { z } from "zod";
 export const SHORTCUT_DEFAULTS = {
   leader: "\\",
   goTransactions: "t",
+  // Analysis was called Stats; the id stays because saved user overrides are keyed by it.
   goStats: "m",
   goAssets: "a",
   goTools: "o",

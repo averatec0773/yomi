@@ -703,7 +703,7 @@ export const en = {
       settleAria: "Settle {name} {currency}",
     },
   },
-  stats: {
+  analysis: {
     title: "Analysis",
     netWorthChange: "Net worth change in this period: {amount}",
     netWorthLink: "Assets",
@@ -765,8 +765,6 @@ export const en = {
       over: "Over by {amount}",
       left: "{amount} left",
     },
-  },
-  analysis: {
     kinds: { label: "View by", day: "Day", week: "Week", month: "Month", year: "Year" },
     soFar: "{label} · so far",
     insightsFor: "Insights for {currency}",

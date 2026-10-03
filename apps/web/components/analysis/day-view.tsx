@@ -27,7 +27,7 @@ const link = "text-primary underline-offset-4 hover:underline";
 function typicalInsight(c: AnalysisCurrency, ctx: InsightContext): Insight | null {
   if (!c.typical || c.partialSources.length > 0) return null;
   const { t } = ctx;
-  const cmp = t.stats.compare;
+  const cmp = t.analysis.compare;
   const diff = c.spendingMinor - c.typical.dailyMinor;
   const prev = fmt(t.analysis.typicalDay, { count: c.typical.periods });
   return {
@@ -75,7 +75,7 @@ export function DayView({ ctx, categoryNames }: { ctx: InsightContext; categoryN
         return (
           <section
             key={cur}
-            aria-label={fmt(t.stats.sectionLabel, { currency: cur })}
+            aria-label={fmt(t.analysis.sectionLabel, { currency: cur })}
             className="min-w-0 overflow-clip rounded-xl border border-border bg-surface"
             data-testid={`day-${cur}`}
           >
@@ -85,7 +85,7 @@ export function DayView({ ctx, categoryNames }: { ctx: InsightContext; categoryN
                 <Money minor={c.spendingMinor} currency={cur} />
               </div>
               <ProvisionalNote totals={c} currency={cur} />
-              <div className="text-meta text-2">{plural(t.stats.count, c.transactionCount)}</div>
+              <div className="text-meta text-2">{plural(t.analysis.count, c.transactionCount)}</div>
             </div>
             {insights.length > 0 && (
               <ul className="divide-y divide-line-soft border-t border-line-soft" aria-label={fmt(a.insightsFor, { currency: cur })} data-testid="insights">
@@ -103,7 +103,7 @@ export function DayView({ ctx, categoryNames }: { ctx: InsightContext; categoryN
                 {a.dayRows}
               </h2>
               {rows.length === 0 ? (
-                <p className="px-4 pb-4 text-body text-2 md:px-5">{t.stats.noSpending}</p>
+                <p className="px-4 pb-4 text-body text-2 md:px-5">{t.analysis.noSpending}</p>
               ) : (
                 <ol className="divide-y divide-line-soft">
                   {rows.map((r) => {
