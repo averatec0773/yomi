@@ -95,9 +95,14 @@ export async function recordResolution(
  * capture's row stays primary so splits and settlements never move, it takes the statement's facts (amount,
  * currency, original amount, time, account, kind, raw counterparty and description; the merchant only when it has
  * none) and the statement row becomes its duplicate (`confirmed`); an equal split is recomputed for a new amount, an
- * exact one gets an `amount_changed` review. Every change is undoable (undoResolution).
+ * exact one gets an `amount_changed` review. Every change is undoable (undoResolution). All or nothing: it runs in its
+ * own transaction, a savepoint when `q` is already one.
  */
 export async function supersede(q: Db, user: CurrentUser, captureId: number, authorityId: number, opts: { by: string }): Promise<CaptureState> {
+  return await q.transaction((tx) => linkCapture(tx, user, captureId, authorityId, opts));
+}
+
+async function linkCapture(q: Db, user: CurrentUser, captureId: number, authorityId: number, opts: { by: string }): Promise<CaptureState> {
   const c = await getCapture(q, user, captureId);
   if (c.state !== "provisional") throw new CaptureError("invalid", "capture_not_open", `Capture #${captureId} was already resolved`, { id: captureId });
   const row = await captureRow(q, user, c);

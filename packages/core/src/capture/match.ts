@@ -360,9 +360,18 @@ const sameCandidates = (a: readonly CaptureCandidate[], b: readonly Candidate[])
  * Re-plans every open capture of the user and applies the plan: links (see `supersede`), then writes the reviews that
  * changed. `newCaptureIds` / `newAuthorityIds` name what arrived in this run (a pasted SMS, an imported batch); with
  * neither, nothing is linked and the run only refreshes the queue (startup, after a resolution or an undo). `by`
- * goes to the audit trail: `import:<batchId>`, `sync:<connectionId>`, `user`.
+ * goes to the audit trail: `import:<batchId>`, `sync:<connectionId>`, `user`. All or nothing: it runs in its own
+ * transaction, a savepoint when `q` is already one.
  */
 export async function runMatching(
+  q: Db,
+  user: CurrentUser,
+  opts: { by: string; newCaptureIds?: readonly number[]; newAuthorityIds?: readonly number[] },
+): Promise<MatchRunResult> {
+  return await q.transaction((tx) => matchOpenCaptures(tx, user, opts));
+}
+
+async function matchOpenCaptures(
   q: Db,
   user: CurrentUser,
   opts: { by: string; newCaptureIds?: readonly number[]; newAuthorityIds?: readonly number[] },
