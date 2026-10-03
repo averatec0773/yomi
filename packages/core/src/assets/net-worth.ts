@@ -2,8 +2,7 @@
 // negative) and holdings market value, per currency; one converted total only with a stated FX rate.
 import { accountBalanceSnapshots, accounts, type BalanceSource, type Db, holdingSnapshots, investmentAccounts, investmentDailyNav } from "@yomi/db";
 import { and, asc, eq, lte, min } from "@yomi/db/orm";
-import { convertMinor, crossRate, type FxTable, getFxRates } from "../invest/fx";
-import { InvestError } from "../invest/errors";
+import { convertMinor, convertWithFx, crossRate, type FxFailure, type FxTable } from "../invest/fx";
 import { getTimeZone } from "../settings/time-zone";
 import { addDays } from "../time/day";
 import { clockNow, todayIn } from "../time/zone";
@@ -98,7 +97,7 @@ export interface NetWorth {
   firstDate: string | null;
   currencies: CurrencyNetWorth[];
   converted: ConvertedNetWorth | null;
-  fxError: { code: string; params: Record<string, string | number>; message: string } | null;
+  fxError: FxFailure | null;
   series: NetWorthPoint[];
   /** Trades, dividends and cash deposits or withdrawals of investment accounts over the series (oldest first). */
   flows: InvestFlow[];
@@ -403,16 +402,13 @@ export async function netWorth(
   const flows = await investmentFlows(db, user, { from: data.from, to: asOf });
   const out: NetWorth = { ...data, flows, converted: null, fxError: null };
   const currencies = netWorthCurrencies(data);
-  if (!opts.currency || currencies.length === 0) return out;
-  try {
-    const fx = await getFxRates(db, user, [...new Set([...currencies, ...flows.map((f) => f.currency)]), opts.currency], { fetch: deps.fetch, now: deps.now });
-    Object.assign(out, convertNetWorth(data, opts.currency, fx));
-    const to = opts.currency.toUpperCase();
+  const currency = opts.currency;
+  if (!currency || currencies.length === 0) return out;
+  out.fxError = await convertWithFx(db, user, [...new Set([...currencies, ...flows.map((f) => f.currency)]), currency], deps, (fx) => {
+    Object.assign(out, convertNetWorth(data, currency, fx));
+    const to = currency.toUpperCase();
     out.flows = flows.map((f) => ({ ...f, convertedMinor: convertMinor(f.amountMinor, f.currency, to, fx) }));
-  } catch (e) {
-    if (!(e instanceof InvestError)) throw e;
-    out.fxError = { code: e.code, params: e.params as Record<string, string | number>, message: e.message };
-  }
+  });
   return out;
 }
 
@@ -448,17 +444,15 @@ export async function netWorthChange(
   let converted: NetWorthChange["converted"] = null;
   // One currency needs no rate: it is shown as is.
   if (period.currency && codes.length > 1) {
-    try {
-      const fx = await getFxRates(db, user, [...codes, period.currency], deps);
-      const to = period.currency.toUpperCase();
+    const to = period.currency.toUpperCase();
+    // Without rates the change is shown per currency only.
+    await convertWithFx(db, user, [...codes, to], deps, (fx) => {
       converted = {
         currency: to,
         changeMinor: currencies.reduce((n, c) => n + convertMinor(c.changeMinor, c.currency, to, fx), 0),
         fx: { source: fx.source, date: fx.date, rates: codes.filter((c) => c !== to).map((c) => ({ from: c, rate: crossRate(c, to, fx), inverse: crossRate(to, c, fx, 4) })) },
       };
-    } catch (e) {
-      if (!(e instanceof InvestError)) throw e;
-    }
+    });
   }
   return { from: period.from, to: period.to, currencies, converted };
 }

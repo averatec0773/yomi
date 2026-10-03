@@ -1,5 +1,5 @@
 import { QuickCreateBody, QuickCreated, QuickDraft, QuickParseBody } from "@yomi/contracts";
-import { createQuickEntry, createSmsEntry, getCurrentUser, getTimeZone, listParticipants, parseQuickEntry, todayIn } from "@yomi/core";
+import { createQuickEntry, createSmsEntry, getCurrentUser, quickDraft } from "@yomi/core";
 import type { Db } from "@yomi/db";
 import { Hono } from "hono";
 import { readJson } from "./http";
@@ -9,19 +9,7 @@ export function quickRoutes(deps: { getDb: () => Db | Promise<Db> }): Hono {
 
   r.post("/parse", async (c) => {
     const body = await readJson(c, QuickParseBody);
-    const timeZone = await getTimeZone(await deps.getDb(), getCurrentUser());
-    const draft = parseQuickEntry(body.text, {
-      today: body.today ?? todayIn(timeZone),
-      timeZone,
-      participants: (await listParticipants(await deps.getDb(), getCurrentUser())).map((p) => ({
-        id: p.id,
-        name: p.name,
-        isSelf: p.isSelf,
-        aliases: p.identities.filter((i) => i.kind !== "zelle_email" && i.kind !== "zelle_phone").map((i) => i.value),
-      })),
-      defaultCurrency: body.defaultCurrency ?? "CNY",
-    });
-    return c.json(draft satisfies QuickDraft);
+    return c.json((await quickDraft(await deps.getDb(), getCurrentUser(), body)) satisfies QuickDraft);
   });
 
   r.post("/", async (c) => {
@@ -29,7 +17,7 @@ export function quickRoutes(deps: { getDb: () => Db | Promise<Db> }): Hono {
     if (body.smsText) {
       const out = await createSmsEntry(await deps.getDb(), getCurrentUser(), {
         text: body.smsText,
-        today: body.today ?? todayIn(await getTimeZone(await deps.getDb(), getCurrentUser())),
+        today: body.today,
         participantIds: body.participantIds,
         mode: body.mode,
       });

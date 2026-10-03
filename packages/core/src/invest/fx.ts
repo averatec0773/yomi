@@ -105,6 +105,33 @@ export async function getFxRates(
   }
 }
 
+/** Why a read could not convert into one currency; the per-currency numbers are still there. */
+export interface FxFailure {
+  code: string;
+  params: Record<string, string | number>;
+  message: string;
+}
+
+/**
+ * Runs `convert` with the rates for `currencies`. An FX failure (Frankfurter down without a covering cache, a
+ * currency it does not quote) comes back as an FxFailure instead of failing the whole read; null on success.
+ */
+export async function convertWithFx(
+  db: Db,
+  user: CurrentUser,
+  currencies: string[],
+  deps: { fetch?: typeof fetch; now?: () => Date },
+  convert: (fx: FxTable) => void,
+): Promise<FxFailure | null> {
+  try {
+    convert(await getFxRates(db, user, currencies, deps));
+    return null;
+  } catch (e) {
+    if (!(e instanceof InvestError)) throw e;
+    return { code: e.code, params: e.params as Record<string, string | number>, message: e.message };
+  }
+}
+
 function strip(c: FxCache): FxTable {
   return { base: c.base, date: c.date, rates: c.rates, source: c.source };
 }

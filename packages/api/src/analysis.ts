@@ -1,5 +1,5 @@
 import { AnalysisQuery, type AnalysisReport, type FreshnessResponse } from "@yomi/contracts";
-import { analysisReport, getCurrentUser, getTimeZone, loadSourceFacts, resolveAnalysisPeriod, sourceFreshness, todayIn } from "@yomi/core";
+import { analysisFor, freshnessFor, getCurrentUser } from "@yomi/core";
 import type { Db } from "@yomi/db";
 import { Hono } from "hono";
 import { readQuery } from "./http";
@@ -7,29 +7,14 @@ import { readQuery } from "./http";
 /** Routes: GET /analysis, GET /analysis/freshness (mounted under /api). */
 export function analysisRoutes(deps: { getDb: () => Db | Promise<Db>; today?: () => string; env?: NodeJS.ProcessEnv }): Hono {
   const r = new Hono();
-
-  const context = async () => {
-    const db = await deps.getDb();
-    const user = getCurrentUser();
-    const timeZone = await getTimeZone(db, user);
-    return { db, user, timeZone, today: deps.today?.() ?? todayIn(timeZone) };
-  };
+  const opts = () => ({ today: deps.today?.(), env: deps.env });
 
   r.get("/analysis", async (c) => {
-    const { period, date, preset, from, to } = readQuery(c, AnalysisQuery);
-    const { db, user, today } = await context();
-    const range = resolveAnalysisPeriod(
-      period ? { period, date } : preset ? { preset } : from !== undefined && to !== undefined ? { from, to } : { period: "month" },
-      today,
-    );
-    return c.json((await analysisReport(db, user, range, { today, env: deps.env })) satisfies AnalysisReport);
+    const q = readQuery(c, AnalysisQuery);
+    return c.json((await analysisFor(await deps.getDb(), getCurrentUser(), q, opts())) satisfies AnalysisReport);
   });
 
-  r.get("/analysis/freshness", async (c) => {
-    const { db, user, timeZone, today } = await context();
-    const sources = sourceFreshness(await loadSourceFacts(db, user, { timeZone, env: deps.env }), today);
-    return c.json({ today, sources } satisfies FreshnessResponse);
-  });
+  r.get("/analysis/freshness", async (c) => c.json((await freshnessFor(await deps.getDb(), getCurrentUser(), opts())) satisfies FreshnessResponse));
 
   return r;
 }

@@ -5,7 +5,7 @@ import { CreatedEntry, SplitMode } from "./split";
 
 export const QuickParseBody = z.object({
   text: z.string().min(1),
-  /** Optional overrides; the server defaults to its local today and CNY. */
+  /** Optional overrides; the server defaults to today in the user's time zone and CNY. */
   today: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   defaultCurrency: CurrencyCode.optional(),
 });

@@ -447,3 +447,15 @@ export async function monthTotalsForList(db: Db, user: CurrentUser, month: strin
 export async function rangeTotalsForList(db: Db, user: CurrentUser, from: string, to: string): Promise<CurrencyTotal[]> {
   return spendingByCurrency(await loadRangeRows(db, user.id, from, to));
 }
+
+/**
+ * A page of the list with the spending totals of the range (from and to) or month it asks for; none for other
+ * filters. What GET /api/transactions and the MCP read return.
+ */
+export async function transactionPage(db: Db, user: CurrentUser, filter: TransactionFilter): Promise<TransactionPage & { totals?: CurrencyTotal[] }> {
+  const page = await listTransactions(db, user, filter);
+  const { month, from, to } = filter;
+  if (from !== undefined && to !== undefined) return { ...page, totals: await rangeTotalsForList(db, user, from, to) };
+  if (month) return { ...page, totals: await monthTotalsForList(db, user, month) };
+  return page;
+}

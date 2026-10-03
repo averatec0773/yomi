@@ -3,11 +3,12 @@ import { and, count, eq, gte, inArray, isNotNull, lte, max, ne } from "@yomi/db/
 import { ibkrStatus } from "../invest/status";
 import { lastCompletedTradingDay } from "../invest/time";
 import { countsAsIncome, countsAsSpending } from "../ledger/share";
+import { getTimeZone } from "../settings/time-zone";
 import type { SpendingRow } from "../ledger/transactions";
 import { clockNow } from "../time/clock";
 import type { DateRange } from "../stats/period";
 import { addDays, daysInclusive } from "../time/day";
-import { localDate } from "../time/zone";
+import { localDate, todayIn } from "../time/zone";
 import type { CurrentUser } from "../user";
 
 // How far each source's data reaches, and which currencies of a period it leaves incomplete.
@@ -133,6 +134,17 @@ export function attentionItems(fresh: readonly SourceFreshness[]): Attention[] {
 }
 
 const SOURCE_ORDER: FreshnessSource[] = ["plaid", "alipay", "wechat", "icbc_pdf", "boa_csv", "sms", "ibkr", "plaid_investments"];
+
+/** Every source's state today in the user's zone (`today` pins it), with that day. What the API and MCP read. */
+export async function freshnessFor(
+  db: Db,
+  user: CurrentUser,
+  opts: { today?: string; env?: NodeJS.ProcessEnv } = {},
+): Promise<{ today: string; sources: SourceFreshness[] }> {
+  const timeZone = await getTimeZone(db, user);
+  const today = opts.today ?? todayIn(timeZone);
+  return { today, sources: sourceFreshness(await loadSourceFacts(db, user, { timeZone, env: opts.env }), today) };
+}
 
 /**
  * What every source of the user's ledger knows about its own reach (no judgement; see sourceFreshness). `timeZone`

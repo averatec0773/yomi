@@ -39,7 +39,7 @@ import {
   type UnusualItem,
   unusualItems,
 } from "./insights";
-import { DEFAULT_WEEK_START, type PeriodKind, periodKindOf, typicalRanges } from "./period";
+import { type AnalysisPreset, DEFAULT_WEEK_START, type PeriodKind, periodKindOf, resolveAnalysisPeriod, typicalRanges } from "./period";
 
 /** A spending row of the day on the Day view. */
 export interface DayRow {
@@ -318,4 +318,29 @@ export async function analysisReport(
     sourceTotals: sourceTotals(inPeriod, await loadPlaidLogins(db, user)),
     latestOn: await latestCountedDay(db, user, today),
   };
+}
+
+/** An Analysis request as the API and MCP receive it: one of a period kind (with an optional date), a preset or a range. */
+export interface AnalysisSelection {
+  period?: PeriodKind;
+  date?: string;
+  preset?: AnalysisPreset;
+  from?: string;
+  to?: string;
+}
+
+/** The report for a request, resolved against today in the user's zone (`today` pins it); this month when it names no period. */
+export async function analysisFor(
+  db: Db,
+  user: CurrentUser,
+  sel: AnalysisSelection,
+  opts: { today?: string; env?: NodeJS.ProcessEnv } = {},
+): Promise<AnalysisReport> {
+  const today = opts.today ?? todayIn(await getTimeZone(db, user));
+  const { period, date, preset, from, to } = sel;
+  const range = resolveAnalysisPeriod(
+    period ? { period, date } : preset ? { preset } : from !== undefined && to !== undefined ? { from, to } : { period: "month" },
+    today,
+  );
+  return await analysisReport(db, user, range, { today, env: opts.env });
 }

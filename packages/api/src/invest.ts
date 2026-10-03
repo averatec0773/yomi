@@ -10,21 +10,18 @@ import {
 } from "@yomi/contracts";
 import {
   type BankProvider,
-  convertOverview,
   getCurrentUser,
-  getFxRates,
   type IbkrConfig,
   type FlexOptions,
   type IbkrSource,
   InvestError,
+  investOverview,
   brokerageConnectionCount,
   listInvestmentAccounts,
-  overviewCurrencies,
   resolveIbkrConfig,
   resolveIbkrSource,
   resolvePlaidConfig,
   resolvePlaidProvider,
-  portfolioOverview,
   pullIbkrHistory,
   syncHoldings,
 } from "@yomi/core";
@@ -69,20 +66,8 @@ export function investRoutes(deps: { getDb: () => Db | Promise<Db> } & InvestDep
 
   r.get("/overview", async (c) => {
     const q = readQuery(c, InvestOverviewQuery);
-    const db = await deps.getDb();
-    const user = getCurrentUser();
-    const o = await portfolioOverview(db, user, { asOf: q.asOf });
-    let fxError: InvestOverview["fxError"] = null;
-    if (q.currency && o.totals.length) {
-      try {
-        const fx = await getFxRates(db, user, [...overviewCurrencies(o), q.currency], { fetch: deps.fetch, now: deps.now });
-        o.converted = convertOverview(o, q.currency, fx);
-      } catch (e) {
-        if (!(e instanceof InvestError)) throw e;
-        fxError = { code: e.code, params: e.params, message: e.message };
-      }
-    }
-    return c.json({ ...o, fxError } satisfies InvestOverview);
+    const out = await investOverview(await deps.getDb(), getCurrentUser(), q, { fetch: deps.fetch, now: deps.now });
+    return c.json(out satisfies InvestOverview);
   });
 
   r.post("/sync", async (c) => {

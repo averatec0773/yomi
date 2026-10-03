@@ -21,12 +21,10 @@ import {
   getCurrentUser,
   listCategories,
   listMonths,
-  listTransactions,
-  monthTotalsForList,
-  rangeTotalsForList,
   recategorizeUnedited,
   renameCategory,
   setCategory,
+  transactionPage,
   updateTransaction,
 } from "@yomi/core";
 import type { Db } from "@yomi/db";
@@ -37,20 +35,9 @@ import { idParam, readJson, readQuery } from "./http";
 export function ledgerRoutes(deps: { getDb: () => Db | Promise<Db> }): Hono {
   const r = new Hono();
 
-  r.get("/transactions", async (c) => {
-    const q = readQuery(c, TransactionQuery);
-    const db = await deps.getDb();
-    const user = getCurrentUser();
-    const page = await listTransactions(db, user, q);
-    const { month, from, to } = q;
-    const body: TransactionPage =
-      from !== undefined && to !== undefined
-        ? { ...page, totals: await rangeTotalsForList(db, user, from, to) }
-        : month
-          ? { ...page, totals: await monthTotalsForList(db, user, month) }
-          : page;
-    return c.json(body);
-  });
+  r.get("/transactions", async (c) =>
+    c.json((await transactionPage(await deps.getDb(), getCurrentUser(), readQuery(c, TransactionQuery))) satisfies TransactionPage),
+  );
 
   r.post("/transactions/bulk", async (c) => {
     const { ids, ...patch } = await readJson(c, BulkUpdateInput);

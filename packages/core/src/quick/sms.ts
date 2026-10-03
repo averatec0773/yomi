@@ -1,8 +1,10 @@
 import { type IcbcSms, looksLikeIcbcSms, type NormalizedRow, parseIcbcSms } from "@yomi/importers";
 import { type CaptureResult, createCapture } from "../capture/create";
 import { sha256Hex } from "../import/dedup";
+import { getTimeZone } from "../settings/time-zone";
 import { type Q, SplitError } from "../split/internal";
 import type { SplitMode } from "../split/splits";
+import { todayIn } from "../time/zone";
 import type { CurrentUser } from "../user";
 
 export { looksLikeIcbcSms, parseIcbcSms };
@@ -48,8 +50,8 @@ export function smsToRow(sms: IcbcSms): NormalizedRow {
 
 export interface SmsEntryInput {
   text: string;
-  /** 'YYYY-MM-DD'; picks the alert's year. */
-  today: string;
+  /** 'YYYY-MM-DD' that picks the alert's year; default today in the user's zone. */
+  today?: string;
   /** Non-self participants to split with (expenses only). */
   participantIds?: number[];
   mode?: SplitMode;
@@ -60,7 +62,7 @@ export interface SmsEntryInput {
  * createCapture. A hold (预授权) is marked and not counted.
  */
 export async function createSmsEntry(db: Q, user: CurrentUser, input: SmsEntryInput): Promise<CaptureResult> {
-  const sms = parseIcbcSms(input.text, { today: input.today });
+  const sms = parseIcbcSms(input.text, { today: input.today ?? todayIn(await getTimeZone(db, user)) });
   if (!sms) {
     throw new SplitError("invalid", "quick_sms_unsupported", "This bank message is not a supported ICBC card alert");
   }

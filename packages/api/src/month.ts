@@ -1,5 +1,5 @@
 import { MonthString, type MonthOverview, SetTargetInput, StatsQuery, type StatsResponse, type Target } from "@yomi/contracts";
-import { getCurrentUser, getTimeZone, matchPreset, monthOverview, rangeOverview, resolvePeriod, setMonthlyTarget, todayIn } from "@yomi/core";
+import { getCurrentUser, monthOverview, setMonthlyTarget, statsFor } from "@yomi/core";
 import type { Db } from "@yomi/db";
 import { Hono } from "hono";
 import { BadRequest, readJson, readQuery } from "./http";
@@ -15,14 +15,8 @@ export function monthRoutes(deps: { getDb: () => Db | Promise<Db>; today?: () =>
   });
 
   r.get("/stats", async (c) => {
-    const { preset, from, to } = readQuery(c, StatsQuery);
-    const today = deps.today?.() ?? todayIn(await getTimeZone(await deps.getDb(), getCurrentUser()));
-    const range =
-      from !== undefined && to !== undefined
-        ? resolvePeriod({ preset: "custom", from, to }, today)
-        : resolvePeriod({ preset: preset && preset !== "custom" ? preset : "this_month" }, today);
-    const overview = await rangeOverview(await deps.getDb(), getCurrentUser(), range, { today });
-    return c.json({ preset: matchPreset(range, today), ...overview } satisfies StatsResponse);
+    const q = readQuery(c, StatsQuery);
+    return c.json((await statsFor(await deps.getDb(), getCurrentUser(), q, { today: deps.today?.() })) satisfies StatsResponse);
   });
 
   r.put("/targets", async (c) => {
