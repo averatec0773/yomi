@@ -108,10 +108,10 @@ export function useTxActions({
       });
       refresh();
     },
-    [refresh],
+    [latest, setOverrides, refresh],
   );
 
-  const byId = (id: number) => latest.current.view.find((t) => t.id === id);
+  const byId = useCallback((id: number) => latest.current.view.find((t) => t.id === id), [latest]);
 
   /** "Also split the N existing ones": optimistic equal split of the merchant's unsplit rows on screen, then the server does all of them. */
   const applyExisting = useCallback(
@@ -129,7 +129,7 @@ export function useTxActions({
         },
       );
     },
-    [mutate, selfId, nameOf, t],
+    [latest, mutate, selfId, nameOf, t],
   );
   const applyExistingRef = useRef(applyExisting);
   useEffect(() => {
@@ -156,10 +156,13 @@ export function useTxActions({
    * when the popover opened.
    */
   const splitSnapshot = useRef<{ id: number; tx: Tx } | null>(null);
-  const splitOpened = useCallback((id: number) => {
-    const tx = latest.current.view.find((x) => x.id === id);
-    splitSnapshot.current = tx ? { id, tx } : null;
-  }, []);
+  const splitOpened = useCallback(
+    (id: number) => {
+      const tx = latest.current.view.find((x) => x.id === id);
+      splitSnapshot.current = tx ? { id, tx } : null;
+    },
+    [latest],
+  );
   const splitClosed = useCallback(
     (id: number) => {
       const snap = splitSnapshot.current;
@@ -200,7 +203,7 @@ export function useTxActions({
         },
       });
     },
-    [mutate, selfId, nameOf, t],
+    [latest, mutate, selfId, nameOf, t],
   );
 
   const actions: RowActions = useMemo(
@@ -392,8 +395,8 @@ export function useTxActions({
         if (type) setFocusId(id);
       },
     }),
-    // byId reads a ref; the rest are stable for the lifetime of the participant/category lists.
-    [mutate, selfId, nameOf, categories, autoSplitToast, refresh, t, splitOpened, splitClosed],
+    // Refs and state setters never change; the rest are stable for the lifetime of the participant/category lists.
+    [latest, anchor, byId, setFocusId, setSelected, setPanel, setAdded, mutate, selfId, nameOf, categories, autoSplitToast, refresh, t, splitOpened, splitClosed],
   );
 
   return { actions, mutate };

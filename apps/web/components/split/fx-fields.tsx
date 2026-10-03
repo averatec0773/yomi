@@ -1,7 +1,7 @@
 "use client";
 
 import { convertByRate, normalizeRate, rateFromAmounts } from "@yomi/core/money";
-import { useEffect } from "react";
+import { useEffect, useEffectEvent } from "react";
 import { fmt } from "@/i18n";
 import { useT } from "@/i18n/client";
 import { AmountInput, Field, NativeSelect, toInput, toMinor } from "./ui";
@@ -81,10 +81,11 @@ export function FxFields({
 
   // The base amount can change (choosing items): keep the rate and recompute the amount, or the other way round
   // when there is no rate yet.
-  useEffect(() => {
+  const rebase = useEffectEvent((baseMinor: number) => {
     const next = deriveFx({ ...value, last: normalizeRate(value.rate) ? "rate" : "amount" }, baseMinor, base);
     if (next.amount !== value.amount || next.rate !== value.rate) onChange(next);
-  }, [baseMinor]);
+  });
+  useEffect(() => rebase(baseMinor), [baseMinor]);
 
   const minor = toMinor(value.amount, value.currency);
   const amountBad = other && value.amount.trim() !== "" && (minor === null || minor <= 0);

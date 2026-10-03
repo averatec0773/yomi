@@ -3,7 +3,7 @@
 import { CheckCircle2Icon, CheckIcon, CircleDashedIcon, ListChecksIcon, PlugZapIcon, XIcon } from "lucide-react";
 import type { IbkrSectionItem, IbkrTestResult } from "@yomi/contracts";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { Sheet } from "@/components/split/ui";
 import { Button } from "@/components/ui-kit/button";
 import { Dialog, DialogClose } from "@/components/ui/dialog";
@@ -143,11 +143,12 @@ function IbkrTestSheet() {
     }
   }
 
-  useEffect(() => {
+  const start = useEffectEvent(() => {
     if (started.current) return;
     started.current = true;
     void run();
-  }, []);
+  });
+  useEffect(() => start(), []);
 
   const footer = (
     <div className="flex flex-wrap items-center justify-end gap-2">

@@ -33,12 +33,12 @@ export function useBulkActions({
   categories: Category[];
 }) {
   const t = useT();
-  const byId = (id: number) => latest.current.view.find((t) => t.id === id);
+  const byId = useCallback((id: number) => latest.current.view.find((t) => t.id === id), [latest]);
 
   const clearSelection = useCallback(() => {
     setSelected(new Set());
     anchor.current = null;
-  }, []);
+  }, [setSelected, anchor]);
 
   /** Bulk AA: exactly these people, equal, on every selected expense row (friend-paid rows are skipped by core). */
   const bulkApply = useCallback(
@@ -73,7 +73,7 @@ export function useBulkActions({
         },
       );
     },
-    [mutate, selfId, nameOf, t],
+    [latest, mutate, selfId, nameOf, t],
   );
 
   /** "Accept N suggestions": equal split with each suggested row's people in one call; Undo clears those rows again. */
@@ -115,7 +115,7 @@ export function useBulkActions({
         return out;
       },
     );
-  }, [mutate, selfId, nameOf, t]);
+  }, [latest, byId, mutate, selfId, nameOf, t]);
 
   const bulkUnsplit = useCallback(() => {
     const rows = latest.current.view.filter((t) => latest.current.selected.has(t.id) && t.splits.length > 0 && canSplit(t));
@@ -132,7 +132,7 @@ export function useBulkActions({
         toast.success(plural(t.transactions.toastBulkUnsplit, rows.length));
       },
     );
-  }, [mutate, t]);
+  }, [latest, mutate, t]);
 
   const bulkCategory = useCallback(
     (categoryId: number) => {
@@ -152,7 +152,7 @@ export function useBulkActions({
         },
       );
     },
-    [mutate, categories, t],
+    [latest, mutate, categories, t],
   );
 
   const bulkTransfer = useCallback(() => {
@@ -171,7 +171,7 @@ export function useBulkActions({
         );
       },
     );
-  }, [mutate, t]);
+  }, [latest, mutate, t]);
 
   return { clearSelection, bulkApply, acceptAll, bulkUnsplit, bulkCategory, bulkTransfer };
 }
