@@ -31,7 +31,7 @@ The cookie holds a hash of the token, never the token itself. **Sign out on this
 
 ## Then, list the addresses you will use
 
-Until you list other names, yomi's API answers only to `localhost`, `127.0.0.1` and `[::1]`, so a web page on another site cannot reach your ledger by pointing its own domain at this computer (DNS rebinding). Add every address you will type on another device to `.env.local`, separated by commas:
+Until you list other names, yomi answers only to `localhost`, `127.0.0.1` and `[::1]`, so a web page on another site cannot reach your ledger by pointing its own domain at this computer (DNS rebinding). Add every address you will type on another device to `.env.local`, separated by commas:
 
 ```
 YOMI_ALLOWED_HOSTS=192.168.1.20,my-laptop,my-laptop.tail1234.ts.net
@@ -71,7 +71,7 @@ Tailscale menu names and commands change between versions; the links above go to
 | Symptom | Fix |
 |---------|-----|
 | The phone shows the Access page again and again | The token in the address or typed on the page does not match `YOMI_ACCESS_TOKEN` (check for spaces), or the browser blocks cookies for this site. |
-| "yomi does not answer to … yet" (`403 request_host_not_allowed`) | Add that address, exactly as the browser shows it, to `YOMI_ALLOWED_HOSTS` in `.env.local` and restart. |
+| "does not answer to …" on a page or in a toast (`403 request_host_not_allowed`) | Add that address, exactly as the browser shows it, to `YOMI_ALLOWED_HOSTS` in `.env.local` and restart. |
 | `401 access_required` from a script | Send `Authorization: Bearer <the token>`. |
 | The page does not load at all | Same network (or Tailscale connected) on both devices? Firewall allowing Node.js? Is `pnpm dev` still running? |
 | "Secrets can be saved only on this computer (localhost) or over HTTPS" | Credentials are entered on the computer itself (http://localhost:7773) or over HTTPS (for example Tailscale Serve), never over plain HTTP on the network. |

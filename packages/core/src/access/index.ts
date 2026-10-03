@@ -1,5 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 
+export { allowedHostsFromEnv, hostAllowed, type HostRefusal, hostRefusal } from "./host";
+
 /**
  * Optional access token gate (YOMI_ACCESS_TOKEN). Framework-free: apps/web/proxy.ts and the /api/access routes call
  * these. The cookie holds the SHA-256 hex of the token, never the token itself.

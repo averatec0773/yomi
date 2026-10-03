@@ -1,5 +1,5 @@
 import type { Health } from "@yomi/contracts";
-import { type CurrentUser, localUser, type ParseFn, runWithUser } from "@yomi/core";
+import { allowedHostsFromEnv, type CurrentUser, localUser, type ParseFn, runWithUser } from "@yomi/core";
 import type { Db } from "@yomi/db";
 import { detectAndParse } from "@yomi/importers";
 import { type Context, Hono } from "hono";
@@ -13,7 +13,7 @@ import { type InvestDeps, investRoutes } from "./invest";
 import { ledgerRoutes } from "./ledger";
 import { maintenanceRoutes } from "./maintenance";
 import { monthRoutes } from "./month";
-import { allowedHostsFromEnv, sameOriginOnly } from "./origin";
+import { sameOriginOnly } from "./origin";
 import { quickRoutes } from "./quick";
 import { type SecretsDeps, secretsRoutes } from "./secrets";
 import { splitRoutes } from "./split";
