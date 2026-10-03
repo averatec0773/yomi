@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Money, moneyText } from "@/components/money";
+import { Skeleton } from "@/components/skeleton";
 import { Button } from "@/components/ui-kit/button";
 import { dialogSize } from "@/components/ui-kit/dialog-size";
 import { EmptyState } from "@/components/ui-kit/empty-state";
@@ -152,6 +153,18 @@ function ReviewBody() {
       </div>
       <DialogDescription className="sr-only">{s.description}</DialogDescription>
       <div className="min-h-0 flex-1 overflow-y-auto">
+        {/* Until the queue arrives: two placeholder items, so the sheet never opens blank. */}
+        {!list && (
+          <div className="flex flex-col gap-6 px-5 py-4" data-testid="review-loading">
+            {[0, 1].map((i) => (
+              <div key={i} className="flex flex-col gap-3">
+                <Skeleton className="h-4 w-56" />
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-8 w-40 self-end" />
+              </div>
+            ))}
+          </div>
+        )}
         {list && items.length === 0 && (
           <EmptyState icon={InboxIcon} variant="inline">
             {s.empty}
