@@ -1,4 +1,4 @@
-import { expect, test } from "./fixtures";
+import { expect, expectNoHScroll, expectWithinX, test } from "./fixtures";
 
 // The clock is pinned to Wed Sep 30 2026, noon in Chicago (playwright.config.ts E2E_NOW). The demo ledger
 // (packages/core/src/cli/demo.ts) has Alipay and ICBC through Sep 29 and a WeChat export that ends on Sep 24.
@@ -163,10 +163,8 @@ test("analysis: Sources lists how far each source reaches and what it adds to th
   await page.goto("/analysis?preset=this_month");
   await page.getByTestId("sources-button").click();
   await expect(line("Added by hand").getByTestId("source-amount")).toContainText("$");
-  const box = (await page.getByRole("dialog", { name: "Data sources" }).boundingBox())!;
-  expect(box.x).toBeGreaterThanOrEqual(16);
-  expect(box.x + box.width).toBeLessThanOrEqual(375 - 16);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
+  await expectWithinX(page.getByRole("dialog", { name: "Data sources" }), 16, 375 - 16);
+  await expectNoHScroll(page, 375);
   await page.keyboard.press("Escape");
 
   await page.goto("/analysis?preset=yesterday");
@@ -174,8 +172,7 @@ test("analysis: Sources lists how far each source reaches and what it adds to th
   await expect(tabs.getByRole("link")).toHaveText(["Transactions", "Analysis", "Assets", "Tools"]);
   await expect(tabs.getByRole("link", { name: "Analysis" })).toHaveAttribute("aria-current", "page");
   await expect(page.getByTestId("day-CNY")).toBeVisible();
-  const width = await page.evaluate(() => document.documentElement.scrollWidth);
-  expect(width).toBeLessThanOrEqual(375);
+  await expectNoHScroll(page, 375);
 
   // Month on a phone: one column, and the list switch and "+N more" keep 44px targets.
   await page.goto("/analysis?preset=this_month");
@@ -190,5 +187,5 @@ test("analysis: Sources lists how far each source reaches and what it adds to th
   });
   expect(hits.length).toBeGreaterThan(2);
   for (const h of hits) expect(h).toBeGreaterThanOrEqual(44);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
+  await expectNoHScroll(page, 375);
 });

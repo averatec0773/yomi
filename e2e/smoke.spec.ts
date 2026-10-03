@@ -1,5 +1,5 @@
 import type { Locator, Page } from "@playwright/test";
-import { expect, openRowPopover, pinClock, test } from "./fixtures";
+import { expect, expectNoHScroll, openRowPopover, pinClock, test } from "./fixtures";
 
 /** "$1,234.56" → 123456 (minor units), from the element's text. */
 async function minorOf(el: Locator): Promise<number> {
@@ -487,7 +487,7 @@ test("settings tabs: server-rendered ?tab=, arrows and back/forward switch tabs,
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/settings?tab=data");
   await expect(tab("Data")).toBeInViewport({ ratio: 1 });
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  await expectNoHScroll(page, 390);
   expect(await page.getByRole("tablist").evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
   expect((await tab("General").boundingBox())!.height).toBeGreaterThanOrEqual(44);
 });

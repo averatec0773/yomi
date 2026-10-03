@@ -1,5 +1,5 @@
 import type { Locator, Page } from "@playwright/test";
-import { expect, test } from "./fixtures";
+import { expect, expectNoHScroll, test } from "./fixtures";
 import { ACCESS_E2E_IBKR_TOKEN, ACCESS_E2E_PLAID_CLIENT_ID, ACCESS_E2E_PORT, ACCESS_E2E_TOKEN } from "../playwright.config";
 
 /** Vertical overlap of two boxes: they sit on one line. */
@@ -102,7 +102,7 @@ test("connections at 390: row actions collapse into the overflow menu, no sidewa
   await page.getByRole("menuitem", { name: "Set up" }).click();
   await expect(page.getByRole("dialog", { name: "Set up Interactive Brokers" })).toBeVisible();
   await page.keyboard.press("Escape");
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  await expectNoHScroll(page, 390);
 
   await page.context().addCookies([{ name: "locale", value: "zh-CN", url: page.url() }]);
   await page.reload();

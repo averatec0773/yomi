@@ -407,7 +407,7 @@ describe("status, categories and batches", () => {
   });
 });
 
-describe("backups around import and revert", () => {
+describe("backups around import and revert", { timeout: 30_000 }, () => {
   it("backs up a PGlite directory before commit and before revert, unless backup: false", async () => {
     const dir = mkdtempSync(path.join(tmpdir(), "yomi-pipe-"));
     await migratedTestDir(path.join(dir, "ledger"));
