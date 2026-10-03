@@ -1,7 +1,7 @@
 import { accounts, bankAccounts, bankConnections, type Db, transactions } from "@yomi/db";
 import { CodedError, type ErrorKind, type MessageParams, type NormalizedRow, type Notice, notice, type ParseResult } from "@yomi/importers";
 import { and, asc, eq, inArray, isNull } from "@yomi/db/orm";
-import type { AccountSpec } from "../import/accounts";
+import { type AccountSpec, ensureAccount } from "../import/accounts";
 import { sha256Hex } from "../import/dedup";
 import { cleanMerchant } from "../import/merchant";
 import { type LockReason, lockReason } from "../ledger/lock";
@@ -102,32 +102,9 @@ async function getConnection(db: Db, user: CurrentUser, id: number): Promise<Con
   return c;
 }
 
-/** Ledger account for a provider account: an existing one with the same kind + institution + last four, else a new one. */
-async function ensureLedgerAccount(db: Q, user: CurrentUser, spec: AccountSpec): Promise<number> {
-  const match = (await db
-    .select({ id: accounts.id })
-    .from(accounts)
-    .where(
-      and(
-        eq(accounts.userId, user.id),
-        eq(accounts.kind, spec.kind),
-        spec.institution == null ? isNull(accounts.institution) : eq(accounts.institution, spec.institution),
-        spec.last4 == null ? isNull(accounts.last4) : eq(accounts.last4, spec.last4),
-      ),
-    )
-    .orderBy(asc(accounts.id))
-    .limit(1))[0];
-  if (match) return match.id;
-  return (await db
-    .insert(accounts)
-    .values({ userId: user.id, ...spec })
-    .returning({ id: accounts.id })
-    )[0]!.id;
-}
-
 async function upsertBankAccounts(tx: Q, user: CurrentUser, connId: number, providerAccounts: readonly ProviderAccount[]): Promise<void> {
   for (const a of providerAccounts) {
-    const accountId = await ensureLedgerAccount(tx, user, ledgerSpec(a));
+    const accountId = await ensureAccount(tx, user, ledgerSpec(a));
     await tx.insert(bankAccounts)
       .values({
         userId: user.id,

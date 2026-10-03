@@ -1,4 +1,4 @@
-import { accounts, backupDatabase, categories, type Db, importBatches, merchantRules, settlements, transactions, transactionSplits } from "@yomi/db";
+import { accounts, backupDatabase, type Db, importBatches, settlements, transactions, transactionSplits } from "@yomi/db";
 import {
   bucketTotals,
   CodedError,
@@ -23,8 +23,9 @@ import { dayNumber } from "../time/day";
 import { occurredOnFor } from "../time/zone";
 import type { CurrentUser } from "../user";
 import { removeBatchBalances, statementBalances, upsertBalanceSnapshot } from "../assets/balances";
-import { accountKey, type AccountSpec, fileAccountCurrency, parsePaymentMethod, resolveAccountSpec } from "./accounts";
+import { accountKey, accountMatchKey, type AccountSpec, fileAccountCurrency, loadAccountIds, parsePaymentMethod, resolveAccountSpec } from "./accounts";
 import { resolveCategoryId } from "./categorize";
+import { categoryContext, latestPurchaseCategories, loadCategorySources } from "./category-context";
 import { statementCoverage } from "./coverage";
 import { computeDedupKeys, sha256Hex } from "./dedup";
 import { cleanMerchant } from "./merchant";
@@ -127,7 +128,8 @@ export class ImportError extends CodedError {
 interface PlannedRow {
   row: NormalizedRow;
   spec: AccountSpec;
-  accountKey: string;
+  /** accountMatchKey of the spec: which ledger account the row lands on. */
+  matchKey: string;
   dedupKey: string;
   isDup: boolean;
   merchant: string;
@@ -200,16 +202,14 @@ async function buildPlan(q: Q, user: CurrentUser, parsed: ParseResult, fileHash:
   // Accounts
   const currency = fileAccountCurrency(parsed.source, rows);
   const specs = rows.map((r) => opts.accountSpec?.(r) ?? resolveAccountSpec(r, currency));
+  // Dedup keys stay scoped by the spec's full identity; the row lands on the account its match key names.
   const keys = specs.map(accountKey);
-  const existingAccountIds = new Map<string, number>();
-  for (const a of (await q.select().from(accounts).where(eq(accounts.userId, userId)))) {
-    existingAccountIds.set(accountKey(a), a.id);
-  }
+  const existingAccountIds = await loadAccountIds(q, user);
   const toCreate = new Map<string, AccountSpec>();
-  specs.forEach((s, i) => {
-    const k = keys[i]!;
+  for (const s of specs) {
+    const k = accountMatchKey(s);
     if (!existingAccountIds.has(k) && !toCreate.has(k)) toCreate.set(k, s);
-  });
+  }
 
   // Dedup
   const dedupKeys = computeDedupKeys(rows, keys);
@@ -225,45 +225,17 @@ async function buildPlan(q: Q, user: CurrentUser, parsed: ParseResult, fileHash:
   }
 
   // Categories and merchant rules
-  const cats = await q.select().from(categories).where(eq(categories.userId, userId));
-  const idByName = new Map(cats.map((c) => [c.name, c.id]));
-  const kindById = new Map(cats.map((c) => [c.id, c.kind]));
-  const rules = new Map(
-    (await q
-      .select()
-      .from(merchantRules)
-      .where(eq(merchantRules.userId, userId))
-      )
-      .map((r) => [r.merchant, r]),
-  );
+  const sources = await loadCategorySources(q, user);
   const fileCategoryByMerchant = new Map<string, number>();
-  const dbCategoryByMerchant = new Map<string, number | null>();
+  let dbCategoryByMerchant = new Map<string, number | null>();
   // Refunds inherit the category of an earlier purchase at the same merchant: this file's first, then the
   // ledger's latest. resolveCategoryId is synchronous, so the ledger lookups are loaded before refunds resolve.
-  const loadInherited = async (merchants: Iterable<string>) => {
-    for (const m of merchants) {
-      if (!m || fileCategoryByMerchant.has(m) || dbCategoryByMerchant.has(m)) continue;
-      const hit = (
-        await q
-          .select({ categoryId: transactions.categoryId })
-          .from(transactions)
-          .where(and(eq(transactions.userId, userId), eq(transactions.merchant, m), eq(transactions.kind, "expense")))
-          .orderBy(desc(transactions.occurredAt), desc(transactions.id))
-      ).find((r) => r.categoryId != null);
-      dbCategoryByMerchant.set(m, hit?.categoryId ?? null);
-    }
-  };
-  const ctx = {
-    idByName,
-    kindById,
-    ruleCategoryId: (m: string) => rules.get(m)?.categoryId ?? null,
-    inheritedCategoryId: (m: string) => fileCategoryByMerchant.get(m) ?? dbCategoryByMerchant.get(m) ?? null,
-  };
+  const ctx = categoryContext(sources, (m) => fileCategoryByMerchant.get(m) ?? dbCategoryByMerchant.get(m) ?? null);
 
   const planned: PlannedRow[] = rows.map((row, i) => ({
     row,
     spec: specs[i]!,
-    accountKey: keys[i]!,
+    matchKey: accountMatchKey(specs[i]!),
     dedupKey: dedupKeys[i]!,
     isDup: existingKeys.has(dedupKeys[i]!),
     merchant: cleanMerchant(row.counterparty),
@@ -281,12 +253,16 @@ async function buildPlan(q: Q, user: CurrentUser, parsed: ParseResult, fileHash:
       fileCategoryByMerchant.set(p.merchant, p.categoryId);
     }
   }
-  await loadInherited(planned.filter((p) => p.row.kind === "refund").map((p) => p.merchant));
+  dbCategoryByMerchant = await latestPurchaseCategories(
+    q,
+    user,
+    planned.filter((p) => p.row.kind === "refund" && !fileCategoryByMerchant.has(p.merchant)).map((p) => p.merchant),
+  );
   for (const p of planned) {
     if (p.row.kind === "refund") p.categoryId = resolveCategoryId(p.row, p.merchant, ctx);
   }
   for (const p of planned) {
-    const ids = parseIds(rules.get(p.merchant)?.participantIds ?? null);
+    const ids = parseIds(sources.rules.get(p.merchant)?.participantIds ?? null);
     if (ids && ids.length > 0) p.participantIds = ids;
   }
 
@@ -627,13 +603,13 @@ export async function commitParsed(db: Db, user: CurrentUser, parsed: ParseResul
         .values({ userId, ...spec })
         .returning({ id: accounts.id })
         )[0]!;
-      accountIds.set(accountKey(spec), a.id);
+      accountIds.set(accountMatchKey(spec), a.id);
     }
 
     // ICBC statements carry the card balance (账户余额) on every row: the last one is the closing balance.
     if (parsed.source === "icbc_pdf") {
       for (const b of statementBalances(
-        planned.map((p) => ({ key: p.accountKey, row: p.row })),
+        planned.map((p) => ({ key: p.matchKey, row: p.row })),
         parsed.periodEnd,
       )) {
         const accountId = accountIds.get(b.key);
@@ -658,7 +634,7 @@ export async function commitParsed(db: Db, user: CurrentUser, parsed: ParseResul
         .values(
           part.map((p) => ({
             userId,
-            accountId: accountIds.get(p.accountKey) ?? null,
+            accountId: accountIds.get(p.matchKey) ?? null,
             occurredAt: p.row.occurredAt,
             occurredOn: occurredOnFor(p.row.occurredAt, p.row.source, zone),
             amountMinor: p.row.amountMinor,

@@ -1,9 +1,10 @@
-import { accounts, type CaptureReview, captures, type CaptureState, categories, merchantRules, transactions } from "@yomi/db";
+import { type CaptureReview, captures, type CaptureState, transactions } from "@yomi/db";
 import { type IcbcSms, looksLikeIcbcSms, type NormalizedRow, parseIcbcSms } from "@yomi/importers";
-import { and, desc, eq } from "@yomi/db/orm";
+import { and, eq } from "@yomi/db/orm";
 import { runMatching } from "../capture/match";
-import { accountKey, resolveAccountSpec } from "../import/accounts";
+import { ensureAccount, resolveAccountSpec } from "../import/accounts";
 import { resolveCategoryId } from "../import/categorize";
+import { categoryContext, latestPurchaseCategories, loadCategorySources } from "../import/category-context";
 import { sha256Hex } from "../import/dedup";
 import { cleanMerchant } from "../import/merchant";
 import { myShareMinor } from "../ledger/share";
@@ -80,53 +81,9 @@ export interface SmsEntryResult {
 }
 
 async function categoryFor(q: Q, user: CurrentUser, row: NormalizedRow, merchant: string): Promise<number | null> {
-  const cats = await q.select().from(categories).where(eq(categories.userId, user.id));
-  // resolveCategoryId is synchronous and only asks about `merchant`: look its rule (and, for refunds, the
-  // category of its latest purchase) up first.
-  const ruleId = merchant
-    ? ((
-        await q
-          .select({ categoryId: merchantRules.categoryId })
-          .from(merchantRules)
-          .where(and(eq(merchantRules.userId, user.id), eq(merchantRules.merchant, merchant)))
-          .limit(1)
-      )[0]?.categoryId ?? null)
-    : null;
-  const inheritedId =
-    merchant && row.kind === "refund"
-      ? ((
-          await q
-            .select({ categoryId: transactions.categoryId })
-            .from(transactions)
-            .where(and(eq(transactions.userId, user.id), eq(transactions.merchant, merchant), eq(transactions.kind, "expense")))
-            .orderBy(desc(transactions.occurredAt), desc(transactions.id))
-        ).find((r) => r.categoryId != null)?.categoryId ?? null)
-      : null;
-  const rule = (m: string) => (m === merchant ? ruleId : null);
-  const inherited = (m: string) => (m === merchant ? inheritedId : null);
-  return resolveCategoryId(row, merchant, {
-    idByName: new Map(cats.map((c) => [c.name, c.id])),
-    kindById: new Map(cats.map((c) => [c.id, c.kind])),
-    ruleCategoryId: rule,
-    inheritedCategoryId: inherited,
-  });
-}
-
-async function accountIdFor(q: Q, user: CurrentUser, row: NormalizedRow): Promise<number> {
-  const spec = resolveAccountSpec(row, row.currency);
-  const key = accountKey(spec);
-  const found = (await q
-    .select()
-    .from(accounts)
-    .where(eq(accounts.userId, user.id))
-    )
-    .find((a) => accountKey(a) === key);
-  if (found) return found.id;
-  return (await q
-    .insert(accounts)
-    .values({ userId: user.id, ...spec })
-    .returning({ id: accounts.id })
-    )[0]!.id;
+  // resolveCategoryId is synchronous: a refund's purchase category is looked up first.
+  const inherited = row.kind === "refund" ? await latestPurchaseCategories(q, user, [merchant]) : new Map<string, number | null>();
+  return resolveCategoryId(row, merchant, categoryContext(await loadCategorySources(q, user), (m) => inherited.get(m) ?? null));
 }
 
 /**
@@ -160,7 +117,7 @@ export async function createSmsEntry(db: Q, user: CurrentUser, input: SmsEntryIn
       .insert(transactions)
       .values({
         userId: user.id,
-        accountId: await accountIdFor(q, user, row),
+        accountId: await ensureAccount(q, user, resolveAccountSpec(row, row.currency)),
         occurredAt: row.occurredAt,
         occurredOn: occurredOnFor(row.occurredAt, "sms", await getTimeZone(q, user)),
         amountMinor: row.amountMinor,
