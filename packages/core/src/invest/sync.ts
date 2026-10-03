@@ -3,7 +3,7 @@ import { CodedError, type MessageParams } from "@yomi/importers";
 import { and, asc, eq } from "@yomi/db/orm";
 import { openSecret } from "../secrets/crypto";
 import { assertSecretsUsable } from "../secrets/tokens";
-import { BankProviderError, type BankProvider } from "../sync/provider";
+import type { BankProvider } from "../sync/provider";
 import type { CurrentUser } from "../user";
 import { InvestError } from "./errors";
 import { ibkrWindow, type IbkrSource } from "./ibkr";
@@ -55,11 +55,10 @@ const PLAID_HISTORY_DAYS = 730;
 /** Later pulls re-read this many days before the last pull, so late-posting activity is caught (upserts). */
 const PLAID_OVERLAP_DAYS = 30;
 
-/** Stable code + params of a failed pull (bank_provider_* like /api/bank for Plaid provider errors). */
+/** Stable code + params of a failed pull (bank_provider_* for Plaid provider errors, as on /api/bank). */
 export function investErrorOf(e: unknown, provider: "ibkr" | "plaid"): { code: string; params: MessageParams; message: string } {
   const message = e instanceof Error ? e.message : String(e);
   if (e instanceof CodedError) return { code: e.code, params: e.params, message };
-  if (e instanceof BankProviderError) return { code: `bank_provider_${e.kind}`, params: { detail: message }, message };
   return { code: provider === "ibkr" ? "invest_ibkr_error" : "invest_plaid_error", params: { detail: message }, message };
 }
 

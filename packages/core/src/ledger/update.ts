@@ -31,7 +31,7 @@ async function categoryOf(db: Q, userId: number, id: number) {
     .from(categories)
     .where(and(eq(categories.userId, userId), eq(categories.id, id)))
     .limit(1))[0];
-  if (!c) throw new LedgerError("category_not_found", "category_not_found", `Category #${id} does not exist`, { id });
+  if (!c) throw new LedgerError("invalid", "category_not_found", `Category #${id} does not exist`, { id });
   return c;
 }
 
@@ -50,8 +50,8 @@ const SPLITTABLE: ReadonlySet<TransactionKind> = new Set(["expense", "refund"]);
 /** The category belongs to the other side (income vs expense). */
 function categoryKindMismatch(name: string, kind: string): LedgerError {
   return kind === "income"
-    ? new LedgerError("category_kind_mismatch", "category_not_for_income", `Category "${name}" is not an income category`, { name })
-    : new LedgerError("category_kind_mismatch", "category_not_for_expense", `Category "${name}" is not an expense category`, { name });
+    ? new LedgerError("invalid", "category_not_for_income", `Category "${name}" is not an income category`, { name })
+    : new LedgerError("invalid", "category_not_for_expense", `Category "${name}" is not an expense category`, { name });
 }
 
 export const SPLIT_KIND_MESSAGE = "This row is split; remove the split before changing its type";
@@ -87,7 +87,7 @@ export async function updateTransaction(db: Db, user: CurrentUser, id: number, p
   const row = await rowOf(db, userId, id);
   const kind = patch.kind ?? row.kind;
   if (patch.kind !== undefined && await blocksKindChange(db, userId, row.kind, patch.kind, id)) {
-    throw new LedgerError("split_conflict", "ledger_kind_change_on_split", SPLIT_KIND_MESSAGE);
+    throw new LedgerError("conflict", "ledger_kind_change_on_split", SPLIT_KIND_MESSAGE);
   }
   let categoryId = patch.categoryId !== undefined ? patch.categoryId : row.categoryId;
   if (patch.categoryId != null) {
@@ -104,7 +104,7 @@ export async function updateTransaction(db: Db, user: CurrentUser, id: number, p
   if (patch.note !== undefined) set.note = patch.note?.trim() ? patch.note.trim() : null;
   if (patch.merchant !== undefined) {
     const m = patch.merchant.trim();
-    if (!m) throw new LedgerError("invalid_input", "merchant_empty", "The merchant cannot be empty");
+    if (!m) throw new LedgerError("invalid", "merchant_empty", "The merchant cannot be empty");
     set.merchant = m;
   }
   await db.update(transactions)
@@ -173,12 +173,12 @@ export async function bulkUpdate(
   const userId = user.id;
   if (ids.length === 0) return { updated: 0, skippedSplit: 0 };
   if (patch.categoryId === undefined && patch.kind === undefined) {
-    throw new LedgerError("invalid_input", "recategorize_needs_target", "categoryId or kind is required");
+    throw new LedgerError("invalid", "recategorize_needs_target", "categoryId or kind is required");
   }
   return await db.transaction(async (tx) => {
     const cat = patch.categoryId != null ? await categoryOf(tx, userId, patch.categoryId) : null;
     if (cat && patch.kind !== undefined && !fits(patch.kind, cat.kind)) {
-      throw new LedgerError("category_kind_mismatch", "category_kind_mismatch", `Category "${cat.name}" does not fit`, { name: cat.name });
+      throw new LedgerError("invalid", "category_kind_mismatch", `Category "${cat.name}" does not fit`, { name: cat.name });
     }
     const catKinds = new Map<number, "expense" | "income">();
     const kindOfCategory = async (id: number) => {
@@ -238,12 +238,12 @@ async function assertNameFree(db: Db, userId: number, name: string, exceptId?: n
     .from(categories)
     .where(and(eq(categories.userId, userId), eq(categories.name, name)))
     .limit(1))[0];
-  if (hit && hit.id !== exceptId) throw new LedgerError("duplicate_name", "category_name_taken", `Category "${name}" already exists`, { name });
+  if (hit && hit.id !== exceptId) throw new LedgerError("conflict", "category_name_taken", `Category "${name}" already exists`, { name });
 }
 
 function cleanName(name: string): string {
   const n = name.trim();
-  if (!n) throw new LedgerError("invalid_input", "category_name_empty", "The category name cannot be empty");
+  if (!n) throw new LedgerError("invalid", "category_name_empty", "The category name cannot be empty");
   return n;
 }
 
@@ -272,7 +272,7 @@ export async function createCategory(db: Db, user: CurrentUser, name: string, ki
 
 async function userCategory(db: Db, userId: number, id: number) {
   const c = await categoryOf(db, userId, id);
-  if (c.isSystem) throw new LedgerError("system_category", "category_system_locked", `System category "${c.name}" cannot be changed`, { name: c.name });
+  if (c.isSystem) throw new LedgerError("forbidden", "category_system_locked", `System category "${c.name}" cannot be changed`, { name: c.name });
   return c;
 }
 

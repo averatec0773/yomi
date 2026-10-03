@@ -1,4 +1,4 @@
-import type { InvestStatement, NormalizedRow, SourceId } from "@yomi/importers";
+import { CodedError, type ErrorKind, type InvestStatement, type NormalizedRow, type SourceId } from "@yomi/importers";
 
 /**
  * Bank aggregator seam. Core sync code only talks to this interface; Plaid is the implementation
@@ -63,15 +63,27 @@ export interface ProviderLinkSession {
   items: { publicToken: string; institutionName: string | null }[];
 }
 
-/** Normalized provider failure. `reconnect` means the login must be redone in the provider's widget. */
-export class BankProviderError extends Error {
+type BankProviderErrorReason = "reconnect" | "rate_limited" | "unavailable" | "other";
+
+const PROVIDER_ERROR_KINDS: Record<BankProviderErrorReason, ErrorKind> = {
+  reconnect: "conflict",
+  rate_limited: "rate_limited",
+  unavailable: "unavailable",
+  other: "unavailable",
+};
+
+/**
+ * Normalized provider failure, code `bank_provider_<reason>` with the provider's message as `detail`. `reconnect`
+ * means the login must be redone in the provider's widget. `status` and `providerCode` are the provider's own.
+ */
+export class BankProviderError extends CodedError {
   constructor(
-    readonly kind: "reconnect" | "rate_limited" | "unavailable" | "other",
+    readonly reason: BankProviderErrorReason,
     message: string,
     readonly status: number | null = null,
-    readonly code: string | null = null,
+    readonly providerCode: string | null = null,
   ) {
-    super(message);
+    super(PROVIDER_ERROR_KINDS[reason], `bank_provider_${reason}`, message, { detail: message });
     this.name = "BankProviderError";
   }
 }

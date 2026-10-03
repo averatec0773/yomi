@@ -20,14 +20,14 @@ const SECRET_CORRUPT_MESSAGE = "A stored bank credential is corrupt and cannot b
 /**
  * `missing`: an encrypted value but no key. `wrong`: GCM authentication failed (another key, or a
  * tampered value). `malformed`: the env key is not 32 bytes of base64/hex. `corrupt`: the stored
- * value has the prefix but not the format. `code` is `bank_secret_<kind>`.
+ * value has the prefix but not the format. `code` is `bank_secret_<reason>`; nothing was changed (`conflict`).
  */
 export class SecretKeyError extends CodedError {
   constructor(
-    readonly kind: "missing" | "wrong" | "malformed" | "corrupt",
-    message: string = kind === "malformed" ? SECRET_MALFORMED_MESSAGE : kind === "corrupt" ? SECRET_CORRUPT_MESSAGE : SECRET_UNAVAILABLE_MESSAGE,
+    reason: "missing" | "wrong" | "malformed" | "corrupt",
+    message: string = reason === "malformed" ? SECRET_MALFORMED_MESSAGE : reason === "corrupt" ? SECRET_CORRUPT_MESSAGE : SECRET_UNAVAILABLE_MESSAGE,
   ) {
-    super(`bank_secret_${kind}`, message);
+    super("conflict", `bank_secret_${reason}`, message);
     this.name = "SecretKeyError";
   }
 }

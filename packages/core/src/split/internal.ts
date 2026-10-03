@@ -1,5 +1,5 @@
 import { participants, transactions, type Db } from "@yomi/db";
-import { CodedError, type MessageParams } from "@yomi/importers";
+import { CodedError, type ErrorKind, type MessageParams } from "@yomi/importers";
 import { and, eq } from "@yomi/db/orm";
 import { clockNow } from "../time/clock";
 import type { CurrentUser } from "../user";
@@ -7,17 +7,9 @@ import type { CurrentUser } from "../user";
 /** Db or a transaction handle: both are Drizzle Postgres databases. */
 export type Q = Db;
 
-/** HTTP-level class of a SplitError; `code` names the specific condition. */
-export type SplitErrorKind = "not_found" | "invalid" | "conflict";
-
 export class SplitError extends CodedError {
-  constructor(
-    readonly kind: SplitErrorKind,
-    code: string,
-    message: string,
-    params: MessageParams = {},
-  ) {
-    super(code, message, params);
+  constructor(kind: ErrorKind, code: string, message: string, params: MessageParams = {}) {
+    super(kind, code, message, params);
     this.name = "SplitError";
   }
 }

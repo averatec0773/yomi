@@ -1,5 +1,4 @@
 import {
-  type ApiError,
   IBKR_HISTORY_DAYS,
   IbkrHistoryBody,
   type InvestAccountList,
@@ -11,7 +10,6 @@ import {
 } from "@yomi/contracts";
 import {
   type BankProvider,
-  BankProviderError,
   convertOverview,
   getCurrentUser,
   getFxRates,
@@ -19,7 +17,6 @@ import {
   type FlexOptions,
   type IbkrSource,
   InvestError,
-  type InvestErrorCode,
   brokerageConnectionCount,
   listInvestmentAccounts,
   overviewCurrencies,
@@ -29,13 +26,11 @@ import {
   resolvePlaidProvider,
   portfolioOverview,
   pullIbkrHistory,
-  SecretKeyError,
   syncHoldings,
 } from "@yomi/core";
 import type { Db } from "@yomi/db";
 import { Hono } from "hono";
-import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { BadRequest, errorBody, readJson, readQuery } from "./split";
+import { BadRequest, readJson, readQuery } from "./split";
 
 export interface InvestDeps {
   /** IBKR Flex source (env, then Settings, resolved per request); tests inject a fake. */
@@ -50,46 +45,12 @@ export interface InvestDeps {
   now?: () => Date;
 }
 
-const INVEST_ERROR_STATUS: Record<InvestErrorCode, ContentfulStatusCode> = {
-  invest_ibkr_not_configured: 409,
-  invest_ibkr_token_expired: 409,
-  invest_ibkr_token_invalid: 409,
-  invest_ibkr_query_invalid: 409,
-  invest_ibkr_ip_restricted: 409,
-  invest_ibkr_rate_limited: 429,
-  invest_ibkr_unavailable: 502,
-  invest_ibkr_error: 502,
-  invest_ibkr_statement_invalid: 502,
-  invest_ibkr_range_invalid: 400,
-  invest_ibkr_history_days_invalid: 400,
-  invest_ibkr_pull_too_soon: 429,
-  invest_ibkr_pull_backoff: 429,
-  invest_ibkr_pull_running: 409,
-  invest_flex_in_progress_timeout: 504,
-  invest_ibkr_test_timeout: 504,
-  invest_plaid_not_configured: 409,
-  invest_plaid_error: 502,
-  invest_fx_unavailable: 502,
-  invest_fx_currency_unsupported: 400,
-};
-
 /** Routes under /api/invest: config, accounts, overview, sync, ibkr/history. Read-only holdings; no trading, no advice. */
 export function investRoutes(deps: { getDb: () => Db | Promise<Db> } & InvestDeps): Hono {
   const r = new Hono();
   const getIbkr = deps.ibkr ?? (async () => await resolveIbkrSource(await deps.getDb(), getCurrentUser(), process.env, deps.ibkrFlex));
   const getIbkrConfig = deps.ibkrConfig ?? (async () => await resolveIbkrConfig(await deps.getDb(), getCurrentUser()));
   const getPlaid = deps.plaid ?? (async () => await resolvePlaidProvider(await deps.getDb()));
-
-  r.onError((err, c) => {
-    if (err instanceof BadRequest) return c.json(errorBody(err), 400);
-    if (err instanceof InvestError) return c.json(errorBody(err), INVEST_ERROR_STATUS[err.code]);
-    if (err instanceof SecretKeyError) return c.json(errorBody(err), 409);
-    if (err instanceof BankProviderError) {
-      const body: ApiError = { error: err.message, code: `bank_provider_${err.kind}`, params: { detail: err.message } };
-      return c.json(body, 502);
-    }
-    throw err;
-  });
 
   r.get("/config", async (c) => {
     const db = await deps.getDb();

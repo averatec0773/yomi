@@ -225,7 +225,7 @@ export async function analysisReport(
   const timeZone = await getTimeZone(db, user);
   const now = opts.now ?? clockNow();
   const today = opts.today ?? todayIn(timeZone, now);
-  if (!isDate(today)) throw new LedgerError("invalid_input", "invalid_date", `Invalid date: ${today}`, { value: today });
+  if (!isDate(today)) throw new LedgerError("invalid", "invalid_date", `Invalid date: ${today}`, { value: today });
   const weekStart = opts.weekStart ?? DEFAULT_WEEK_START;
   const kind = periodKindOf(range, weekStart);
 

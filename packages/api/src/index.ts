@@ -1,5 +1,5 @@
 import type { Health } from "@yomi/contracts";
-import { allowedHostsFromEnv, type CurrentUser, localUser, type ParseFn, runWithUser } from "@yomi/core";
+import { allowedHostsFromEnv, CodedError, type CurrentUser, localUser, type ParseFn, runWithUser } from "@yomi/core";
 import type { Db } from "@yomi/db";
 import { detectAndParse } from "@yomi/importers";
 import { type Context, Hono } from "hono";
@@ -8,6 +8,7 @@ import { analysisRoutes } from "./analysis";
 import { assetsRoutes } from "./assets";
 import { captureRoutes } from "./capture";
 import { type BankDeps, bankRoutes } from "./bank";
+import { errorBody, statusOf } from "./errors";
 import { importRoutes } from "./import";
 import { type InvestDeps, investRoutes } from "./invest";
 import { ledgerRoutes } from "./ledger";
@@ -47,6 +48,12 @@ export function resolveRequestUser(_c: Context): CurrentUser {
 
 export function createApi(deps: ApiDeps) {
   const app = new Hono().basePath("/api");
+  // One error mapping for every route: a coded error answers by its kind; anything else is a bug (500, logged).
+  app.onError((err, c) => {
+    if (err instanceof CodedError) return c.json(errorBody(err), statusOf(err));
+    console.error(err);
+    return c.text("Internal Server Error", 500);
+  });
   app.get("/health", (c) => c.json({ ok: true } satisfies Health));
   // Everything after health (container health checks may use any host name) is for this server's own pages and local scripts.
   app.use(sameOriginOnly(deps.allowedHosts ?? allowedHostsFromEnv()));

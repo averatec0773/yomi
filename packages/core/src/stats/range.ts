@@ -132,7 +132,7 @@ export async function rangeOverview(
 ): Promise<RangeOverview> {
   assertRange(range);
   const today = opts.today ?? todayIn(await getTimeZone(db, user));
-  if (!isDate(today)) throw new LedgerError("invalid_input", "invalid_date", `Invalid date: ${today}`, { value: today });
+  if (!isDate(today)) throw new LedgerError("invalid", "invalid_date", `Invalid date: ${today}`, { value: today });
   const userId = user.id;
   const rows = await loadRangeRows(db, userId, range.from, range.to);
   const prevRange = previousRange(range);

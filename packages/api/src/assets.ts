@@ -1,6 +1,5 @@
 import { type AssetsSyncResult, NetWorthQuery, type NetWorthView, StartingBalanceBody, type StartingBalanceResult } from "@yomi/contracts";
 import {
-  AssetsError,
   type BankProvider,
   getCurrentUser,
   type FlexOptions,
@@ -8,7 +7,6 @@ import {
   netWorth,
   resolveIbkrSource,
   resolvePlaidProvider,
-  SecretKeyError,
   setStartingBalance,
   syncAll,
   syncHoldings,
@@ -16,7 +14,7 @@ import {
 } from "@yomi/core";
 import type { Db } from "@yomi/db";
 import { Hono } from "hono";
-import { BadRequest, errorBody, idParam, readJson, readQuery } from "./split";
+import { idParam, readJson, readQuery } from "./split";
 
 export interface AssetsDeps {
   getDb: () => Db | Promise<Db>;
@@ -35,13 +33,6 @@ export function assetsRoutes(deps: AssetsDeps): Hono {
   const r = new Hono();
   const getPlaid = deps.plaid ?? (async () => await resolvePlaidProvider(await deps.getDb()));
   const getIbkr = deps.ibkr ?? (async () => await resolveIbkrSource(await deps.getDb(), getCurrentUser(), process.env, deps.ibkrFlex));
-
-  r.onError((err, c) => {
-    if (err instanceof BadRequest) return c.json(errorBody(err), 400);
-    if (err instanceof AssetsError) return c.json(errorBody(err), err.kind === "not_found" ? 404 : 400);
-    if (err instanceof SecretKeyError) return c.json(errorBody(err), 409);
-    throw err;
-  });
 
   r.get("/assets/net-worth", async (c) => {
     const q = readQuery(c, NetWorthQuery);

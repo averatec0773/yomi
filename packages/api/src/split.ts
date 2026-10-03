@@ -1,7 +1,6 @@
 import {
   AcceptSuggestionsBody,
   AcceptSuggestionsResult,
-  ApiError,
   ApplyAutoSplitBody,
   ApplyAutoSplitResult,
   BalanceList,
@@ -85,7 +84,6 @@ import {
   setSplit,
   settleAll,
   settlementCandidates,
-  SplitError,
   statementText,
   toggleParticipantResult,
   unsplitSuggestions,
@@ -93,13 +91,6 @@ import {
 } from "@yomi/core";
 import type { Db } from "@yomi/db";
 import { type Context, Hono } from "hono";
-import type { ContentfulStatusCode } from "hono/utils/http-status";
-
-const SPLIT_ERROR_STATUS: Record<SplitError["kind"], ContentfulStatusCode> = {
-  not_found: 404,
-  invalid: 400,
-  conflict: 409,
-};
 
 interface Schema<T> {
   safeParse(
@@ -107,17 +98,12 @@ interface Schema<T> {
   ): { success: true; data: T } | { success: false; error: { issues: { path: PropertyKey[]; message: string }[] } };
 }
 
-/** Thrown by `readJson`/`readQuery` and turned into a 400 by the error handler. */
+/** Thrown by `readJson`/`readQuery`: a request the route cannot read (400). */
 export class BadRequest extends CodedError {
   constructor(code: string, message: string, params: MessageParams = {}) {
-    super(code, message, params);
+    super("invalid", code, message, params);
     this.name = "BadRequest";
   }
-}
-
-/** Body of an error response: English message, stable code, params for the UI's translation. */
-export function errorBody(err: CodedError): ApiError {
-  return { error: err.message, code: err.code, params: err.params };
 }
 
 function issuesText(issues: { path: PropertyKey[]; message: string }[], root: string): string {
@@ -154,18 +140,8 @@ export function idParam(c: Context, name = "id"): number {
   return id;
 }
 
-/** Shared error mapping for split and quick routes. */
-export function withSplitErrors(r: Hono): Hono {
-  r.onError((err, c) => {
-    if (err instanceof SplitError) return c.json(errorBody(err), SPLIT_ERROR_STATUS[err.kind]);
-    if (err instanceof BadRequest) return c.json(errorBody(err), 400);
-    throw err;
-  });
-  return r;
-}
-
 export function splitRoutes(deps: { getDb: () => Db | Promise<Db> }): Hono {
-  const r = withSplitErrors(new Hono());
+  const r = new Hono();
   const db = async () => await deps.getDb();
   const user = () => getCurrentUser();
 

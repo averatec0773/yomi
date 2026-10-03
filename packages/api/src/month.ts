@@ -2,12 +2,11 @@ import { type ApiError, MonthString, type MonthOverview, SetTargetInput, StatsQu
 import { getCurrentUser, getTimeZone, matchPreset, monthOverview, rangeOverview, resolvePeriod, setMonthlyTarget, todayIn } from "@yomi/core";
 import type { Db } from "@yomi/db";
 import { Hono } from "hono";
-import { ledgerErrorHandler, parseJson } from "./ledger";
+import { parseJson } from "./ledger";
 
 /** Routes: GET /month/:month, GET /stats, PUT /targets (mounted under /api). */
 export function monthRoutes(deps: { getDb: () => Db | Promise<Db>; today?: () => string }): Hono {
   const r = new Hono();
-  r.onError(ledgerErrorHandler);
 
   r.get("/month/:month", async (c) => {
     const month = c.req.param("month");

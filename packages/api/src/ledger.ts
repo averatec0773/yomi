@@ -20,7 +20,6 @@ import {
   bulkUpdate,
   createCategory,
   getCurrentUser,
-  LedgerError,
   listCategories,
   listMonths,
   listTransactions,
@@ -33,24 +32,6 @@ import {
 } from "@yomi/core";
 import type { Db } from "@yomi/db";
 import { type Context, Hono } from "hono";
-import type { ContentfulStatusCode } from "hono/utils/http-status";
-
-export const LEDGER_ERROR_STATUS: Record<LedgerError["kind"], ContentfulStatusCode> = {
-  not_found: 404,
-  category_not_found: 422,
-  category_kind_mismatch: 422,
-  system_category: 403,
-  duplicate_name: 409,
-  invalid_input: 400,
-  split_conflict: 409,
-};
-
-export function ledgerErrorHandler(err: Error, c: Context): Response {
-  if (err instanceof LedgerError) {
-    return c.json({ error: err.message, code: err.code, params: err.params } satisfies ApiError, LEDGER_ERROR_STATUS[err.kind]);
-  }
-  throw err;
-}
 
 /** The part of a zod schema this module uses (zod itself is not an api dependency). */
 interface Schema<T> {
@@ -89,7 +70,6 @@ const badId = (c: Context) => c.json({ error: "Invalid id", code: "invalid_id", 
 /** Routes: /transactions, /categories, /months, /ledger/recategorize (mounted under /api). */
 export function ledgerRoutes(deps: { getDb: () => Db | Promise<Db> }): Hono {
   const r = new Hono();
-  r.onError(ledgerErrorHandler);
 
   r.get("/transactions", async (c) => {
     const q = await parseJson(c, TransactionQuery, c.req.query());

@@ -293,7 +293,7 @@ describe("status, categories and batches", () => {
     expect(preview).toMatchObject({ alreadyImported: true, existingBatchId: 1, newCount: 0 });
     await expect(commitImport(db, user, fakeParse("alipay", rows), bytes("same"), "x.csv")).rejects.toMatchObject({
       name: "ImportError",
-      kind: "already_imported",
+      kind: "conflict",
       code: "import_already_imported",
       params: { batchId: 1 },
     });

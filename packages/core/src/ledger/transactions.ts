@@ -135,16 +135,16 @@ async function buildWhere(db: Db, userId: number, f: TransactionFilter): Promise
   const conds: (SQL | undefined)[] = [eq(transactions.userId, userId)];
   if (f.id !== undefined) conds.push(eq(transactions.id, f.id));
   if (f.month !== undefined) {
-    if (!isMonth(f.month)) throw new LedgerError("invalid_input", "invalid_month", `Invalid month: ${f.month}`, { value: f.month });
+    if (!isMonth(f.month)) throw new LedgerError("invalid", "invalid_month", `Invalid month: ${f.month}`, { value: f.month });
     const { start, end } = monthRange(f.month);
     conds.push(gte(transactions.occurredOn, start), lt(transactions.occurredOn, end));
   }
   if (f.from !== undefined) {
-    if (!isDate(f.from)) throw new LedgerError("invalid_input", "invalid_start_date", `Invalid start date: ${f.from}`, { value: f.from });
+    if (!isDate(f.from)) throw new LedgerError("invalid", "invalid_start_date", `Invalid start date: ${f.from}`, { value: f.from });
     conds.push(gte(transactions.occurredOn, f.from));
   }
   if (f.to !== undefined) {
-    if (!isDate(f.to)) throw new LedgerError("invalid_input", "invalid_end_date", `Invalid end date: ${f.to}`, { value: f.to });
+    if (!isDate(f.to)) throw new LedgerError("invalid", "invalid_end_date", `Invalid end date: ${f.to}`, { value: f.to });
     conds.push(lte(transactions.occurredOn, f.to));
   }
   const q = f.q?.trim();
@@ -381,14 +381,14 @@ export function provisionalTotals(rows: readonly SpendingRow[], currency: string
 
 /** All rows of a month with their splits and my share. */
 export async function loadMonthRows(db: Db, userId: number, month: string): Promise<SpendingRow[]> {
-  if (!isMonth(month)) throw new LedgerError("invalid_input", "invalid_month", `Invalid month: ${month}`, { value: month });
+  if (!isMonth(month)) throw new LedgerError("invalid", "invalid_month", `Invalid month: ${month}`, { value: month });
   const { start, end } = monthRange(month);
   return await loadRowsBetween(db, userId, start, end);
 }
 
 /** All rows from `from` through `to` (inclusive dates), with their splits and my share. */
 export async function loadRangeRows(db: Db, userId: number, from: string, to: string): Promise<SpendingRow[]> {
-  if (!isDate(from) || !isDate(to)) throw new LedgerError("invalid_input", "invalid_range", `Invalid date range: ${from} ~ ${to}`, { from, to });
+  if (!isDate(from) || !isDate(to)) throw new LedgerError("invalid", "invalid_range", `Invalid date range: ${from} ~ ${to}`, { from, to });
   return await loadRowsBetween(db, userId, from, addDays(to, 1));
 }
 

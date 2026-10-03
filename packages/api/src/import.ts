@@ -3,13 +3,6 @@ import { CodedError, commitImport, getCurrentUser, ImportError, listBatches, typ
 import type { Db } from "@yomi/db";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
-import type { ContentfulStatusCode } from "hono/utils/http-status";
-
-const ERROR_STATUS: Record<ImportError["kind"], ContentfulStatusCode> = {
-  already_imported: 409,
-  batch_not_found: 404,
-  batch_already_reverted: 409,
-};
 
 /** Largest upload (the whole form body) accepted, checked before it is read; apps/web/next.config.ts lets it through the proxy. */
 const MAX_UPLOAD_MB = 25;
@@ -20,13 +13,6 @@ function truthy(v: unknown): boolean {
 
 export function importRoutes(deps: { getDb: () => Db | Promise<Db>; parse: ParseFn }): Hono {
   const r = new Hono();
-
-  r.onError((err, c) => {
-    if (err instanceof ImportError) {
-      return c.json({ error: err.message, code: err.code, params: err.params } satisfies ApiError, ERROR_STATUS[err.kind]);
-    }
-    throw err;
-  });
 
   async function readUpload(body: Record<string, unknown>) {
     const file = body.file;

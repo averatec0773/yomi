@@ -43,7 +43,7 @@ import {
 } from "@yomi/core";
 import { backupDatabase, type Db, dbTarget, pgDumpHint } from "@yomi/db";
 import { Hono } from "hono";
-import { readJson, readQuery, withSplitErrors } from "./split";
+import { readJson, readQuery } from "./split";
 
 function csv(body: string, fileName: string): Response {
   return new Response(body, {
@@ -57,7 +57,7 @@ function csv(body: string, fileName: string): Response {
 
 /** Routes: /maintenance/backup, /settings/status, /settings/time-zone, /settings/shortcuts, /settings/profile, /settings/payment-methods, /settings/theme, /export/transactions.csv, /export/split.csv (mounted under /api). */
 export function maintenanceRoutes(deps: { getDb: () => Db | Promise<Db> }): Hono {
-  const r = withSplitErrors(new Hono());
+  const r = new Hono();
 
   r.post("/maintenance/backup", async (c) => {
     const db = await deps.getDb();

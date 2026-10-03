@@ -31,7 +31,7 @@ export function isAnalysisPreset(s: unknown): s is AnalysisPreset {
 }
 
 function assertDate(date: string): void {
-  if (!isDate(date)) throw new LedgerError("invalid_input", "invalid_date", `Invalid date: ${date}`, { value: date });
+  if (!isDate(date)) throw new LedgerError("invalid", "invalid_date", `Invalid date: ${date}`, { value: date });
 }
 
 /** Day of the week of a calendar date: 0 = Sunday ... 6 = Saturday. */

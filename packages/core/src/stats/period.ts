@@ -56,13 +56,13 @@ export function monthRangeOf(month: string): DateRange {
 
 /** Throws invalid_input unless both ends are real dates, from ≤ to and the span is at most five years. */
 export function assertRange(r: DateRange): void {
-  if (!isDate(r.from)) throw new LedgerError("invalid_input", "invalid_start_date", `Invalid start date: ${r.from}`, { value: r.from });
-  if (!isDate(r.to)) throw new LedgerError("invalid_input", "invalid_end_date", `Invalid end date: ${r.to}`, { value: r.to });
-  if (r.from > r.to) throw new LedgerError("invalid_input", "range_start_after_end", "The start date cannot be after the end date");
+  if (!isDate(r.from)) throw new LedgerError("invalid", "invalid_start_date", `Invalid start date: ${r.from}`, { value: r.from });
+  if (!isDate(r.to)) throw new LedgerError("invalid", "invalid_end_date", `Invalid end date: ${r.to}`, { value: r.to });
+  if (r.from > r.to) throw new LedgerError("invalid", "range_start_after_end", "The start date cannot be after the end date");
   const year = String(Number(r.from.slice(0, 4)) + MAX_RANGE_YEARS).padStart(4, "0");
   // A range from Feb 29 may end on Feb 28 five years later.
   const end = isDate(`${year}${r.from.slice(4)}`) ? `${year}${r.from.slice(4)}` : `${year}-03-01`;
-  if (r.to >= end) throw new LedgerError("invalid_input", "range_too_long", "A range can be at most 5 years", { years: 5 });
+  if (r.to >= end) throw new LedgerError("invalid", "range_too_long", "A range can be at most 5 years", { years: 5 });
 }
 
 /** Number of whole calendar months the range covers exactly, or null when it does not start on a 1st and end on a month end. */
@@ -101,7 +101,7 @@ export function monthsIn(r: DateRange): string[] {
  * (this month is the whole month; the last 3 months are this month and the two before it; this year is the whole year).
  */
 export function presetRange(preset: StatsPreset, today: string): DateRange {
-  if (!isDate(today)) throw new LedgerError("invalid_input", "invalid_date", `Invalid date: ${today}`, { value: today });
+  if (!isDate(today)) throw new LedgerError("invalid", "invalid_date", `Invalid date: ${today}`, { value: today });
   const month = today.slice(0, 7);
   const year = today.slice(0, 4);
   switch (preset) {

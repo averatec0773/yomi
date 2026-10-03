@@ -194,7 +194,7 @@ export interface ResolveResult {
 }
 
 function invalid(id: number, action: string): CaptureError {
-  return new CaptureError("invalid", "capture_action_invalid", `"${action}" does not apply to capture #${id} now`, { id, action });
+  return new CaptureError("conflict", "capture_action_invalid", `"${action}" does not apply to capture #${id} now`, { id, action });
 }
 
 async function applyAction(q: Db, user: CurrentUser, c: CaptureRow, action: ReviewAction, candidateId?: number): Promise<void> {
@@ -204,7 +204,7 @@ async function applyAction(q: Db, user: CurrentUser, c: CaptureRow, action: Revi
     case "link": {
       if (!choosing) throw invalid(c.id, action);
       if (candidateId === undefined || !(c.payload.candidates ?? []).some((x) => x.id === candidateId)) {
-        throw new CaptureError("invalid", "capture_candidate_invalid", `Transaction #${candidateId} is not a candidate of capture #${c.id}`, { id: c.id });
+        throw new CaptureError("conflict", "capture_candidate_invalid", `Transaction #${candidateId} is not a candidate of capture #${c.id}`, { id: c.id });
       }
       await supersede(q, user, c.id, candidateId, { by });
       return;

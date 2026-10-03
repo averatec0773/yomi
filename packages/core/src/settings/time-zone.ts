@@ -63,7 +63,7 @@ export async function ensureOccurredOn(db: Db, user: CurrentUser): Promise<numbe
 /** Stores the zone and regroups every transaction by it. */
 export async function setTimeZone(db: Db, user: CurrentUser, timeZone: string): Promise<TimeZoneChange> {
   const zone = timeZone.trim();
-  if (!isTimeZone(zone)) throw new LedgerError("invalid_input", "invalid_time_zone", `Unknown time zone: ${timeZone}`, { value: timeZone });
+  if (!isTimeZone(zone)) throw new LedgerError("invalid", "invalid_time_zone", `Unknown time zone: ${timeZone}`, { value: timeZone });
   await writeSetting(db, user, TIME_ZONE_KEY, zone);
   const changed = await recomputeOccurredOn(db, user, zone);
   return { timeZone: zone, isSet: true, changed };

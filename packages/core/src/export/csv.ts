@@ -135,11 +135,11 @@ export async function exportTransactionsCsv(
   opts: { month?: string; from?: string; to?: string; locale?: CsvLocale } = {},
 ): Promise<string> {
   const l = LABELS[opts.locale ?? "en"];
-  if (opts.month !== undefined && !isMonth(opts.month)) throw new LedgerError("invalid_input", "invalid_month", `Invalid month: ${opts.month}`, { value: opts.month });
+  if (opts.month !== undefined && !isMonth(opts.month)) throw new LedgerError("invalid", "invalid_month", `Invalid month: ${opts.month}`, { value: opts.month });
   if (opts.from !== undefined || opts.to !== undefined) {
-    if (opts.from === undefined || opts.to === undefined) throw new LedgerError("invalid_input", "range_needs_both", "Give both the start and the end date");
+    if (opts.from === undefined || opts.to === undefined) throw new LedgerError("invalid", "range_needs_both", "Give both the start and the end date");
     if (!isDate(opts.from) || !isDate(opts.to) || opts.from > opts.to) {
-      throw new LedgerError("invalid_input", "invalid_range", `Invalid date range: ${opts.from} ~ ${opts.to}`, { from: opts.from, to: opts.to });
+      throw new LedgerError("invalid", "invalid_range", `Invalid date range: ${opts.from} ~ ${opts.to}`, { from: opts.from, to: opts.to });
     }
   }
   const items: TransactionItem[] = [];

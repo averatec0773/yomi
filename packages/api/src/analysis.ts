@@ -2,12 +2,11 @@ import { AnalysisQuery, type AnalysisReport, type FreshnessResponse } from "@yom
 import { analysisReport, getCurrentUser, getTimeZone, loadSourceFacts, resolveAnalysisPeriod, sourceFreshness, todayIn } from "@yomi/core";
 import type { Db } from "@yomi/db";
 import { Hono } from "hono";
-import { ledgerErrorHandler, parseJson } from "./ledger";
+import { parseJson } from "./ledger";
 
 /** Routes: GET /analysis, GET /analysis/freshness (mounted under /api). */
 export function analysisRoutes(deps: { getDb: () => Db | Promise<Db>; today?: () => string; env?: NodeJS.ProcessEnv }): Hono {
   const r = new Hono();
-  r.onError(ledgerErrorHandler);
 
   const context = async () => {
     const db = await deps.getDb();

@@ -4,6 +4,7 @@ import {
   CodedError,
   type DeclaredBucket,
   type DeclaredTotals,
+  type ErrorKind,
   type MessageParams,
   type NormalizedRow,
   type Notice,
@@ -115,16 +116,9 @@ export interface RevertResult {
   keptEdited: number;
 }
 
-export type ImportErrorKind = "already_imported" | "batch_not_found" | "batch_already_reverted";
-
 export class ImportError extends CodedError {
-  constructor(
-    readonly kind: ImportErrorKind,
-    code: string,
-    message: string,
-    params: MessageParams = {},
-  ) {
-    super(code, message, params);
+  constructor(kind: ErrorKind, code: string, message: string, params: MessageParams = {}) {
+    super(kind, code, message, params);
     this.name = "ImportError";
   }
 }
@@ -602,7 +596,7 @@ export async function commitParsed(db: Db, user: CurrentUser, parsed: ParseResul
     const { preview, parsedTotals, planned, existingAccountIds } = await buildPlan(tx, user, parsed, fileHash, fileName, opts);
     if (preview.alreadyImported && !opts.force) {
       throw new ImportError(
-        "already_imported",
+        "conflict",
         "import_already_imported",
         `The file was already imported (batch #${preview.existingBatchId}); use force to import it again`,
         { batchId: preview.existingBatchId ?? 0 },
@@ -751,8 +745,8 @@ export async function revertBatch(db: Db, user: CurrentUser, batchId: number, op
       .from(importBatches)
       .where(and(eq(importBatches.userId, userId), eq(importBatches.id, batchId)))
       .limit(1))[0];
-    if (!batch) throw new ImportError("batch_not_found", "import_batch_not_found", `Batch #${batchId} does not exist`, { batchId });
-    if (batch.status === "reverted") throw new ImportError("batch_already_reverted", "import_batch_already_reverted", `Batch #${batchId} was already reverted`, { batchId });
+    if (!batch) throw new ImportError("not_found", "import_batch_not_found", `Batch #${batchId} does not exist`, { batchId });
+    if (batch.status === "reverted") throw new ImportError("conflict", "import_batch_already_reverted", `Batch #${batchId} was already reverted`, { batchId });
 
     const rows = await tx
       .select({ id: transactions.id, userEditedAt: transactions.userEditedAt })

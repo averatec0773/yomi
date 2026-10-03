@@ -2,10 +2,10 @@ import { QuickCreateBody, QuickCreated, QuickDraft, QuickParseBody } from "@yomi
 import { createQuickEntry, createSmsEntry, getCurrentUser, getTimeZone, listParticipants, parseQuickEntry, todayIn } from "@yomi/core";
 import type { Db } from "@yomi/db";
 import { Hono } from "hono";
-import { readJson, withSplitErrors } from "./split";
+import { readJson } from "./split";
 
 export function quickRoutes(deps: { getDb: () => Db | Promise<Db> }): Hono {
-  const r = withSplitErrors(new Hono());
+  const r = new Hono();
 
   r.post("/parse", async (c) => {
     const body = await readJson(c, QuickParseBody);

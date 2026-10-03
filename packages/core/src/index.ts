@@ -13,7 +13,7 @@ export * from "./analysis";
 export * from "./export";
 export * from "./sync";
 export * from "./secrets";
-export { CodedError, type MessageParams, type Notice, ParseError } from "@yomi/importers";
+export { CodedError, type ErrorKind, type MessageParams, type Notice, ParseError } from "@yomi/importers";
 export * from "./invest";
 export * from "./assets";
 export * from "./settings";

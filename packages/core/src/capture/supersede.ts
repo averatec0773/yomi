@@ -1,20 +1,13 @@
 import { categories, type CaptureState, type CaptureUndo, captures, type Db, transactions } from "@yomi/db";
-import { CodedError, type MessageParams } from "@yomi/importers";
+import { CodedError, type ErrorKind, type MessageParams } from "@yomi/importers";
 import { and, eq } from "@yomi/db/orm";
 import { lockReason } from "../ledger/lock";
 import { applySplit, getSplit } from "../split/splits";
 import type { CurrentUser } from "../user";
 
-export type CaptureErrorKind = "not_found" | "invalid";
-
 export class CaptureError extends CodedError {
-  constructor(
-    readonly kind: CaptureErrorKind,
-    code: string,
-    message: string,
-    params: MessageParams = {},
-  ) {
-    super(code, message, params);
+  constructor(kind: ErrorKind, code: string, message: string, params: MessageParams = {}) {
+    super(kind, code, message, params);
     this.name = "CaptureError";
   }
 }
@@ -104,7 +97,7 @@ export async function supersede(q: Db, user: CurrentUser, captureId: number, aut
 
 async function linkCapture(q: Db, user: CurrentUser, captureId: number, authorityId: number, opts: { by: string }): Promise<CaptureState> {
   const c = await getCapture(q, user, captureId);
-  if (c.state !== "provisional") throw new CaptureError("invalid", "capture_not_open", `Capture #${captureId} was already resolved`, { id: captureId });
+  if (c.state !== "provisional") throw new CaptureError("conflict", "capture_not_open", `Capture #${captureId} was already resolved`, { id: captureId });
   const row = await captureRow(q, user, c);
   const auth = await txRow(q, user, authorityId);
 
@@ -206,7 +199,7 @@ export async function undoResolution(q: Db, user: CurrentUser, captureId: number
   const c = await getCapture(q, user, captureId);
   const undo = c.payload.undo ?? [];
   const entry = undo.at(-1);
-  if (!entry) throw new CaptureError("invalid", "capture_nothing_to_undo", `Capture #${captureId} has nothing to undo`, { id: captureId });
+  if (!entry) throw new CaptureError("conflict", "capture_nothing_to_undo", `Capture #${captureId} has nothing to undo`, { id: captureId });
   if (entry.authority && Object.keys(entry.authority.fields).length) {
     await q.update(transactions).set(entry.authority.fields as TxPatch).where(and(eq(transactions.userId, user.id), eq(transactions.id, entry.authority.id)));
   }

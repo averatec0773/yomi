@@ -1,11 +1,8 @@
 import { BulkResolveBody, ResolveBody, type ResolveResult, type ReviewList } from "@yomi/contracts";
-import { CaptureError, getCurrentUser, getTimeZone, listReview, resolveReview, resolveReviewBulk, todayIn, undoCapture } from "@yomi/core";
+import { getCurrentUser, getTimeZone, listReview, resolveReview, resolveReviewBulk, todayIn, undoCapture } from "@yomi/core";
 import type { Db } from "@yomi/db";
 import { Hono } from "hono";
-import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { BadRequest, errorBody, idParam, readJson } from "./split";
-
-const CAPTURE_ERROR_STATUS: Record<CaptureError["kind"], ContentfulStatusCode> = { not_found: 404, invalid: 409 };
+import { idParam, readJson } from "./split";
 
 /**
  * The capture review queue (thin over core/capture; the v0.3 MCP tools call the same functions):
@@ -13,11 +10,6 @@ const CAPTURE_ERROR_STATUS: Record<CaptureError["kind"], ContentfulStatusCode> =
  */
 export function captureRoutes(deps: { getDb: () => Db | Promise<Db>; today?: () => string }): Hono {
   const r = new Hono();
-  r.onError((err, c) => {
-    if (err instanceof CaptureError) return c.json(errorBody(err), CAPTURE_ERROR_STATUS[err.kind]);
-    if (err instanceof BadRequest) return c.json(errorBody(err), 400);
-    throw err;
-  });
   const db = async () => await deps.getDb();
   const user = () => getCurrentUser();
 

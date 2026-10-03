@@ -56,16 +56,16 @@ describe("encryptSecret / decryptSecret", () => {
       return buf.toString("base64");
     };
     for (const bad of [`enc:v1:${iv}:${flip(ct)}:${tag}`, `enc:v1:${flip(iv)}:${ct}:${tag}`, `enc:v1:${iv}:${ct}:${flip(tag)}`]) {
-      expect(() => decryptSecret(bad, key())).toThrow(expect.objectContaining({ kind: "wrong" }));
+      expect(() => decryptSecret(bad, key())).toThrow(expect.objectContaining({ code: "bank_secret_wrong" }));
     }
-    expect(() => decryptSecret("enc:v1:abc", key())).toThrow(expect.objectContaining({ kind: "corrupt" }));
+    expect(() => decryptSecret("enc:v1:abc", key())).toThrow(expect.objectContaining({ code: "bank_secret_corrupt" }));
   });
 
   it("a wrong key fails GCM authentication; a missing key is its own error", () => {
     const enc = encryptSecret(ACCESS, key());
     expect(() => decryptSecret(enc, parseSecretKey(OTHER_B64))).toThrow(SecretKeyError);
     expect(() => decryptSecret(enc, parseSecretKey(OTHER_B64))).toThrow(SECRET_UNAVAILABLE_MESSAGE);
-    expect(() => decryptSecret(enc, null)).toThrow(expect.objectContaining({ kind: "missing" }));
+    expect(() => decryptSecret(enc, null)).toThrow(expect.objectContaining({ code: "bank_secret_missing" }));
   });
 
   it("reads legacy plaintext unchanged, with or without a key", () => {
@@ -90,7 +90,7 @@ describe("encryptSecret / decryptSecret", () => {
         err = e;
       }
       expect(err).toBeInstanceOf(SecretKeyError);
-      expect((err as SecretKeyError).kind).toBe("malformed");
+      expect((err as SecretKeyError).code).toBe("bank_secret_malformed");
       expect((err as Error).message).not.toContain(bad);
       expect((err as Error).message).toContain("YOMI_SECRET_KEY");
     }
