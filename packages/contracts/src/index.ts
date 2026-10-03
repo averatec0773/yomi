@@ -18,4 +18,5 @@ export * from "./shortcuts";
 export const Health = z.object({ ok: z.literal(true) });
 export type Health = z.infer<typeof Health>;
 export * from "./payment";
+export * from "./tools";
 export * from "./secrets";

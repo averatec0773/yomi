@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Notice } from "./common";
+import { Id, Notice } from "./common";
 
 export const BankEnvironment = z.enum(["sandbox", "production"]);
 export type BankEnvironment = z.infer<typeof BankEnvironment>;
@@ -21,7 +21,7 @@ export type BankConfig = z.infer<typeof BankConfig>;
  * the connection's environment). Otherwise a new login in `environment` (default: defaultEnvironment).
  */
 export const LinkTokenBody = z.object({
-  connectionId: z.int().positive().optional(),
+  connectionId: Id.optional(),
   environment: BankEnvironment.optional(),
   /**
    * New logins only. bank (default): Plaid product transactions. brokerage: Plaid product investments;
@@ -60,7 +60,7 @@ export const ExchangeBody = z.object({
   environment: BankEnvironment.optional(),
   institution: z.object({ name: z.string(), institution_id: z.string().optional() }).nullable().optional(),
   /** LinkTokenResult.sessionId of the Link session that produced the token. */
-  sessionId: z.int().positive().optional(),
+  sessionId: Id.optional(),
 });
 export type ExchangeBody = z.infer<typeof ExchangeBody>;
 
@@ -140,7 +140,7 @@ export type EnrollmentResult = z.infer<typeof EnrollmentResult>;
  * one (plus Plaid's link_session_id from onExit, kept for support).
  */
 export const LinkRecoverBody = z.object({
-  sessionId: z.int().positive().optional(),
+  sessionId: Id.optional(),
   linkSessionId: z.string().max(200).nullish(),
 });
 export type LinkRecoverBody = z.infer<typeof LinkRecoverBody>;

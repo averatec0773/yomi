@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DateString, Locale } from "./common";
+import { DateString, Locale, MonthString } from "./common";
 import { optionalEmail, optionalPhone } from "./payment";
 import { IbkrSectionItem } from "./secrets";
 
@@ -7,10 +7,7 @@ export const BackupResult = z.object({ path: z.string(), fileName: z.string() })
 export type BackupResult = z.infer<typeof BackupResult>;
 
 export const TransactionsCsvQuery = z.object({
-  month: z
-    .string()
-    .regex(/^\d{4}-(0[1-9]|1[0-2])$/, "YYYY-MM")
-    .optional(),
+  month: MonthString.optional(),
   from: DateString.optional(),
   to: DateString.optional(),
   locale: Locale.optional(),

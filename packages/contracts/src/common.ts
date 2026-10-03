@@ -1,7 +1,15 @@
 import { z } from "zod";
 
+// Leaf schemas every contract (HTTP queries and bodies, responses, MCP tool inputs) builds on.
+
 export const CurrencyCode = z.string().regex(/^[A-Z]{3}$/, "ISO 4217 code, e.g. CNY");
 export type CurrencyCode = z.infer<typeof CurrencyCode>;
+
+/** A currency as a person or an agent types it ("cny", " usd "), read as its ISO code. */
+export const Currency = z.string().trim().toUpperCase().pipe(CurrencyCode);
+
+/** A positive integer id in a JSON body or a tool input. */
+export const Id = z.int().positive();
 
 export const MonthString = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "YYYY-MM");
 export type MonthString = z.infer<typeof MonthString>;

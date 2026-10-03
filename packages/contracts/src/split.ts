@@ -1,10 +1,7 @@
 import { z } from "zod";
-import { CurrencyCode, Locale, MonthString, QueryFlag, QueryId } from "./common";
+import { Currency, CurrencyCode, DateString, Id, Locale, MonthString, QueryFlag, QueryId } from "./common";
 import { StatementPayment } from "./payment";
 
-const Id = z.int().positive();
-const IsoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD");
-const Currency = z.string().trim().toUpperCase().pipe(CurrencyCode);
 /** Units of the other currency per 1 unit of the base currency, as a decimal string ("7.2"). */
 const FxRate = z.string().trim().regex(/^\d{1,12}(\.\d{1,12})?$/, "a positive decimal, e.g. 7.2");
 
@@ -232,7 +229,7 @@ export const RecordSettlementBody = z.object({
   originalCurrency: Currency.nullish(),
   /** With originalCurrency: the other side of originalAmountMinor; one of the two is enough. */
   fxRate: FxRate.nullish(),
-  settledOn: IsoDate,
+  settledOn: DateString,
   note: z.string().nullish(),
   transactionId: Id.nullish(),
   /** Open split items (same person and currency) this settlement pays; amountMinor may be less than their sum. */
@@ -249,7 +246,7 @@ export const SettleAllBody = z.object({
   originalAmountMinor: z.int().nullish(),
   originalCurrency: Currency.nullish(),
   fxRate: FxRate.nullish(),
-  settledOn: IsoDate,
+  settledOn: DateString,
   note: z.string().nullish(),
   transactionId: Id.nullish(),
 });
@@ -261,7 +258,7 @@ export const OpeningBalanceBody = z.object({
   /** Magnitude in minor units. */
   amountMinor: z.int().positive(),
   currency: Currency,
-  date: IsoDate,
+  date: DateString,
   note: z.string().nullish(),
 });
 export type OpeningBalanceBody = z.infer<typeof OpeningBalanceBody>;
@@ -270,7 +267,7 @@ export type OpeningBalanceBody = z.infer<typeof OpeningBalanceBody>;
 export const ClearBeforeBody = z.object({
   participantId: Id,
   currency: Currency,
-  from: IsoDate,
+  from: DateString,
   note: z.string().nullish(),
 });
 export type ClearBeforeBody = z.infer<typeof ClearBeforeBody>;
@@ -340,11 +337,11 @@ export type StatementFlag = z.infer<typeof StatementFlag>;
 export const DEFAULT_STATEMENT_FLAGS: readonly StatementFlag[] = ["shared", "notes", "settlements", "payment"];
 
 export const StatementQuery = z.object({
-  participantId: z.coerce.number().pipe(Id),
+  participantId: QueryId,
   currency: Currency,
-  since: IsoDate.optional(),
+  since: DateString.optional(),
   /** First day of the recent settlements list (default: 60 days ago). */
-  recentSince: IsoDate.optional(),
+  recentSince: DateString.optional(),
   /** Language of `text` (and of the CSV export); default English. */
   locale: Locale.optional(),
   /** Which items: open ones (default), all of them, or `items` (scope "selected"). */
@@ -461,7 +458,7 @@ export const Statement = z.object({
 export type Statement = z.infer<typeof Statement>;
 
 export const OpenItemsQuery = z.object({
-  participantId: z.coerce.number().pipe(Id),
+  participantId: QueryId,
   currency: Currency,
 });
 export type OpenItemsQuery = z.infer<typeof OpenItemsQuery>;
@@ -507,7 +504,7 @@ export type SuggestionList = z.infer<typeof SuggestionList>;
 export const SuggestionsQuery = z.object({ month: MonthString.optional() });
 
 export const UnsplitMonth = z.object({
-  month: z.string().regex(/^\d{4}-\d{2}$/),
+  month: MonthString,
   count: z.int().nonnegative(),
   /** Per currency; never summed across currencies. amountMinor = Σ −amount (positive = spent). */
   totals: z.array(z.object({ currency: CurrencyCode, count: z.int().nonnegative(), amountMinor: z.int() })),
