@@ -78,4 +78,4 @@ CSV export is for spreadsheets, not for restoring. It is available on Transactio
 |---------|-----|
 | "The yomi database at ... is in use by another process" | Another `pnpm dev`, `pnpm import:files` or `pnpm demo:db` has it open. Stop that process, or wait for it to finish. |
 | After a restore, bank sync says the key is missing or wrong | The backup was taken with a different secret key. Put that key back (`YOMI_SECRET_KEY` or the key file) and restart. |
-| `tar` reports an error | The file is not a yomi PGlite backup (for example a v0.1 `.db` file). See [Upgrade from v0.1](upgrade-from-v0.1.md). |
+| `tar` reports an error | The file is not a yomi PGlite backup (for example a v0.1 `.db` file). |

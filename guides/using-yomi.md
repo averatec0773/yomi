@@ -71,6 +71,6 @@ pnpm install
 pnpm dev
 ```
 
-Database upgrades run on start, after an automatic `pre-migrate` backup ([Backup and restore](backup-and-restore.md)). Coming from v0.1 (`data/yomi.db`)? Follow [Upgrade from v0.1](upgrade-from-v0.1.md).
+Database upgrades run on start, after an automatic `pre-migrate` backup ([Backup and restore](backup-and-restore.md)).
 
 See also: [Configuration](configuration.md), [Troubleshooting](troubleshooting.md).

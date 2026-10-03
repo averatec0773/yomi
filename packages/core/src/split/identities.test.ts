@@ -1,7 +1,4 @@
-import { readFileSync } from "node:fs";
-import path from "node:path";
-import { DatabaseSync } from "node:sqlite";
-import { accounts, type Db, sqliteMigrationsFolder, transactions } from "@yomi/db";
+import { accounts, type Db, transactions } from "@yomi/db";
 import { testDb } from "@yomi/db/testing";
 import { describe, expect, it } from "vitest";
 import { seed } from "../seed";
@@ -210,47 +207,5 @@ describe("claim → candidates", () => {
     const t = await addTx(db, { amountMinor: 1000, source: "boa_csv", currency: "USD", accountId: null, sourceCategory: "Zelle", counterpartyRaw: "JO DOE", occurredAt: "2026-09-20T12:00:00-05:00" });
     await markAsSettlement(db, user, t, { participantId: a.id });
     expect((await listIdentities(db, user, a.id)).map((i) => [i.kind, i.value, i.source])).toEqual([["zelle_name", "JO DOE", "claimed"]]);
-  });
-});
-
-// yomi v0.2 runs on Postgres from a baseline migration, but v0.1 SQLite ledgers carry identities that the archived
-// SQLite migration 0006 derived from aliases, and the v0.2 import copies them as they are. The archived migration
-// runs here on Node's built-in SQLite (the same SQL v0.1 applied), so its kinds and normalization must still
-// match core.
-describe("migration 0006: aliases → identities", () => {
-  it("copies aliases with a guessed kind and the same normalization as core", () => {
-    const folder = sqliteMigrationsFolder();
-    const journal = JSON.parse(readFileSync(path.join(folder, "meta", "_journal.json"), "utf8")) as { entries: { tag: string }[] };
-    const apply = (sqlite: DatabaseSync, keep: (tag: string) => boolean) => {
-      for (const e of journal.entries) if (keep(e.tag)) sqlite.exec(readFileSync(path.join(folder, `${e.tag}.sql`), "utf8"));
-    };
-    const sqlite = new DatabaseSync(":memory:");
-    try {
-      apply(sqlite, (tag) => tag < "0006");
-      sqlite.exec(`
-        insert into participants (user_id, name, is_self, aliases, created_at) values
-          (1, '我', 1, '[]', 'x'),
-          (1, '室友', 0, '["阿杰", "  Alex   TESTER ", "", "wxid_Abc", "A-Wang🌙"]', 'x'),
-          (1, '小李', 0, '["阿杰", "Li"]', 'x'),
-          (1, '坏数据', 0, 'not json', 'x');
-      `);
-      apply(sqlite, (tag) => tag >= "0006");
-      const rows = sqlite
-        .prepare("select participant_id as pid, kind, value, normalized, source from participant_identities order by id")
-        .all() as unknown as { pid: number; kind: string; value: string; normalized: string; source: string }[];
-      expect(rows.map((r) => [r.pid, r.kind, r.value, r.normalized, r.source])).toEqual([
-        [2, "wechat", "阿杰", "阿杰", "manual"],
-        [2, "zelle_name", "Alex   TESTER", "alex tester", "manual"],
-        [2, "wechat", "wxid_Abc", "wxid_abc", "manual"],
-        [2, "wechat", "A-Wang🌙", "a-wang🌙", "manual"],
-        [3, "zelle_name", "Li", "li", "manual"],
-      ]);
-      for (const r of rows) {
-        expect(r.kind).toBe(guessAliasKind(r.value));
-        expect(r.normalized).toBe(normalizeIdentity(r.kind as "wechat", r.value));
-      }
-    } finally {
-      sqlite.close();
-    }
   });
 });

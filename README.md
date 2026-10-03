@@ -68,7 +68,6 @@ Nothing is required. Bank and brokerage credentials are entered in **Settings > 
 - [Connect Interactive Brokers](guides/ibkr.md)
 - [Open yomi from your phone](guides/remote-access.md)
 - [Back up and restore](guides/backup-and-restore.md)
-- [Upgrade from v0.1](guides/upgrade-from-v0.1.md)
 - [Troubleshooting](guides/troubleshooting.md)
 
 ## Privacy

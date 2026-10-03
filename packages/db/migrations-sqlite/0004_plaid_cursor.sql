@@ -1,1 +1,0 @@
-ALTER TABLE `bank_connections` ADD `cursor` text;

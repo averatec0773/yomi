@@ -21,7 +21,6 @@
     "lint": "eslint .",
     "db:generate": "pnpm --filter @yomi/db generate",
     "db:migrate": "pnpm --filter @yomi/db migrate",
-    "db:import-sqlite": "pnpm --filter @yomi/db import-sqlite",
     "import:files": "tsx packages/core/src/cli/import-files.ts",
     "invest:sync": "tsx packages/core/src/cli/invest-sync.ts",
     "demo:db": "tsx packages/core/src/cli/demo.ts",
