@@ -1,5 +1,5 @@
 import { mergeShortcuts, shortcutOverrides } from "@yomi/contracts/shortcuts";
-import { getCurrentUser, getShortcutOverrides, getTheme, getTimeZoneSetting } from "@yomi/core";
+import { getCurrentUser, getShortcutOverrides, getTheme } from "@yomi/core";
 import type { Metadata } from "next";
 import { QuickAdd } from "@/components/quick-add";
 import { BottomTabs } from "@/components/shell/bottom-tabs";
@@ -11,6 +11,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { I18nProvider } from "@/i18n/client";
 import { getI18n } from "@/i18n/server";
 import { getDb } from "@/lib/db";
+import { getZoneSetting } from "@/lib/settings";
 import { ShortcutsProvider } from "@/lib/shortcuts";
 import { ThemeProvider } from "@/lib/theme";
 import { TimeZoneProvider } from "@/lib/time-zone";
@@ -25,7 +26,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   const { locale } = await getI18n();
   const db = await getDb();
   const user = getCurrentUser();
-  const zone = await getTimeZoneSetting(db, user);
+  const zone = await getZoneSetting();
   const shortcuts = shortcutOverrides(mergeShortcuts(await getShortcutOverrides(db, user)));
   const theme = await getTheme(db, user);
   return (

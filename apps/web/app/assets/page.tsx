@@ -28,7 +28,8 @@ import { Segmented } from "@/components/ui-kit/segmented";
 import { fmt } from "@/i18n";
 import { getI18n } from "@/i18n/server";
 import { getDb } from "@/lib/db";
-import { dayLabel, todayLocal } from "@/lib/month";
+import { dayLabel } from "@/lib/month";
+import { getToday } from "@/lib/settings";
 
 export async function generateMetadata() {
   const { t } = await getI18n();
@@ -48,7 +49,7 @@ export default async function AssetsPage({ searchParams }: PageProps<"/assets">)
   const a = t.assets;
   const db = await getDb();
   const user = getCurrentUser();
-  const today = todayLocal();
+  const today = await getToday();
 
   const params: AssetsParams = {
     view: VIEWS.find((v) => v === first(sp.view)) ?? "all",

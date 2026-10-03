@@ -22,7 +22,7 @@ import { fmt } from "@/i18n";
 import { errorText } from "@/i18n/errors";
 import { getI18n } from "@/i18n/server";
 import { getDb } from "@/lib/db";
-import { currentMonth } from "@/lib/month";
+import { getToday } from "@/lib/settings";
 import { cn } from "@/lib/utils";
 
 export async function generateMetadata() {
@@ -91,7 +91,7 @@ export default async function SettingsPage() {
   const user = getCurrentUser();
   const status = await settingsStatus(db, user);
   const lines = await balances(db, user);
-  const month = currentMonth();
+  const month = (await getToday()).slice(0, 7);
   const { security } = status;
   const accessOn = readAccessToken() !== null;
   // A Postgres server is backed up with pg_dump (yomi only copies its own PGlite directory).

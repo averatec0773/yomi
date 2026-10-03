@@ -127,6 +127,35 @@ test("time zone: settings shows the zone and regroups days when it changes", asy
   await expect(picker).toHaveText("America/Chicago");
 });
 
+test("time zone: today is the user's day, not the server's, in day headers and Quick Add", async ({ page }) => {
+  const hydrationErrors: string[] = [];
+  page.on("console", (m) => {
+    if (m.type() === "error" && /hydrat|#418|#425/i.test(m.text())) hydrationErrors.push(m.text());
+  });
+  const pickZone = async (search: string, zone: string) => {
+    await page.goto("/settings");
+    const picker = page.getByTestId("time-zone-picker");
+    await picker.click();
+    await page.getByPlaceholder("Search time zones").fill(search);
+    await page.getByRole("option", { name: zone }).click();
+    await expect(picker).toHaveText(zone);
+  };
+  // Kiritimati (UTC+14) is already Oct 1 at the pinned instant, noon Sep 30 in Chicago (the servers' and browser's zone).
+  await pickZone("Kiritimati", "Pacific/Kiritimati");
+  await page.goto("/transactions?month=2026-09");
+  // Busy Bee Cafe (Sep 29, 21:14 Beijing time) falls on Sep 30 there: yesterday for the user, today by the server's clock.
+  const day = page.getByRole("rowgroup").filter({ has: page.getByRole("row").filter({ hasText: "Busy Bee Cafe" }) });
+  await expect(day.locator("> div").first()).toContainText(/^Yesterday/);
+  const parsed = page.waitForRequest((r) => r.url().includes("/api/quick/parse"));
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await page.getByRole("textbox", { name: "Add", exact: true }).fill("coffee 4");
+  expect((await parsed).postDataJSON().today).toBe("2026-10-01");
+  await page.keyboard.press("Escape");
+  expect(hydrationErrors).toEqual([]);
+  // Back to Chicago so the rest of the run sees the same days.
+  await pickZone("Chicago", "America/Chicago");
+});
+
 test("bulk: split three rows with 室友, then remove it", async ({ page }) => {
   await page.goto("/transactions?month=2026-09");
   const rows = [await plainRow(page, 0), await plainRow(page, 1), await plainRow(page, 2)];

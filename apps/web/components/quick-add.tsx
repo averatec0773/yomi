@@ -2,6 +2,7 @@
 
 import type { Participant, ParticipantList, QuickCreated, QuickDraft, QuickSms } from "@yomi/contracts";
 import { formatMinor, splitEqual } from "@yomi/core/money";
+import { todayIn } from "@yomi/core/time";
 import { Loader2Icon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { type KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
@@ -15,7 +16,7 @@ import { useLocale, useT } from "@/i18n/client";
 import type { Dictionary } from "@/i18n/en";
 import { errorText } from "@/i18n/errors";
 import { apiFetch } from "@/lib/api";
-import { dayLabel, todayLocal } from "@/lib/month";
+import { dayLabel } from "@/lib/month";
 import { QUICK_ADD_EVENT } from "@/lib/quick-add";
 import { localTimeOf, useTimeZone } from "@/lib/time-zone";
 import { cn } from "@/lib/utils";
@@ -24,8 +25,8 @@ const PARSE_DELAY_MS = 150;
 
 type Draft = QuickDraft & { text: string };
 
-async function parse(text: string): Promise<Draft> {
-  const draft = await apiFetch<QuickDraft>("/quick/parse", { json: { text, today: todayLocal() }, silent: true });
+async function parse(text: string, today: string): Promise<Draft> {
+  const draft = await apiFetch<QuickDraft>("/quick/parse", { json: { text, today }, silent: true });
   return { ...draft, text };
 }
 
@@ -72,6 +73,8 @@ export function QuickAdd() {
   const router = useRouter();
   const t = useT();
   const locale = useLocale();
+  // "Today" is the user's time-zone day (the one pages render with), not the browser's.
+  const timeZone = useTimeZone();
   const q = t.quickAdd;
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
@@ -112,7 +115,7 @@ export function QuickAdd() {
     }
     setParsing(true);
     try {
-      const d = await parse(value);
+      const d = await parse(value, todayIn(timeZone));
       if (id === seq.current) setDraft(d);
       return d;
     } catch {
@@ -120,7 +123,7 @@ export function QuickAdd() {
     } finally {
       if (id === seq.current) setParsing(false);
     }
-  }, []);
+  }, [timeZone]);
 
   useEffect(() => {
     if (!open) return;
@@ -144,7 +147,7 @@ export function QuickAdd() {
     setSaving(true);
     try {
       const { text: _text, errors: _errors, sms, ...body } = d;
-      const res = await apiFetch<QuickCreated>("/quick", { json: sms ? { ...body, smsText: d.text, today: todayLocal() } : body });
+      const res = await apiFetch<QuickCreated>("/quick", { json: sms ? { ...body, smsText: d.text, today: todayIn(timeZone) } : body });
       const amount = formatMinor(d.amountMinor, d.currency);
       if (res.alreadyAdded) toast(q.sms.already, { description: d.description || undefined });
       else if (res.duplicateOfId != null) toast.success(q.sms.linked, { description: d.description || undefined });
@@ -252,7 +255,7 @@ export function QuickAdd() {
                   <span className="text-3">{q.noAmount}</span>
                 )}
                 <span className="text-3">|</span>
-                <span className="text-2">{dayLabel(current.date, locale, { relative: true })}</span>
+                <span className="text-2">{dayLabel(current.date, locale, { relative: true, today: todayIn(timeZone) })}</span>
                 {current.categoryHint && <CategoryPill name={current.categoryHint} />}
               </div>
               )}

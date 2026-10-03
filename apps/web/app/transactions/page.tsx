@@ -18,8 +18,8 @@ import { PageHeader } from "@/components/ui-kit/page-header";
 import { PeriodBar } from "@/components/ui-kit/period-bar";
 import { getI18n } from "@/i18n/server";
 import { getDb } from "@/lib/db";
-import { currentMonth, todayLocal } from "@/lib/month";
 import { otherParams, resolvePagePeriod } from "@/lib/page-period";
+import { getToday } from "@/lib/settings";
 
 function first(v: string | string[] | undefined): string | undefined {
   return Array.isArray(v) ? v[0] : v;
@@ -40,11 +40,11 @@ export default async function TransactionsPage({ searchParams }: PageProps<"/tra
   const { t } = await getI18n();
   const db = await getDb();
   const user = getCurrentUser();
-  const today = todayLocal();
+  const today = await getToday();
 
   // Default: the latest month with data. `?preset=`, `?from=&to=` or `?month=` (alias) pick another period.
   const latest = (await listMonths(db, user))[0]?.month;
-  const { range, error, typed } = resolvePagePeriod(sp, today, monthRangeOf(latest ?? currentMonth()), t);
+  const { range, error, typed } = resolvePagePeriod(sp, today, monthRangeOf(latest ?? today.slice(0, 7)), t);
   const oneMonth = wholeMonths(range) === 1;
 
   const filters: TxFilters = {

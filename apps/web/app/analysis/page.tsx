@@ -1,4 +1,4 @@
-import { analysisReport, getCurrentUser, getTimeZone, listCategories, netWorthChange, periodKindOf, presetRange, todayIn } from "@yomi/core";
+import { analysisReport, getCurrentUser, listCategories, netWorthChange, periodKindOf, presetRange } from "@yomi/core";
 import { ArrowRightIcon, ChartColumnIcon } from "lucide-react";
 import Link from "next/link";
 import { DayView } from "@/components/analysis/day-view";
@@ -18,6 +18,7 @@ import { getDb } from "@/lib/db";
 import { dayLabel } from "@/lib/month";
 import { resolvePagePeriod } from "@/lib/page-period";
 import { previousLabel, rangeLabel } from "@/lib/period";
+import { getToday } from "@/lib/settings";
 import { distinctSourceNames } from "@/lib/source-names";
 
 export async function generateMetadata() {
@@ -38,7 +39,7 @@ export default async function AnalysisPage({ searchParams }: PageProps<"/analysi
   const { locale, t } = await getI18n();
   const db = await getDb();
   const user = getCurrentUser();
-  const today = todayIn(await getTimeZone(db, user));
+  const today = await getToday();
   const { range, error, typed } = resolvePagePeriod(sp, today, presetRange("this_month", today), t, "analysis");
   const kind = periodKindOf(range);
   const report = error ? null : await analysisReport(db, user, range, { today });

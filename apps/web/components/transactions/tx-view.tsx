@@ -810,7 +810,7 @@ export function TxView({
           {groups.map((g) => (
             <div key={g.date} role="rowgroup">
               <div className="sticky top-0 z-10 flex h-9 items-center justify-between border-b border-line-soft bg-day px-4 text-meta text-2 md:px-5">
-                <span className="font-medium whitespace-nowrap">{dayLabel(g.date, locale, { weekday: true, relative: true })}</span>
+                <span className="font-medium whitespace-nowrap">{dayLabel(g.date, locale, { weekday: true, relative: true, today })}</span>
                 {g.sums.size > 0 && (
                   <span className="inline-flex items-baseline gap-1">
                     {t.transactions.daySpent}
