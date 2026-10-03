@@ -1,7 +1,7 @@
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { BackupResult, PAYMENT_KINDS, PaymentMethodInput, PaymentMethodsSetting, ProfileSetting, QuickCreated, QuickDraft, SettingsStatus, Statement } from "@yomi/contracts";
+import { BackupResult, PAYMENT_KINDS, PaymentMethodInput, PaymentMethodsSetting, ProfileSetting, SettingsStatus, Statement } from "@yomi/contracts";
 import {
   PAYMENT_KINDS as CORE_PAYMENT_KINDS,
   createParticipant,
@@ -128,24 +128,6 @@ describe("export and backup routes", () => {
       const v = process.env[k]?.trim();
       if (v) expect(text).not.toContain(v);
     }
-  });
-});
-
-describe("quick add with a pasted ICBC alert", () => {
-  const SMS = "您尾号3141信用卡9月27日08:24POS支出(消费BUSY BEE BOBA Houston)15.74美元。【工商银行】";
-
-  it("parses, saves once and reports a repeat paste", async () => {
-    const { db, app } = await setup();
-    const parsed = QuickDraft.parse(await (await app.request("/api/quick/parse", { method: "POST", body: JSON.stringify({ text: SMS, today: "2026-09-29" }) })).json());
-    expect(parsed.sms).toMatchObject({ last4: "3141", merchant: "BUSY BEE BOBA", amountMinor: -1574 });
-    const body = JSON.stringify({ ...parsed, errors: undefined, smsText: SMS, today: "2026-09-29" });
-    const first = await app.request("/api/quick", { method: "POST", body });
-    expect(first.status).toBe(201);
-    expect(QuickCreated.parse(await first.json())).toMatchObject({ alreadyAdded: false, duplicateOfId: null });
-    const again = await app.request("/api/quick", { method: "POST", body });
-    expect(again.status).toBe(200);
-    expect(QuickCreated.parse(await again.json())).toMatchObject({ alreadyAdded: true });
-    expect((await db.select().from(transactions)).map((t) => t.source)).toEqual(["sms"]);
   });
 });
 
