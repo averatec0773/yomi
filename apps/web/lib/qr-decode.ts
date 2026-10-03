@@ -1,4 +1,3 @@
-import jsQR from "jsqr";
 import { boxOf, type Point, type Rect, storedSize } from "./qr-crop";
 
 /** A decoded QR code: its text and, when the decoder reports it, its corners in the image's pixels. */
@@ -31,8 +30,12 @@ async function withBarcodeDetector(bitmap: ImageBitmap): Promise<QrRead | null> 
   }
 }
 
-/** jsQR on a canvas at a few sizes, with a white margin (a tight crop may cut the quiet zone). */
-function withJsQr(bitmap: ImageBitmap): QrRead | null {
+/**
+ * jsQR on a canvas at a few sizes, with a white margin (a tight crop may cut the quiet zone). Loaded on first use, so
+ * it stays out of the page's bundle.
+ */
+async function withJsQr(bitmap: ImageBitmap): Promise<QrRead | null> {
+  const { default: jsQR } = await import("jsqr");
   const longest = Math.max(bitmap.width, bitmap.height);
   const sizes = [...new Set([1200, 800, 500, 2000].map((max) => Math.min(max, longest)))];
   for (const max of sizes) {
@@ -62,7 +65,7 @@ function withJsQr(bitmap: ImageBitmap): QrRead | null {
 
 /** The QR code in a decoded image: BarcodeDetector when the browser has one, else jsQR. */
 export async function readQrBitmap(bitmap: ImageBitmap): Promise<QrRead | null> {
-  const read = (await withBarcodeDetector(bitmap)) ?? withJsQr(bitmap);
+  const read = (await withBarcodeDetector(bitmap)) ?? (await withJsQr(bitmap));
   const text = read?.text.trim();
   return read && text ? { ...read, text } : null;
 }
