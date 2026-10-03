@@ -40,10 +40,10 @@ export default async function TransactionsPage({ searchParams }: PageProps<"/tra
   const { t } = await getI18n();
   const db = await getDb();
   const user = getCurrentUser();
-  const today = await getToday();
+  const [today, months] = await Promise.all([getToday(), listMonths(db, user)]);
 
   // Default: the latest month with data. `?preset=`, `?from=&to=` or `?month=` (alias) pick another period.
-  const latest = (await listMonths(db, user))[0]?.month;
+  const latest = months[0]?.month;
   const { range, error, typed } = resolvePagePeriod(sp, today, monthRangeOf(latest ?? today.slice(0, 7)), t);
   const oneMonth = wholeMonths(range) === 1;
 
@@ -56,15 +56,26 @@ export default async function TransactionsPage({ searchParams }: PageProps<"/tra
     showAll: first(sp.show) === "all",
   };
 
-  const page = await listTransactions(db, user, {
-    ...range,
-    q: filters.q || undefined,
-    categoryId: filters.categoryId,
-    participantId: filters.participantId,
-    uncategorized: filters.uncategorized || undefined,
-    unsplit: filters.unsplit || undefined,
-    limit: 5000,
-  });
+  const filtered = Boolean(filters.q || filters.categoryId || filters.participantId || filters.uncategorized || filters.unsplit);
+  const [page, periodTotal, totals, participants, categories, autoSplitRules, allBalances, review] = await Promise.all([
+    listTransactions(db, user, {
+      ...range,
+      q: filters.q || undefined,
+      categoryId: filters.categoryId,
+      participantId: filters.participantId,
+      uncategorized: filters.uncategorized || undefined,
+      unsplit: filters.unsplit || undefined,
+      limit: 5000,
+    }),
+    // Unfiltered, the list's own total already says whether the period has rows.
+    filtered ? listTransactions(db, user, { ...range, limit: 1 }).then((p) => p.total) : null,
+    rangeTotalsForList(db, user, range.from, range.to),
+    listParticipants(db, user),
+    listCategories(db, user),
+    listMerchantRules(db, user, { autoSplitOnly: true }),
+    filters.participantId ? balances(db, user) : [],
+    listReview(db, user),
+  ]);
   const items = filters.showAll ? page.items : page.items.filter((t) => t.status === "ok" && t.duplicateOfId == null);
 
   return (
@@ -82,17 +93,17 @@ export default async function TransactionsPage({ searchParams }: PageProps<"/tra
       <TxView
         month={oneMonth ? range.from.slice(0, 7) : `${range.from}~${range.to}`}
         isRange={!oneMonth}
-        monthHasData={(await listTransactions(db, user, { ...range, limit: 1 })).total > 0}
+        monthHasData={(periodTotal ?? page.total) > 0}
         items={items}
         hiddenCount={page.items.length - items.length}
-        totals={await rangeTotalsForList(db, user, range.from, range.to)}
-        participants={await listParticipants(db, user)}
-        categories={(await listCategories(db, user)).filter((c) => !c.archivedAt)}
+        totals={totals}
+        participants={participants}
+        categories={categories.filter((c) => !c.archivedAt)}
         filters={filters}
-        autoSplitMerchants={(await listMerchantRules(db, user, { autoSplitOnly: true })).map((r) => r.merchant)}
-        balances={filters.participantId ? (await balances(db, user)).filter((b) => b.participantId === filters.participantId) : []}
+        autoSplitMerchants={autoSplitRules.map((r) => r.merchant)}
+        balances={allBalances.filter((b) => b.participantId === filters.participantId)}
         today={today}
-        reviewCount={(await listReview(db, user)).total}
+        reviewCount={review.total}
       />
     </>
   );

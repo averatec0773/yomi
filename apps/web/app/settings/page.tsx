@@ -135,7 +135,7 @@ export default async function SettingsPage() {
       </Section>
 
       <Section id="connections" title={s.connections}>
-        <ConnectionsPanel />
+        <ConnectionsPanel ibkr={status.ibkr} />
       </Section>
 
       <Section id="security" title={s.security}>
