@@ -1,11 +1,11 @@
 import { participants, settlementItems, settlements, transactions, transactionSplits } from "@yomi/db";
 import { and, desc, eq } from "@yomi/db/orm";
 import { convertByRate, normalizeRate, rateFromAmounts } from "../money";
+import { addDays } from "../time/day";
 import type { CurrentUser } from "../user";
 import { aaEvents, balanceOf } from "./balances";
 import { allocateItems, coverageFor } from "./items";
 import {
-  addDays,
   assertCurrency,
   assertDate,
   getParticipant,

@@ -5,7 +5,7 @@ import { CodedError, decimalToMinor, type ErrorKind, type MessageParams, type No
 import { and, asc, eq, gt, isNull, lte, sum } from "@yomi/db/orm";
 import { minorDigits } from "../money";
 import { getTimeZone } from "../settings/time-zone";
-import { addDays, isDate } from "../stats/period";
+import { addDays, isDate } from "../time/day";
 import type { ProviderAccount } from "../sync/provider";
 import { clockNow, todayIn } from "../time/zone";
 import type { CurrentUser } from "../user";

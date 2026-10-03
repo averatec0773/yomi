@@ -1,13 +1,12 @@
 import { settlements, transactions } from "@yomi/db";
 import { and, desc, eq, inArray, isNull, ne, or } from "@yomi/db/orm";
 import { convertFromRate, normalizeRate } from "../money";
+import { addDays, dayNumber } from "../time/day";
 import type { CurrentUser } from "../user";
 import { balances } from "./balances";
 import { isP2P, learnIdentityFromRow, makeMatcher, P2P_SOURCES, partyName, peopleForMatching } from "./counterparties";
 import {
-  addDays,
   assertCurrency,
-  dayNumber,
   getParticipant,
   getTransaction,
   type Q,

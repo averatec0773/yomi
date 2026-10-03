@@ -3,6 +3,7 @@ import { type FlexRange, type InvestStatement, mapFlexStatement } from "@yomi/im
 import { describe, expect, it } from "vitest";
 import { freshDb, user } from "../ledger/test-helpers";
 import { writeSetting } from "../settings/store";
+import { daysInclusive } from "../time/day";
 import { pullIbkrHistory } from "./job";
 import {
   IBKR_SECTIONS_SETTING,
@@ -12,7 +13,6 @@ import {
   nextSectionsRecord,
   parseSectionsRecord,
   recordIbkrSections,
-  windowDays,
 } from "./sections";
 import { ibkrStatus } from "./status";
 import { syncHoldings } from "./sync";
@@ -25,9 +25,9 @@ const after = (...pulls: IbkrPullSections[]) => pulls.reduce<IbkrSectionsRecord 
 
 describe("IBKR Flex section verdict", () => {
   it("counts both ends of the window", () => {
-    expect(windowDays("2026-09-29", "2026-09-29")).toBe(1);
-    expect(windowDays("2026-08-31", "2026-09-29")).toBe(30);
-    expect(windowDays("2025-09-30", "2026-09-29")).toBe(365);
+    expect(daysInclusive("2026-09-29", "2026-09-29")).toBe(1);
+    expect(daysInclusive("2026-08-31", "2026-09-29")).toBe(30);
+    expect(daysInclusive("2025-09-30", "2026-09-29")).toBe(365);
   });
 
   it("everything present: present", () => {
@@ -106,12 +106,12 @@ describe("IBKR Flex sections on the row", () => {
     });
     // The first sync backfills 365 days with every section but NAV.
     await syncHoldings(db, user, { provider: "ibkr" }, { ibkr: source(without("nav")), now: () => at });
-    expect(windowDays(windows[0]!.from, windows[0]!.to)).toBe(365);
+    expect(daysInclusive(windows[0]!.from, windows[0]!.to)).toBe(365);
     expect(states((await ibkrStatus(db, user, env, at)).sectionCheck as IbkrSectionsRecord)).toMatchObject({ trades: "present", nav: "missing" });
 
     // Sync now on a quiet week (from 7 days before the stored statement): Trades absent proves nothing.
     await syncHoldings(db, user, { provider: "ibkr" }, { ibkr: source(without("trades", "nav")), now: () => at });
-    expect(windowDays(windows[1]!.from, windows[1]!.to)).toBeLessThan(30);
+    expect(daysInclusive(windows[1]!.from, windows[1]!.to)).toBeLessThan(30);
     const check = (await ibkrStatus(db, user, env, at)).sectionCheck!;
     expect(check).toMatchObject({ from: windows[1]!.from, to: "2026-09-29" });
     expect(states(check as IbkrSectionsRecord)).toMatchObject({ nav: "missing", trades: "present", cashTransactions: "present" });

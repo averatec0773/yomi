@@ -19,6 +19,7 @@ import { detachFromAuthority } from "../capture/supersede";
 import { autoSplitParticipants } from "../split/rules";
 import { applySplit } from "../split/splits";
 import { getTimeZone } from "../settings/time-zone";
+import { dayNumber } from "../time/day";
 import { occurredOnFor } from "../time/zone";
 import type { CurrentUser } from "../user";
 import { removeBatchBalances, statementBalances, upsertBalanceSnapshot } from "../assets/balances";
@@ -167,11 +168,6 @@ function chunks<T>(xs: readonly T[], size = CHUNK): T[][] {
   const out: T[][] = [];
   for (let i = 0; i < xs.length; i += size) out.push(xs.slice(i, i + size));
   return out;
-}
-
-function dayNumber(iso: string): number {
-  const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
-  return Date.UTC(y ?? 0, (m ?? 1) - 1, d ?? 1) / 86_400_000;
 }
 
 export function reconcile(declared: DeclaredTotals, parsed: DeclaredTotals): Reconciliation {

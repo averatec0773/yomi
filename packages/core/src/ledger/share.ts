@@ -31,23 +31,3 @@ export function myShareMinor(row: ShareRow, splits: readonly ShareSplit[]): numb
   const mine = splits.find((s) => s.isSelf)?.owedMinor ?? 0;
   return row.amountMinor > 0 ? -mine : mine;
 }
-
-/** "YYYY-MM" → [start, end) bounds comparable with occurred_on text. */
-export function monthRange(month: string): { start: string; end: string } {
-  return { start: `${month}-01`, end: `${shiftMonth(month, 1)}-01` };
-}
-
-export function shiftMonth(month: string, delta: number): string {
-  const [y, m] = month.split("-").map(Number);
-  const idx = (y ?? 0) * 12 + (m ?? 1) - 1 + delta;
-  return `${String(Math.floor(idx / 12)).padStart(4, "0")}-${String((idx % 12) + 1).padStart(2, "0")}`;
-}
-
-export function isMonth(s: string): boolean {
-  return /^\d{4}-(0[1-9]|1[0-2])$/.test(s);
-}
-
-export function daysInMonth(month: string): number {
-  const [y, m] = month.split("-").map(Number);
-  return new Date(Date.UTC(y ?? 0, m ?? 1, 0)).getUTCDate();
-}

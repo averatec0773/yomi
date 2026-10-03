@@ -1,7 +1,5 @@
 // US market calendar helpers in America/New_York, built on Intl (no date library).
-import { addDays } from "../stats/period";
-
-export { addDays };
+import { addDays, weekdayOf } from "../time/day";
 
 export const MARKET_TZ = "America/New_York";
 /** Flex statements for a trading day are pulled after this local hour (market closes 16:00, data settles later). */
@@ -22,10 +20,6 @@ export function marketClock(now: Date): { date: string; hour: number; weekday: n
   const parts = Object.fromEntries(fmt.formatToParts(now).map((p) => [p.type, p.value]));
   const weekday = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(parts.weekday ?? "");
   return { date: `${parts.year}-${parts.month}-${parts.day}`, hour: Number(parts.hour), weekday };
-}
-
-function weekdayOf(date: string): number {
-  return new Date(`${date}T00:00:00Z`).getUTCDay();
 }
 
 /** The weekday before `date` (Friday for a Monday or a weekend day). */

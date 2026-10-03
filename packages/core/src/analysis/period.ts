@@ -1,16 +1,6 @@
 import { LedgerError } from "../ledger/errors";
-import {
-  addDays,
-  assertRange,
-  type DateRange,
-  isDate,
-  isStatsPreset,
-  monthRangeOf,
-  presetRange,
-  previousRange,
-  STATS_PRESETS,
-  wholeMonths,
-} from "../stats/period";
+import { assertRange, type DateRange, isStatsPreset, monthRangeOf, presetRange, previousRange, STATS_PRESETS, wholeMonths } from "../stats/period";
+import { addDays, isDate, weekdayOf } from "../time/day";
 
 // Day, week, month and year periods for Analysis, on 'YYYY-MM-DD' strings. Pure.
 
@@ -32,12 +22,6 @@ export function isAnalysisPreset(s: unknown): s is AnalysisPreset {
 
 function assertDate(date: string): void {
   if (!isDate(date)) throw new LedgerError("invalid", "invalid_date", `Invalid date: ${date}`, { value: date });
-}
-
-/** Day of the week of a calendar date: 0 = Sunday ... 6 = Saturday. */
-export function weekdayOf(date: string): number {
-  const [y, m, d] = date.split("-").map(Number) as [number, number, number];
-  return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
 }
 
 /** The seven days containing `date`, starting on `weekStart`. */

@@ -3,6 +3,7 @@ import { keywordCategoryName } from "../import/categorize";
 import { cleanMerchant } from "../import/merchant";
 import { minorDigits, parseAmountToMinor } from "../money";
 import type { SplitMode } from "../split/splits";
+import { addDays, isDate, weekdayOf } from "../time/day";
 import { DEFAULT_TIME_ZONE, occurredOnFor } from "../time/zone";
 
 export interface QuickParticipant {
@@ -166,30 +167,19 @@ function pad2(n: number): string {
   return String(n).padStart(2, "0");
 }
 
-function dayNumber(date: string): number {
-  const [y, m, d] = date.split("-").map(Number);
-  return Date.UTC(y ?? 0, (m ?? 1) - 1, d ?? 1) / 86_400_000;
-}
-
-function fromDayNumber(n: number): string {
-  return new Date(n * 86_400_000).toISOString().slice(0, 10);
-}
-
 function invalidDate(value: string): QuickError {
   return { code: "quick_invalid_date", message: `Invalid date: ${value}`, params: { value } };
 }
 
 /** Most recent past `dow` (0 = Sunday), never today. */
 function lastWeekday(today: string, dow: number): string {
-  const todayDow = new Date(dayNumber(today) * 86_400_000).getUTCDay();
-  const back = (todayDow - dow + 7) % 7 || 7;
-  return fromDayNumber(dayNumber(today) - back);
+  const back = (weekdayOf(today) - dow + 7) % 7 || 7;
+  return addDays(today, -back);
 }
 
 function validDate(y: number, m: number, d: number): string | null {
   const iso = `${y}-${pad2(m)}-${pad2(d)}`;
-  if (m < 1 || m > 12 || d < 1 || d > 31) return null;
-  return fromDayNumber(dayNumber(iso)) === iso ? iso : null;
+  return isDate(iso) ? iso : null;
 }
 
 interface Key {
@@ -263,9 +253,9 @@ export function parseQuickEntry(text: string, ctx: QuickParseContext): QuickDraf
     else errors.push(invalidDate(m[0].trim()));
   } else if ((m = take(/大前天|前天|昨天|今天/))) {
     const back = { 今天: 0, 昨天: 1, 前天: 2, 大前天: 3 }[m[0] as "今天"] ?? 0;
-    date = fromDayNumber(dayNumber(today) - back);
+    date = addDays(today, -back);
   } else if ((m = take(/\b(today|yesterday)\b/i))) {
-    date = fromDayNumber(dayNumber(today) - (EN_RELATIVE[m[1]!.toLowerCase()] ?? 0));
+    date = addDays(today, -(EN_RELATIVE[m[1]!.toLowerCase()] ?? 0));
   } else if ((m = take(new RegExp(`(?:周|星期|礼拜)([${WEEKDAYS}])`)))) {
     date = lastWeekday(today, (WEEKDAYS.indexOf(m[1]!) + 1) % 7); // 0 = Sunday
   } else if ((m = take(new RegExp(`(?:\\blast\\s+|\\bon\\s+)?${EN_WEEKDAY_RE.source}`, "i")))) {

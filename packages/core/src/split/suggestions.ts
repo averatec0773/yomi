@@ -1,7 +1,8 @@
 import { categories, merchantRules, transactions, transactionSplits } from "@yomi/db";
 import { and, desc, eq, gte, isNull, like } from "@yomi/db/orm";
 import type { CurrentUser } from "../user";
-import { addDays, type Q, todayLocal } from "./internal";
+import { addDays } from "../time/day";
+import { type Q, todayLocal } from "./internal";
 import { listParticipants } from "./participants";
 import { suggestSplits } from "./suggest";
 

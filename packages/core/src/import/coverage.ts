@@ -1,4 +1,4 @@
-import { addDays, isDate } from "../stats/period";
+import { addDays, isDate } from "../time/day";
 
 /**
  * The days a statement file covers, both inclusive, from the period it states (`ParseResult.periodStart/periodEnd`:

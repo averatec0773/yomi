@@ -2,7 +2,7 @@ import { captures, type CaptureState, type Db, importBatches, transactions } fro
 import { and, desc, eq, inArray, isNotNull, like, max, min, or } from "@yomi/db/orm";
 import { getTimeZone } from "../settings/time-zone";
 import { loadSplits } from "../ledger/transactions";
-import { addDays, daysInclusive } from "../stats/period";
+import { addDays, dayDiff, daysInclusive } from "../time/day";
 import { todayIn } from "../time/zone";
 import type { CurrentUser } from "../user";
 import { type MatchReason, PDF_WINDOW, runMatching } from "./match";
@@ -173,7 +173,7 @@ export async function listReview(q: Db, user: CurrentUser, opts: { today?: strin
           currency: t.currency,
           merchant: t.merchant || t.counterpartyRaw,
           reasons: x.reasons as MatchReason[],
-          daysAfter: Math.round((Date.parse(t.occurredOn) - Date.parse(occurredOn)) / 86_400_000),
+          daysAfter: dayDiff(occurredOn, t.occurredOn),
           amountDiffMinor: t.currency === c.currency ? Math.abs(t.amountMinor) - Math.abs(c.amountMinor) : 0,
         },
       ];

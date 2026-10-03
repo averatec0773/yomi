@@ -1,7 +1,8 @@
 import { countsAsSpending } from "../ledger/share";
 import type { SpendingRow } from "../ledger/transactions";
 import type { InvestFlow } from "../assets/investments";
-import { addDays, type DateRange, daysInclusive } from "../stats/period";
+import type { DateRange } from "../stats/period";
+import { addDays, daysInclusive } from "../time/day";
 
 // Numbers-only observations over spending rows (my share, ledger/share.ts rule). Pure: rows in, plain data out.
 

@@ -11,7 +11,8 @@ import type { IbkrPullKind } from "./pull-log";
 import { recordIbkrSections } from "./sections";
 import { latestSnapshotDate, writeStatement, type WriteStatementResult } from "./store";
 import { clockNow } from "../time/clock";
-import { addDays, lastCompletedTradingDay, marketClock } from "./time";
+import { addDays } from "../time/day";
+import { lastCompletedTradingDay, marketClock } from "./time";
 
 export type InvestProviderChoice = "ibkr" | "plaid" | "all";
 

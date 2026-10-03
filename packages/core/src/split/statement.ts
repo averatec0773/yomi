@@ -7,7 +7,8 @@ import { getDisplayName } from "../settings/profile";
 import type { CurrentUser } from "../user";
 import { type AaEvent, aaAccounts, aaEvents } from "./balances";
 import { coverageOf, type ItemStatus, itemRowsOf, settledOnDates } from "./items";
-import { addDays, assertCurrency, assertDate, getParticipant, type Q, SplitError, todayLocal } from "./internal";
+import { addDays } from "../time/day";
+import { assertCurrency, assertDate, getParticipant, type Q, SplitError, todayLocal } from "./internal";
 
 /**
  * What a statement shows besides the items themselves; shared by the text, the print view, the dialog and the CSV.

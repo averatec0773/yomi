@@ -5,7 +5,8 @@ import { lastCompletedTradingDay } from "../invest/time";
 import { countsAsIncome, countsAsSpending } from "../ledger/share";
 import type { SpendingRow } from "../ledger/transactions";
 import { clockNow } from "../time/clock";
-import { addDays, type DateRange, daysInclusive } from "../stats/period";
+import type { DateRange } from "../stats/period";
+import { addDays, daysInclusive } from "../time/day";
 import { localDate } from "../time/zone";
 import type { CurrentUser } from "../user";
 

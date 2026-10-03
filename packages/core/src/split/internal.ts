@@ -74,15 +74,6 @@ export function toOccurredAt(dateOrIso: string): string {
   throw new SplitError("invalid", "invalid_date", `Invalid date ${JSON.stringify(dateOrIso)}`, { value: String(dateOrIso) });
 }
 
-export function dayNumber(date: string): number {
-  const [y, m, d] = date.slice(0, 10).split("-").map(Number);
-  return Date.UTC(y ?? 0, (m ?? 1) - 1, d ?? 1) / 86_400_000;
-}
-
-export function addDays(date: string, days: number): string {
-  return new Date((dayNumber(date) + days) * 86_400_000).toISOString().slice(0, 10);
-}
-
 export function todayLocal(): string {
   const d = clockNow();
   const pad = (n: number) => String(n).padStart(2, "0");

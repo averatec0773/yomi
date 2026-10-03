@@ -1,7 +1,8 @@
 import { categories, merchantRules, participants, transactions, transactionSplits } from "@yomi/db";
 import { and, count, desc, eq, gte, inArray, isNull } from "@yomi/db/orm";
 import type { CurrentUser } from "../user";
-import { addDays, getSelf, getTransaction, nowIso, parseIdList, type Q, SplitError, todayLocal } from "./internal";
+import { addDays } from "../time/day";
+import { getSelf, getTransaction, nowIso, parseIdList, type Q, SplitError, todayLocal } from "./internal";
 import { applySplit } from "./splits";
 
 /** Category learning looks at split rows this many days back from today. */

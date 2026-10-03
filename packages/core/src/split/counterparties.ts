@@ -10,7 +10,8 @@ import {
   normalizeIdentity,
   TEXT_MATCH_KINDS,
 } from "./identities";
-import { dayNumber, type Q, SplitError, todayLocal } from "./internal";
+import { dayNumber } from "../time/day";
+import { type Q, SplitError, todayLocal } from "./internal";
 import { createParticipant } from "./participants";
 
 /** WeChat 交易类型 / Alipay 交易分类 values that mean a person-to-person transfer. */

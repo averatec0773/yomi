@@ -2,7 +2,7 @@ import { accounts, type CaptureCandidate, captures, type Db, transactions } from
 import { and, eq, gte, inArray, isNull, lte, or } from "@yomi/db/orm";
 import { parsePaymentMethod } from "../import/accounts";
 import { lockReason } from "../ledger/lock";
-import { addDays } from "../stats/period";
+import { addDays, dayDiff } from "../time/day";
 import type { CurrentUser } from "../user";
 import { supersede } from "./supersede";
 
@@ -88,11 +88,6 @@ export function merchantsOverlap(a: string, b: string): boolean {
   return ta.some((x) => tb.some((y) => x === y || (CJK_RE.test(x) && CJK_RE.test(y) && (x.includes(y) || y.includes(x)))));
 }
 
-function dayNumber(day: string): number {
-  const [y, m, d] = day.slice(0, 10).split("-").map(Number);
-  return Date.UTC(y ?? 0, (m ?? 1) - 1, d ?? 1) / 86_400_000;
-}
-
 function sameSign(a: number, b: number): boolean {
   return Math.sign(a) === Math.sign(b);
 }
@@ -119,7 +114,7 @@ function amountNear(c: OpenCapture, a: AuthorityRow): boolean {
 
 /** "in" the window, "near" it (a day-window only, up to two days outside), or null. Wallet rows compare instants. */
 function timeFit(c: OpenCapture, a: AuthorityRow): { fit: "in" | "near"; daysAfter: number } | null {
-  const daysAfter = dayNumber(a.occurredOn) - dayNumber(c.occurredOn);
+  const daysAfter = dayDiff(c.occurredOn, a.occurredOn);
   if (WALLETS.has(a.source)) {
     const gap = Math.abs(Date.parse(a.occurredAt) - Date.parse(c.occurredAt));
     return Number.isFinite(gap) && gap <= WALLET_WINDOW_MS ? { fit: "in", daysAfter } : null;

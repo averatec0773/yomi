@@ -7,7 +7,8 @@ import { getMonthlyTarget, type MonthTarget } from "../month/target";
 import { getTimeZone } from "../settings/time-zone";
 import { clockNow, todayIn } from "../time/zone";
 import type { CurrentUser } from "../user";
-import { assertRange, type DateRange, daysInclusive, isDate, monthEnd, monthsIn, monthStart, previousRange, wholeMonths } from "./period";
+import { daysInclusive, isDate, monthEnd, monthStart } from "../time/day";
+import { assertRange, type DateRange, monthsIn, previousRange, wholeMonths } from "./period";
 
 export interface CategoryShare {
   categoryId: number | null;

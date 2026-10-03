@@ -1,10 +1,10 @@
 import type { Db } from "@yomi/db";
 import { LedgerError } from "../ledger/errors";
-import { countsAsSpending, isMonth } from "../ledger/share";
+import { countsAsSpending } from "../ledger/share";
 import { listTransactions, type TransactionItem } from "../ledger/transactions";
 import { formatMinorDecimal } from "../money";
 import { type Statement, type StatementScope, statementCategory, statementText } from "../split/statement";
-import { isDate } from "../stats/period";
+import { isDate, isMonth } from "../time/day";
 import { getTimeZone } from "../settings/time-zone";
 import { occurredTimeFor } from "../time/zone";
 import type { CurrentUser } from "../user";

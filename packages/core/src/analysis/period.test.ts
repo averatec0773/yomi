@@ -8,10 +8,10 @@ import {
   periodOf,
   resolveAnalysisPeriod,
   typicalRanges,
-  weekdayOf,
   weekOf,
 } from "./period";
 import { shiftRange } from "../stats/period";
+import { weekdayOf } from "../time/day";
 
 describe("weekOf", () => {
   it("starts on Monday by default, across month and year ends", () => {

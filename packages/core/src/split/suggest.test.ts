@@ -3,7 +3,8 @@ import { eq } from "@yomi/db/orm";
 import { describe, expect, it } from "vitest";
 import { listTransactions, unsplitSummary } from "../ledger";
 import { addParticipant, addSplit, addTx, catId, freshDb, selfId, user } from "../ledger/test-helpers";
-import { addDays, todayLocal } from "./internal";
+import { addDays } from "../time/day";
+import { todayLocal } from "./internal";
 import {
   acceptSuggestions,
   archiveParticipant,

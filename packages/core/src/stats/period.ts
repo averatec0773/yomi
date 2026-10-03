@@ -1,7 +1,7 @@
 import { LedgerError } from "../ledger/errors";
-import { daysInMonth, shiftMonth } from "../ledger/share";
+import { addDays, daysInclusive, isDate, monthEnd, monthStart, shiftMonth } from "../time/day";
 
-// Date math on 'YYYY-MM-DD' strings (calendar dates, no time zone). Pure.
+// Stats ranges and presets on 'YYYY-MM-DD' strings (calendar dates, no time zone). Pure.
 
 export interface DateRange {
   /** First day, inclusive. */
@@ -15,40 +15,6 @@ export type StatsPreset = (typeof STATS_PRESETS)[number];
 
 /** Longest range the stats accept, in calendar years (from + 5 years, exclusive). */
 export const MAX_RANGE_YEARS = 5;
-
-const DATE_RE = /^(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
-
-export function isDate(s: unknown): s is string {
-  if (typeof s !== "string") return false;
-  const m = DATE_RE.exec(s);
-  return m != null && Number(m[3]) <= daysInMonth(`${m[1]}-${m[2]}`);
-}
-
-function toEpochDay(date: string): number {
-  const [y, m, d] = date.split("-").map(Number) as [number, number, number];
-  return Date.UTC(y, m - 1, d) / 86_400_000;
-}
-
-function fromEpochDay(n: number): string {
-  return new Date(n * 86_400_000).toISOString().slice(0, 10);
-}
-
-export function addDays(date: string, n: number): string {
-  return fromEpochDay(toEpochDay(date) + n);
-}
-
-/** Days from `from` to `to`, both counted (a single day is 1). */
-export function daysInclusive(from: string, to: string): number {
-  return toEpochDay(to) - toEpochDay(from) + 1;
-}
-
-export function monthStart(month: string): string {
-  return `${month}-01`;
-}
-
-export function monthEnd(month: string): string {
-  return `${month}-${String(daysInMonth(month)).padStart(2, "0")}`;
-}
 
 export function monthRangeOf(month: string): DateRange {
   return { from: monthStart(month), to: monthEnd(month) };

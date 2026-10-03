@@ -1,7 +1,7 @@
 import { type Db, monthlyTargets } from "@yomi/db";
 import { and, eq, isNull } from "@yomi/db/orm";
 import { LedgerError } from "../ledger/errors";
-import { isMonth } from "../ledger/share";
+import { isMonth } from "../time/day";
 import type { CurrentUser } from "../user";
 
 export interface TargetItem {

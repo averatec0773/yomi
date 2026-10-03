@@ -5,7 +5,7 @@ import { and, asc, eq, lte, min } from "@yomi/db/orm";
 import { convertMinor, crossRate, type FxTable, getFxRates } from "../invest/fx";
 import { InvestError } from "../invest/errors";
 import { getTimeZone } from "../settings/time-zone";
-import { addDays } from "../stats/period";
+import { addDays } from "../time/day";
 import { clockNow, todayIn } from "../time/zone";
 import type { CurrentUser } from "../user";
 import { type BalanceClass, balanceTimeline } from "./balances";

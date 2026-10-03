@@ -18,4 +18,5 @@ export * from "./invest";
 export * from "./assets";
 export * from "./settings";
 export * from "./time/zone";
+export * from "./time/day";
 export * from "./payment";

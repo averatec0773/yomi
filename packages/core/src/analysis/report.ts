@@ -6,7 +6,8 @@ import { LedgerError } from "../ledger/errors";
 import { countsAsSpending } from "../ledger/share";
 import { loadRangeRows, type SpendingRow } from "../ledger/transactions";
 import { getTimeZone } from "../settings/time-zone";
-import { addDays, assertRange, type DateRange, daysInclusive, isDate } from "../stats/period";
+import { assertRange, type DateRange } from "../stats/period";
+import { addDays, daysInclusive, isDate, weekdayOf } from "../time/day";
 import { type RangeCurrencyOverview, rangeOverview } from "../stats/range";
 import { clockNow, localDate, todayIn } from "../time/zone";
 import type { CurrentUser } from "../user";
@@ -38,7 +39,7 @@ import {
   type UnusualItem,
   unusualItems,
 } from "./insights";
-import { DEFAULT_WEEK_START, type PeriodKind, periodKindOf, typicalRanges, weekdayOf } from "./period";
+import { DEFAULT_WEEK_START, type PeriodKind, periodKindOf, typicalRanges } from "./period";
 
 /** A spending row of the day on the Day view. */
 export interface DayRow {

@@ -15,6 +15,7 @@ import {
 } from "../settings/secrets";
 import { deleteSetting, type Q, readSetting, writeSetting } from "../settings/store";
 import { getTimeZone } from "../settings/time-zone";
+import { dayDiff } from "../time/day";
 import { clockNow, todayIn } from "../time/zone";
 import type { CurrentUser } from "../user";
 import { InvestError } from "./errors";
@@ -185,7 +186,7 @@ export type ExpiryState = "none" | "ok" | "soon" | "expired";
 /** `soon` from 14 days before the expiry date (days 0 = expires today), `expired` after it. */
 export function tokenExpiry(expiresOn: string | null, today: string): { state: ExpiryState; days: number | null } {
   if (!expiresOn) return { state: "none", days: null };
-  const days = Math.round((Date.parse(`${expiresOn}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000);
+  const days = dayDiff(today, expiresOn);
   return { state: days < 0 ? "expired" : days <= IBKR_EXPIRY_WARN_DAYS ? "soon" : "ok", days };
 }
 
