@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CurrencyCode, DateString, Id, TransactionKind } from "./common";
+import { Currency, CurrencyCode, DateString, Id, TransactionKind } from "./common";
 
 // Captures (a pasted card SMS) and their review queue. Shaped so the v0.3 MCP tools can return the same objects.
 
@@ -13,8 +13,8 @@ export type CaptureState = z.infer<typeof CaptureState>;
 export const CaptureReviewType = z.enum(["ambiguous", "near_miss", "stale", "amount_changed"]);
 export type CaptureReviewType = z.infer<typeof CaptureReviewType>;
 
-/** Capture items, plus own_transfer: a ledger row that looks like money moving between my own accounts. */
-export const ReviewType = z.enum([...CaptureReviewType.options, "own_transfer"]);
+/** Capture items, plus ledger rows that look like a friend paying me back (repayment) or money between my own accounts (own_transfer). */
+export const ReviewType = z.enum([...CaptureReviewType.options, "repayment", "own_transfer"]);
 export type ReviewType = z.infer<typeof ReviewType>;
 
 export const MatchReason = z.enum(["amount", "card", "merchant", "time"]);
@@ -128,7 +128,37 @@ export const OwnTransferItem = z.object({
 });
 export type OwnTransferItem = z.infer<typeof OwnTransferItem>;
 
-export const ReviewItem = z.union([CaptureReviewItem, OwnTransferItem]);
+/** name · balance (equals what is open) · items (equals certain open items) · partial · time · fx (compared in another currency). */
+export const RepaymentReason = z.enum(["name", "balance", "items", "partial", "time", "fx"]);
+export type RepaymentReason = z.infer<typeof RepaymentReason>;
+
+export const RepaymentProposal = z.object({
+  participantId: z.int(),
+  participantName: z.string(),
+  /** The open items it pays; empty for a partial payment. */
+  itemTransactionIds: z.array(z.int()),
+  items: z.array(z.object({ transactionId: z.int(), date: DateString, merchant: z.string(), remainingMinor: z.int() })),
+  amountMinor: z.int(),
+  currency: CurrencyCode,
+  /** What stays open with them after it, in `currency`. */
+  balanceAfterMinor: z.int(),
+  confidence: Confidence,
+  reasons: z.array(RepaymentReason),
+  /** A settlement recorded by hand with the same amount within 3 days. */
+  possiblyCovered: z.object({ settlementId: z.int(), amountMinor: z.int(), currency: CurrencyCode, settledOn: DateString }).nullable(),
+});
+export type RepaymentProposal = z.infer<typeof RepaymentProposal>;
+
+export const RepaymentReviewItem = z.object({
+  subject: z.literal("transaction"),
+  type: z.literal("repayment"),
+  transactionId: z.int(),
+  row: ReviewRow,
+  proposal: RepaymentProposal,
+});
+export type RepaymentReviewItem = z.infer<typeof RepaymentReviewItem>;
+
+export const ReviewItem = z.union([CaptureReviewItem, RepaymentReviewItem, OwnTransferItem]);
 export type ReviewItem = z.infer<typeof ReviewItem>;
 
 /** GET /api/review */
@@ -161,17 +191,26 @@ export const BulkResolveBody = z.object({ captureIds: z.array(Id).min(1).max(500
 export type BulkResolveBody = z.infer<typeof BulkResolveBody>;
 
 /**
- * POST /api/review/transactions/:transactionId. own_transfer: the proposal is right (the row and its peer become
- * transfers). income: the row is income in `categoryId` (an income category) and is not proposed again. dismiss: not a
- * transfer, never proposed again.
+ * POST /api/review/transactions/:transactionId. settle: the row is a repayment from `participantId` (paying
+ * `itemTransactionIds`, for `amountMinor` in `currency` when given); Undo is DELETE /api/settlements/:id. own_transfer:
+ * the proposal is right (the row and its peer become transfers). income: the row is income in `categoryId` (an income
+ * category) and is not proposed again. dismiss: not a repayment or transfer, never proposed again.
  */
-export const TransactionReviewAction = z.enum(["own_transfer", "income", "dismiss"]);
+export const TransactionReviewAction = z.enum(["settle", "own_transfer", "income", "dismiss"]);
 export type TransactionReviewAction = z.infer<typeof TransactionReviewAction>;
 
 export const TransactionReviewBody = z
-  .object({ action: TransactionReviewAction, categoryId: Id.optional() })
+  .object({
+    action: TransactionReviewAction,
+    participantId: Id.optional(),
+    itemTransactionIds: z.array(Id).max(2000).optional(),
+    amountMinor: z.int().positive().optional(),
+    currency: Currency.optional(),
+    categoryId: Id.optional(),
+  })
   .strict()
-  .refine((b) => b.action !== "income" || b.categoryId !== undefined, { message: "income needs categoryId", path: ["categoryId"] });
+  .refine((b) => b.action !== "income" || b.categoryId !== undefined, { message: "income needs categoryId", path: ["categoryId"] })
+  .refine((b) => b.action !== "settle" || b.participantId !== undefined, { message: "settle needs participantId", path: ["participantId"] });
 export type TransactionReviewBody = z.infer<typeof TransactionReviewBody>;
 
 /** The row's fields before an action, as the action returns them; Undo puts them back. */
@@ -180,7 +219,13 @@ export const ReviewPrior = z
   .strict();
 export type ReviewPrior = z.infer<typeof ReviewPrior>;
 
-export const TransactionReviewResult = z.object({ transactionId: z.int(), kind: TransactionKind, prior: ReviewPrior });
+export const TransactionReviewResult = z.object({
+  transactionId: z.int(),
+  kind: TransactionKind,
+  prior: ReviewPrior,
+  /** settle: the settlement recorded (Undo deletes it). */
+  settlementId: z.int().nullable(),
+});
 export type TransactionReviewResult = z.infer<typeof TransactionReviewResult>;
 
 /** POST /api/review/transactions/bulk: confirm several own-account transfers, all or nothing. */
@@ -190,8 +235,8 @@ export type BulkTransactionReviewBody = z.infer<typeof BulkTransactionReviewBody
 export const BulkTransactionReviewResult = z.object({ results: z.array(TransactionReviewResult) });
 export type BulkTransactionReviewResult = z.infer<typeof BulkTransactionReviewResult>;
 
-/** POST /api/review/transactions/:transactionId/undo: the action taken and the `prior` it returned. */
-export const TransactionReviewUndoBody = z.object({ action: TransactionReviewAction, prior: ReviewPrior }).strict();
+/** POST /api/review/transactions/:transactionId/undo: the action taken (settle is undone by deleting the settlement) and the `prior` it returned. */
+export const TransactionReviewUndoBody = z.object({ action: TransactionReviewAction.exclude(["settle"]), prior: ReviewPrior }).strict();
 export type TransactionReviewUndoBody = z.infer<typeof TransactionReviewUndoBody>;
 
 /** Result of a resolution or an undo (POST /api/captures/:captureId/undo). */

@@ -218,6 +218,7 @@ export const zhCN: Dictionary = {
       capture_action_invalid: "这个操作已经不适用于这一条，请刷新页面。",
       review_item_gone: "这一条已经没有需要确认的内容，请刷新页面。",
       review_income_category: "请选择一个收入分类。",
+      review_settle_participant: "请选择是谁还给你的。",
       transfer_rule_missing: "这一笔不是由规则标为转账的。",
       capture_candidate_invalid: "这笔账单记录已不在候选里，请刷新页面。",
       capture_nothing_to_undo: "这里没有可撤销的。",

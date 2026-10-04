@@ -224,6 +224,7 @@ export const en = {
       capture_action_invalid: "That does not apply to this item any more. Reload the page.",
       review_item_gone: "This item has nothing to review any more. Reload the page.",
       review_income_category: "Pick an income category.",
+      review_settle_participant: "Pick who paid you back.",
       transfer_rule_missing: "This row was not made a transfer by a rule.",
       capture_candidate_invalid: "That statement row is no longer offered for this capture. Reload the page.",
       capture_nothing_to_undo: "There is nothing to undo here.",

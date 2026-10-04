@@ -304,6 +304,8 @@ export const MarkSettlementBody = z.object({
   /** When currency differs: units of the transaction's currency per 1 unit of `currency`; replaces amountMinor. */
   fxRate: FxRate.nullish(),
   note: z.string().nullish(),
+  /** Open split items with this person the transfer pays (same currency); the amount may cover them in part. */
+  itemTransactionIds: z.array(Id).max(2000).optional(),
 });
 export type MarkSettlementBody = z.infer<typeof MarkSettlementBody>;
 

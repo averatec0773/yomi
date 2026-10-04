@@ -3,10 +3,12 @@ import { and, eq, inArray } from "@yomi/db/orm";
 import { applyOwnTransfer, detectOwnTransfers, revertOwnTransfer, type TransferProposal } from "../import/transfers";
 import { LedgerError } from "../ledger/errors";
 import type { TransactionKind } from "../ledger/transactions";
+import { markAsSettlement } from "../split/candidates";
+import { type RepaymentProposal, repaymentProposals } from "../split/repayments";
 import type { CurrentUser } from "../user";
 
-// Review items about rows already in the ledger (own-account transfers), derived when the queue is read and never
-// stored, and the actions on them. Captures keep their own items and actions (review.ts).
+// Review items about rows already in the ledger (AA repayments, own-account transfers), derived when the queue is read
+// and never stored, and the actions on them. Captures keep their own items and actions (review.ts).
 
 /** The ledger row an item is about, as the review sheet shows it. */
 export interface ReviewRow {
@@ -32,7 +34,15 @@ export interface OwnTransferItem {
   proposal: Omit<TransferProposal, "transactionId">;
 }
 
-export type TransactionReviewItem = OwnTransferItem;
+export interface RepaymentReviewItem {
+  subject: "transaction";
+  type: "repayment";
+  transactionId: number;
+  row: ReviewRow;
+  proposal: RepaymentProposal;
+}
+
+export type TransactionReviewItem = RepaymentReviewItem | OwnTransferItem;
 
 /** The fields of the item's row an action changes; returned so Undo can put them back. */
 export interface ReviewPrior {
@@ -43,13 +53,19 @@ export interface ReviewPrior {
 }
 
 /**
- * own_transfer: the proposal is right (the row and its peer become transfers). income: the row is income in this
- * category (`categoryId`) and is not proposed again. dismiss: not a transfer, never proposed again.
+ * settle: the row is this repayment (a settlement with `participantId`, paying `itemTransactionIds`, for `amountMinor`
+ * in `currency` when given; Undo deletes the settlement). own_transfer: the proposal is right (the row and its peer
+ * become transfers). income: the row is income in this category (`categoryId`) and is not proposed again. dismiss: not
+ * a repayment or transfer, never proposed again.
  */
-export type TransactionReviewAction = "own_transfer" | "income" | "dismiss";
+export type TransactionReviewAction = "settle" | "own_transfer" | "income" | "dismiss";
 
 export interface TransactionReviewBody {
   action: TransactionReviewAction;
+  participantId?: number;
+  itemTransactionIds?: number[];
+  amountMinor?: number;
+  currency?: string;
   categoryId?: number;
 }
 
@@ -58,6 +74,8 @@ export interface TransactionReviewResult {
   /** The row's kind after the action. */
   kind: TransactionKind;
   prior: ReviewPrior;
+  /** settle: the settlement recorded (Undo deletes it). */
+  settlementId: number | null;
 }
 
 async function reviewRows(q: Db, user: CurrentUser, ids: readonly number[]): Promise<Map<number, ReviewRow>> {
@@ -82,11 +100,22 @@ async function reviewRows(q: Db, user: CurrentUser, ids: readonly number[]): Pro
   return new Map(rows.map(({ counterparty, ...r }) => [r.transactionId, { ...r, merchant: r.merchant || counterparty }]));
 }
 
-/** Own-account transfer proposals as review items (every confidence: history is only ever changed by the user). */
-export async function transactionReviewItems(q: Db, user: CurrentUser): Promise<TransactionReviewItem[]> {
-  const proposals = await detectOwnTransfers(q, user);
-  const rows = await reviewRows(q, user, proposals.flatMap((p) => (p.peerId == null ? [p.transactionId] : [p.transactionId, p.peerId])));
-  return proposals
+/** Both kinds of proposal; a row proposed as my own transfer is not also offered as a repayment. */
+async function proposals(q: Db, user: CurrentUser, opts: { today?: string }) {
+  const transfers = await detectOwnTransfers(q, user);
+  const mine = new Set(transfers.flatMap((p) => (p.peerId == null ? [p.transactionId] : [p.transactionId, p.peerId])));
+  const repayments = (await repaymentProposals(q, user, opts)).filter((r) => !mine.has(r.transactionId));
+  return { transfers, repayments };
+}
+
+/**
+ * Repayment and own-account transfer proposals as review items, repayments best first, transfers newest first (every
+ * confidence: history is only ever changed by the user).
+ */
+export async function transactionReviewItems(q: Db, user: CurrentUser, opts: { today?: string } = {}): Promise<TransactionReviewItem[]> {
+  const { transfers, repayments } = await proposals(q, user, opts);
+  const rows = await reviewRows(q, user, [...transfers.flatMap((p) => (p.peerId == null ? [p.transactionId] : [p.transactionId, p.peerId])), ...repayments.map((r) => r.transactionId)]);
+  const own = transfers
     .map(({ transactionId, ...proposal }): OwnTransferItem => ({
       subject: "transaction",
       type: "own_transfer",
@@ -96,11 +125,14 @@ export async function transactionReviewItems(q: Db, user: CurrentUser): Promise<
       proposal,
     }))
     .sort((a, b) => b.row.occurredOn.localeCompare(a.row.occurredOn) || b.transactionId - a.transactionId);
+  const paid = repayments.map(({ transactionId, proposal }): RepaymentReviewItem => ({ subject: "transaction", type: "repayment", transactionId, row: rows.get(transactionId)!, proposal }));
+  return [...paid, ...own];
 }
 
 /** transactionReviewItems' length without loading the rows. */
-export async function countTransactionReview(q: Db, user: CurrentUser): Promise<number> {
-  return (await detectOwnTransfers(q, user)).length;
+export async function countTransactionReview(q: Db, user: CurrentUser, opts: { today?: string } = {}): Promise<number> {
+  const { transfers, repayments } = await proposals(q, user, opts);
+  return transfers.length + repayments.length;
 }
 
 async function openRow(q: Db, user: CurrentUser, id: number) {
@@ -123,11 +155,21 @@ async function applyAction(q: Db, user: CurrentUser, id: number, body: Transacti
   const prior = priorOf(row);
   const now = new Date().toISOString();
   switch (body.action) {
+    case "settle": {
+      if (body.participantId === undefined) throw new LedgerError("invalid", "review_settle_participant", "Pick who paid you back");
+      const s = await markAsSettlement(q, user, id, {
+        participantId: body.participantId,
+        amountMinor: body.amountMinor,
+        currency: body.currency,
+        itemTransactionIds: body.itemTransactionIds,
+      });
+      return { transactionId: id, kind: row.kind === "income" || row.kind === "expense" ? "transfer" : row.kind, prior, settlementId: s.id };
+    }
     case "own_transfer": {
       const p = proposals.find((x) => x.transactionId === id);
       if (!p) throw new LedgerError("conflict", "review_item_gone", `Transaction #${id} has nothing to review now`, { id });
       await applyOwnTransfer(q, user, p, { by: "user" });
-      return { transactionId: id, kind: "transfer", prior };
+      return { transactionId: id, kind: "transfer", prior, settlementId: null };
     }
     case "income": {
       const cat = body.categoryId === undefined ? undefined : (await q.select().from(categories).where(and(eq(categories.userId, user.id), eq(categories.id, body.categoryId))).limit(1))[0];
@@ -138,15 +180,15 @@ async function applyAction(q: Db, user: CurrentUser, id: number, body: Transacti
         .update(transactions)
         .set({ kind: "income", categoryId: cat.id, userEditedAt: now, reviewDismissedAt: now, updatedAt: now })
         .where(eq(transactions.id, id));
-      return { transactionId: id, kind: "income", prior };
+      return { transactionId: id, kind: "income", prior, settlementId: null };
     }
     case "dismiss": {
       if (row.kindRule != null) {
         await revertOwnTransfer(q, user, id, { dismiss: true });
-        return { transactionId: id, kind: row.priorKind ?? row.kind, prior };
+        return { transactionId: id, kind: row.priorKind ?? row.kind, prior, settlementId: null };
       }
       await q.update(transactions).set({ reviewDismissedAt: now, updatedAt: now }).where(eq(transactions.id, id));
-      return { transactionId: id, kind: row.kind, prior };
+      return { transactionId: id, kind: row.kind, prior, settlementId: null };
     }
   }
 }
@@ -169,13 +211,13 @@ export async function confirmOwnTransfers(db: Db, user: CurrentUser, ids: readon
 /**
  * Takes an action back (the toast's Undo). own_transfer: the row and its peer get their prior kinds back and return to
  * the queue. income and dismiss: the row's kind, category, edit mark and dismissal return to `prior` (as the action
- * returned it).
+ * returned it). A settlement is taken back by deleting it (deleteSettlement).
  */
 export async function undoTransactionReview(
   db: Db,
   user: CurrentUser,
   id: number,
-  body: { action: TransactionReviewAction; prior: ReviewPrior },
+  body: { action: Exclude<TransactionReviewAction, "settle">; prior: ReviewPrior },
 ): Promise<TransactionReviewResult> {
   return await db.transaction(async (q) => {
     const row = await openRow(q, user, id);
@@ -189,6 +231,6 @@ export async function undoTransactionReview(
       await q.update(transactions).set({ ...body.prior, updatedAt: new Date().toISOString() }).where(eq(transactions.id, row.id));
     }
     const after = await openRow(q, user, id);
-    return { transactionId: id, kind: after.kind, prior: priorOf(row) };
+    return { transactionId: id, kind: after.kind, prior: priorOf(row), settlementId: null };
   });
 }

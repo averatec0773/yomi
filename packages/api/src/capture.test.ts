@@ -4,6 +4,7 @@ import {
   type CaptureReviewItem,
   Identity,
   ImportResult,
+  Participant,
   ParticipantList,
   QuickCreated,
   ResolveResult,
@@ -70,7 +71,7 @@ describe("capture review api", () => {
     expect(imported.captures).toEqual({ linked: 0, toReview: 2 });
 
     const queue = await review();
-    expect(queue.counts).toEqual({ ambiguous: 2, near_miss: 0, stale: 0, amount_changed: 0, own_transfer: 0 });
+    expect(queue.counts).toEqual({ ambiguous: 2, near_miss: 0, stale: 0, amount_changed: 0, repayment: 0, own_transfer: 0 });
     const item = queue.items.find((i) => i.subject === "capture" && i.captureId === a.captureId) as CaptureReviewItem;
     expect(item).toMatchObject({ type: "ambiguous", capture: { last4: "3141", amountMinor: -500, hold: false }, candidates: [{ reasons: ["amount", "card", "merchant", "time"], daysAfter: 0 }] });
 
@@ -148,7 +149,7 @@ describe("own-account transfer review api", () => {
     const review = async () => ReviewList.parse(await (await app.request("/api/review")).json());
     const queue = await review();
     expect(queue.counts.own_transfer).toBe(2);
-    expect(queue.items.map((i) => i.subject === "transaction" && [i.transactionId, i.proposal.rule, i.proposal.confidence]).sort()).toEqual([
+    expect(queue.items.map((i) => i.type === "own_transfer" && [i.transactionId, i.proposal.rule, i.proposal.confidence]).sort()).toEqual([
       [inn!.id, "pair", "high"],
       [wire!.id, "hint", "medium"],
     ]);
@@ -169,6 +170,41 @@ describe("own-account transfer review api", () => {
     expect([gone.status, await code(gone)]).toEqual([409, "review_item_gone"]);
     const missing = await app.request("/api/review/transactions/999", json({ action: "dismiss" }));
     expect(missing.status).toBe(404);
+  });
+
+  it("settles a repayment item with its items and undoes it by deleting the settlement", async () => {
+    const db = await testDb();
+    await seed(db);
+    const app = createApi({ getDb: () => db, today: () => "2026-10-05" });
+    const jordan = Participant.parse(await (await app.request("/api/participants", json({ name: "Jordan Park", identities: [{ kind: "zelle_name", value: "Jordan Park" }] }))).json());
+    const [boa] = await db.insert(accounts).values({ userId: 1, name: "BoA checking", kind: "debit_card", institution: "Bank of America", last4: "3141", currency: "USD" }).returning();
+    const row = (p: { amountMinor: number; key: string; day: string; zelle?: boolean }) => ({
+      userId: 1,
+      accountId: boa!.id,
+      occurredAt: `2026-10-0${p.day}T12:00:00-05:00`,
+      occurredOn: `2026-10-0${p.day}`,
+      amountMinor: p.amountMinor,
+      currency: "USD",
+      kind: p.amountMinor < 0 ? ("expense" as const) : ("income" as const),
+      counterpartyRaw: p.zelle ? "Jordan Park" : "Corner Cafe",
+      source: "boa_csv" as const,
+      sourceCategory: p.zelle ? "Zelle" : "Purchase",
+      dedupKey: p.key,
+    });
+    const [dinner, pay] = await db.insert(transactions).values([row({ amountMinor: -6000, key: "d", day: "1" }), row({ amountMinor: 3000, key: "p", day: "3", zelle: true })]).returning();
+    await app.request(`/api/transactions/${dinner!.id}/toggle-participant`, json({ participantId: jordan.id }));
+
+    const queue = ReviewList.parse(await (await app.request("/api/review")).json());
+    const item = queue.items.find((i) => i.type === "repayment");
+    expect(item).toMatchObject({ transactionId: pay!.id, proposal: { participantId: jordan.id, itemTransactionIds: [dinner!.id], confidence: "high", balanceAfterMinor: 0 } });
+    expect((await app.request(`/api/review/transactions/${pay!.id}`, json({ action: "settle" }))).status).toBe(400);
+    const settled = TransactionReviewResult.parse(
+      await (await app.request(`/api/review/transactions/${pay!.id}`, json({ action: "settle", participantId: jordan.id, itemTransactionIds: [dinner!.id] }))).json(),
+    );
+    expect(settled).toMatchObject({ kind: "transfer", settlementId: expect.any(Number) });
+    expect(ReviewList.parse(await (await app.request("/api/review")).json()).total).toBe(0);
+    expect((await app.request(`/api/settlements/${settled.settlementId}`, { method: "DELETE" })).status).toBe(200);
+    expect(ReviewList.parse(await (await app.request("/api/review")).json()).counts.repayment).toBe(1);
   });
 
   it("stores names on my transfers on the self participant, only of the transfer kinds", async () => {

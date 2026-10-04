@@ -159,7 +159,7 @@ describe("own_transfer review actions", () => {
     expect((await listReview(db, user, { today })).counts.own_transfer).toBe(2);
 
     const done = await resolveTransactionReview(db, user, inn, { action: "own_transfer" });
-    expect(done).toEqual({ transactionId: inn, kind: "transfer", prior: { kind: "income", categoryId: null, userEditedAt: null, reviewDismissedAt: null } });
+    expect(done).toEqual({ transactionId: inn, kind: "transfer", prior: { kind: "income", categoryId: null, userEditedAt: null, reviewDismissedAt: null }, settlementId: null });
     expect(await row(db, out)).toMatchObject({ kind: "transfer", transferPeerId: inn, userEditedAt: expect.any(String) });
     expect((await listReview(db, user, { today })).counts.own_transfer).toBe(1);
     await undoTransactionReview(db, user, inn, { action: "own_transfer", prior: done.prior });

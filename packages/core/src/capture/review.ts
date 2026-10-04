@@ -11,11 +11,12 @@ import { CaptureError, type CaptureRow, captureRow, getCapture, recordResolution
 
 // The review queue: open captures the matcher could not settle alone (ambiguous, near miss), captures no statement
 // row arrived for (stale, derived when read), confirmed captures whose exact split no longer adds up, and ledger rows
-// that look like transfers between my own accounts (own_transfer, derived when read; proposals.ts).
+// that look like a friend paying me back (repayment) or money moving between my own accounts (own_transfer), both
+// derived when read (proposals.ts).
 
 export const CAPTURE_REVIEW_TYPES = ["ambiguous", "near_miss", "stale", "amount_changed"] as const;
 export type CaptureReviewType = (typeof CAPTURE_REVIEW_TYPES)[number];
-export const REVIEW_TYPES = [...CAPTURE_REVIEW_TYPES, "own_transfer"] as const;
+export const REVIEW_TYPES = [...CAPTURE_REVIEW_TYPES, "repayment", "own_transfer"] as const;
 export type ReviewType = (typeof REVIEW_TYPES)[number];
 export type ReviewAction = "link" | "keep_separate" | "keep_final" | "discard" | "keep_shares";
 /** Actions that apply to several items at once; choosing a candidate is always one at a time. */
@@ -108,7 +109,7 @@ function staleReason(c: Pick<ReviewCapture, "last4" | "occurredOn">, reach: Map<
 }
 
 function emptyCounts(): Record<ReviewType, number> {
-  return { ambiguous: 0, near_miss: 0, stale: 0, amount_changed: 0, own_transfer: 0 };
+  return { ambiguous: 0, near_miss: 0, stale: 0, amount_changed: 0, repayment: 0, own_transfer: 0 };
 }
 
 /** Stored reviews and provisional captures, newest first, with the statement reach of the cards that may be stale. */
@@ -204,7 +205,7 @@ export async function listReview(q: Db, user: CurrentUser, opts: { today?: strin
     if (needsCandidates(kind.type) && candidates.length === 0) continue;
     items.push({ subject: "capture", captureId: c.id, type: kind.type, capture, candidates, stale: kind.stale, shares, createdAt: c.createdAt });
   }
-  items.push(...(await transactionReviewItems(q, user)));
+  items.push(...(await transactionReviewItems(q, user, { today })));
   items.sort((a, b) => REVIEW_TYPES.indexOf(a.type) - REVIEW_TYPES.indexOf(b.type));
   const counts = emptyCounts();
   for (const i of items) counts[i.type] += 1;
@@ -231,7 +232,7 @@ export async function countReview(q: Db, user: CurrentUser, opts: { today?: stri
       .filter(isOpenCandidate)
       .map((t) => t.id),
   );
-  return queued.filter((x) => !needsCandidates(x.type) || x.candidateIds.some((id) => open.has(id))).length + (await countTransactionReview(q, user));
+  return queued.filter((x) => !needsCandidates(x.type) || x.candidateIds.some((id) => open.has(id))).length + (await countTransactionReview(q, user, { today }));
 }
 
 export interface ResolveResult {
