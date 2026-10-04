@@ -499,7 +499,9 @@ test("settings tabs: server-rendered ?tab=, arrows and back/forward switch tabs,
 
   // Roving tabindex: only the active tab is in the tab order; arrows move and open.
   await expect(page.locator('[role="tab"][tabindex="0"]')).toHaveCount(1);
-  await tab("Categories").focus();
+  await tab("Profile").focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(tab("Categories")).toBeFocused();
   await page.keyboard.press("ArrowRight");
   await expect(tab("Appearance")).toBeFocused();
   await expect(tab("Appearance")).toHaveAttribute("aria-selected", "true");
