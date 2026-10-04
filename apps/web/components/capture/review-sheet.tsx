@@ -1,6 +1,6 @@
 "use client";
 
-import type { BulkReviewAction, MatchCandidate, ResolveResult, ReviewAction, ReviewItem, ReviewList } from "@yomi/contracts";
+import type { BulkReviewAction, CaptureReviewItem, MatchCandidate, ResolveResult, ReviewAction, ReviewList } from "@yomi/contracts";
 import { CircleAlertIcon, InboxIcon, RotateCwIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, useTransition } from "react";
@@ -24,7 +24,7 @@ const PHONE_FULL =
   "max-sm:inset-0 max-sm:top-0 max-sm:left-0 max-sm:h-dvh max-sm:max-h-dvh max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-none max-sm:ring-0";
 
 /** Bulk actions each type allows (choosing a candidate is never bulk). */
-const BULK: Record<ReviewItem["type"], BulkReviewAction[]> = {
+const BULK: Record<CaptureReviewItem["type"], BulkReviewAction[]> = {
   ambiguous: ["keep_separate", "discard"],
   near_miss: ["keep_separate", "discard"],
   stale: ["keep_final", "discard"],
@@ -68,7 +68,7 @@ function ReviewBody() {
     try {
       const next = await apiFetch<ReviewList>("/review");
       setList(next);
-      setSelected((sel) => new Set([...sel].filter((id) => next.items.some((i) => i.captureId === id))));
+      setSelected((sel) => new Set([...sel].filter((id) => next.items.some((i) => i.subject === "capture" && i.captureId === id))));
     } catch {
       // apiFetch toasted; with no queue shown yet, the sheet offers Try again instead of a skeleton that never ends.
       setLoadFailed(true);
@@ -112,10 +112,10 @@ function ReviewBody() {
     [refresh, undo, t],
   );
 
-  const act = (item: ReviewItem, action: ReviewAction, candidateId?: number) =>
+  const act = (item: CaptureReviewItem, action: ReviewAction, candidateId?: number) =>
     run([item.captureId], s.toasts[action], () => apiFetch<ResolveResult>(`/review/${item.captureId}`, { json: { action, candidateId } }));
 
-  const items = list?.items ?? [];
+  const items = (list?.items ?? []).filter((i): i is CaptureReviewItem => i.subject === "capture");
   const chosen = items.filter((i) => selected.has(i.captureId));
   const bulkActions = (["keep_separate", "keep_final", "discard"] as const).filter((a) => chosen.length > 0 && chosen.every((i) => BULK[i.type].includes(a)));
   const bulk = (action: BulkReviewAction) => {
@@ -235,7 +235,7 @@ function Item({
   onCheck,
   onAct,
 }: {
-  item: ReviewItem;
+  item: CaptureReviewItem;
   busy: boolean;
   selecting: boolean;
   checked: boolean;

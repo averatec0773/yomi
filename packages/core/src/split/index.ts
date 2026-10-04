@@ -26,6 +26,7 @@ export {
   listIdentities,
   normalizeIdentity,
   removeIdentity,
+  SELF_IDENTITY_KINDS,
 } from "./identities";
 export {
   claimCounterparty,

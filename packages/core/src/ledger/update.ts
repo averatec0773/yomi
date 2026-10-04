@@ -1,5 +1,6 @@
 import { categories, type Db, merchantRules, transactions, transactionSplits } from "@yomi/db";
 import { and, asc, eq, inArray, isNull, max, ne } from "@yomi/db/orm";
+import { releaseTransfer } from "../import/transfers";
 import type { CurrentUser } from "../user";
 import { LedgerError } from "./errors";
 import { getTransaction, type TransactionItem, type TransactionKind } from "./transactions";
@@ -108,6 +109,8 @@ export async function updateTransaction(db: Db, user: CurrentUser, id: number, p
     if (!m) throw new LedgerError("invalid", "merchant_empty", "The merchant cannot be empty");
     set.merchant = m;
   }
+  // A new kind ends an own-account transfer a rule made: its other leg gets its prior kind back.
+  if (patch.kind !== undefined && patch.kind !== row.kind) await releaseTransfer(db, user, [id]);
   await db.update(transactions)
     .set(set)
     .where(and(eq(transactions.userId, userId), eq(transactions.id, id)));
@@ -209,6 +212,7 @@ export async function bulkUpdate(
       if (patch.kind !== undefined) set.kind = patch.kind;
       if (patch.categoryId !== undefined) set.categoryId = patch.categoryId;
       else if (row.categoryId != null && !fits(kind, await kindOfCategory(row.categoryId))) set.categoryId = null;
+      if (kind !== row.kind) await releaseTransfer(tx, user, [row.id]);
       await tx.update(transactions)
         .set(set)
         .where(and(eq(transactions.userId, userId), eq(transactions.id, row.id)));
@@ -290,7 +294,7 @@ export async function renameCategory(db: Db, user: CurrentUser, id: number, name
  */
 export async function setCountsAsIncome(db: Db, user: CurrentUser, id: number, counts: boolean): Promise<CategoryItem> {
   const c = await categoryOf(db, user.id, id);
-  if (c.kind !== "income") throw new LedgerError("invalid", "category_not_income", `Category "${c.name}" is not an income category`, { name: c.name });
+  if (c.kind !== "income") throw categoryKindMismatch(c.name, "income");
   await db.update(categories)
     .set({ countsAsIncome: counts })
     .where(and(eq(categories.userId, user.id), eq(categories.id, id)));

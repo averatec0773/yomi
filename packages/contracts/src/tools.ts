@@ -1,8 +1,7 @@
 import { z } from "zod";
 import { AnalysisPreset, PeriodKind } from "./analysis";
 import { NetWorthRange } from "./assets";
-import { Currency, DateString, Id, Locale, MonthString } from "./common";
-import { TransactionKind } from "./ledger";
+import { Currency, DateString, Id, Locale, MonthString, TransactionKind } from "./common";
 import { StatementFlag, StatementScope } from "./split";
 
 // Inputs of the reads the MCP endpoint will expose: plain JSON objects (real booleans, numbers and arrays, no

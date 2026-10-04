@@ -1,9 +1,6 @@
 import { z } from "zod";
 import { CaptureInfo, ProvisionalTotals } from "./capture";
-import { CurrencyCode, DateString, Id, MonthString, QueryFlag, QueryId } from "./common";
-
-export const TransactionKind = z.enum(["expense", "income", "transfer", "refund"]);
-export type TransactionKind = z.infer<typeof TransactionKind>;
+import { CurrencyCode, DateString, Id, MonthString, QueryFlag, QueryId, TransactionKind } from "./common";
 
 /** GET /api/transactions query string. */
 export const TransactionQuery = z.object({

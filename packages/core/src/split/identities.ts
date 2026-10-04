@@ -20,6 +20,9 @@ export interface IdentityInput {
   value: string;
 }
 
+/** Kinds "me" can hold: the names my own transfers carry ("Names on my transfers"), used to spot own-account transfers. */
+export const SELF_IDENTITY_KINDS: readonly IdentityKind[] = ["bank_name", "zelle_name", "alipay", "wechat"];
+
 /** Kinds whose value can appear inside free bank or wallet text, so a contains-match is meaningful. */
 export const TEXT_MATCH_KINDS: readonly IdentityKind[] = ["wechat", "zelle_name", "alipay"];
 
@@ -109,8 +112,10 @@ export async function addIdentity(
   source: Identity["source"] = "manual",
 ): Promise<Identity> {
   const p = await getParticipant(db, user, participantId);
-  if (p.isSelf) throw new SplitError("invalid", "identity_self", "\"Me\" needs no identities");
   const { kind, value, normalized } = cleanIdentity(input);
+  if (p.isSelf && !SELF_IDENTITY_KINDS.includes(kind)) {
+    throw new SplitError("invalid", "identity_self_kind", "\"Me\" holds only the names on my transfers (bank, Zelle, Alipay, WeChat)", { kind });
+  }
   const existing = await findIdentity(db, user, kind, normalized);
   if (existing) {
     if (existing.participantId === participantId) return existing;
