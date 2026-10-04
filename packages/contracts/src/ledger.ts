@@ -65,6 +65,8 @@ export const TransactionItem = z.object({
   categoryName: z.string().nullable(),
   accountId: z.int().nullable(),
   accountName: z.string().nullable(),
+  /** The other leg's account when the row is one side of a transfer between my accounts. */
+  transferAccountName: z.string().nullable(),
   source: z.enum(["alipay", "wechat", "icbc_pdf", "plaid", "boa_csv", "sms", "manual"]),
   importBatchId: z.int().nullable(),
   duplicateOfId: z.int().nullable(),

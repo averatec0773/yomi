@@ -20,7 +20,7 @@ import { TxDayList } from "./tx-day-list";
 import { TxDetails } from "./tx-details";
 import { TxEmpty } from "./tx-empty";
 import { TxToolbar } from "./tx-toolbar";
-import type { Category, CurrencyTotal, Panel, Participant, Tx, TxFilters } from "./types";
+import { type Category, type CurrencyTotal, hasFilters, type Panel, type Participant, type Tx, type TxFilters } from "./types";
 import { useBulkActions } from "./use-bulk-actions";
 import { useListKeys } from "./use-list-keys";
 import { type Override, useTxActions } from "./use-tx-actions";
@@ -169,7 +169,7 @@ export function TxView({
   const counts = new Map(totals.map((x) => [x.currency, x.count]));
   const notSplit = others.length ? view.filter((x) => canSplit(x) && x.splits.length === 0 && x.accountId !== null).length : 0;
   const suggestedCount = view.filter((x) => x.suggestion && x.splits.length === 0 && canSplit(x)).length;
-  const filtered = Boolean(filters.q || filters.categoryId || filters.participantId || filters.uncategorized || filters.unsplit);
+  const filtered = hasFilters(filters);
   const csvHref = isRange
     ? `/api/export/transactions.csv?${new URLSearchParams({ from: month.split("~")[0]!, to: month.split("~")[1]! }).toString()}`
     : `/api/export/transactions.csv?month=${month}`;

@@ -6,11 +6,21 @@ export type { Category, CurrencyTotal, Participant };
 export interface TxFilters {
   q: string;
   categoryId?: number;
+  /** One kind of row (?kind=): spending (expense), income, transfers or refunds. */
+  kind?: Tx["kind"];
   participantId?: number;
   uncategorized: boolean;
   /** Catching up on old bills: only my own unsplit expenses (?unsplit=1). */
   unsplit: boolean;
   showAll: boolean;
+}
+
+/** The kinds the type filter offers, in its order. */
+export const TX_KINDS = ["expense", "income", "transfer", "refund"] as const satisfies readonly Tx["kind"][];
+
+/** Some filter narrows the list (the spend strip still shows the whole period). */
+export function hasFilters(f: TxFilters): boolean {
+  return Boolean(f.q || f.categoryId || f.kind || f.participantId || f.uncategorized || f.unsplit);
 }
 
 export type PanelType = "category" | "split" | "menu" | "note" | "details";

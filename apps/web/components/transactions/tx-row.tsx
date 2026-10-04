@@ -239,6 +239,8 @@ function TxRowImpl({ tx, others, selfId, nameOf, categories, selected, focused, 
 
   const origin = tx.accountName ? accountLabel(tx.accountName, t) : (t.transactions.sources[tx.source] ?? tx.source);
   const meta = [
+    // One leg of a transfer between my accounts names the other leg's account.
+    transfer && tx.transferAccountName ? fmt(r.transferPeer, { account: accountLabel(tx.transferAccountName, t) }) : null,
     desktop ? null : tx.categoryName ? categoryLabel(tx.categoryName, t) : null,
     // Phones keep the category and drop the source (it is in the details), so the meta does not truncate to a stub.
     desktop || !tx.categoryName ? origin : null,
