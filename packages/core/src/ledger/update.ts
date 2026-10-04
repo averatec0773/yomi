@@ -18,6 +18,10 @@ export interface CategoryItem {
   isSystem: boolean;
   sort: number;
   archivedAt: string | null;
+  /** Dictionary key of a system category; null for categories the user made. */
+  key: string | null;
+  /** Income on it counts in income totals (income categories). */
+  countsAsIncome: boolean;
 }
 
 const now = () => new Date().toISOString();
@@ -214,16 +218,20 @@ export async function bulkUpdate(
   });
 }
 
+const CATEGORY_ITEM = {
+  id: categories.id,
+  name: categories.name,
+  kind: categories.kind,
+  isSystem: categories.isSystem,
+  sort: categories.sort,
+  archivedAt: categories.archivedAt,
+  key: categories.key,
+  countsAsIncome: categories.countsAsIncome,
+};
+
 export async function listCategories(db: Db, user: CurrentUser): Promise<CategoryItem[]> {
   return await db
-    .select({
-      id: categories.id,
-      name: categories.name,
-      kind: categories.kind,
-      isSystem: categories.isSystem,
-      sort: categories.sort,
-      archivedAt: categories.archivedAt,
-    })
+    .select(CATEGORY_ITEM)
     .from(categories)
     .where(eq(categories.userId, user.id))
     .orderBy(asc(categories.kind), asc(categories.sort), asc(categories.id));
@@ -256,14 +264,7 @@ export async function createCategory(db: Db, user: CurrentUser, name: string, ki
   return (await db
     .insert(categories)
     .values({ userId, name: n, kind, isSystem: false, sort: (top?.s ?? -1) + 1 })
-    .returning({
-      id: categories.id,
-      name: categories.name,
-      kind: categories.kind,
-      isSystem: categories.isSystem,
-      sort: categories.sort,
-      archivedAt: categories.archivedAt,
-    })
+    .returning(CATEGORY_ITEM)
     )[0]!;
 }
 
@@ -281,6 +282,19 @@ export async function renameCategory(db: Db, user: CurrentUser, id: number, name
     .set({ name: n })
     .where(and(eq(categories.userId, user.id), eq(categories.id, id)));
   return (await listCategories(db, user)).find((c) => c.id === id)!;
+}
+
+/**
+ * Whether income on an income category counts in income totals and the savings rate (system categories too: family
+ * support or reimbursements are the user's call). Rows on it stay income either way.
+ */
+export async function setCountsAsIncome(db: Db, user: CurrentUser, id: number, counts: boolean): Promise<CategoryItem> {
+  const c = await categoryOf(db, user.id, id);
+  if (c.kind !== "income") throw new LedgerError("invalid", "category_not_income", `Category "${c.name}" is not an income category`, { name: c.name });
+  await db.update(categories)
+    .set({ countsAsIncome: counts })
+    .where(and(eq(categories.userId, user.id), eq(categories.id, id)));
+  return (await listCategories(db, user)).find((x) => x.id === id)!;
 }
 
 /** Archived categories stay on existing rows; the UI stops offering them. */

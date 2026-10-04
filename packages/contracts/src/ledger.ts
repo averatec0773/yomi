@@ -141,6 +141,10 @@ export const Category = z.object({
   isSystem: z.boolean(),
   sort: z.int(),
   archivedAt: z.string().nullable(),
+  /** Dictionary key of a system category (`dining`, `salary`, ...); null for categories the user made. */
+  key: z.string().nullable(),
+  /** Income on this category counts in income totals and the savings rate (income categories). */
+  countsAsIncome: z.boolean(),
 });
 export type Category = z.infer<typeof Category>;
 
@@ -151,9 +155,11 @@ export const CreateCategoryInput = z.object({ name: z.string().trim().min(1).max
 export type CreateCategoryInput = z.infer<typeof CreateCategoryInput>;
 
 export const UpdateCategoryInput = z
-  .object({ name: z.string().trim().min(1).max(40).optional(), archived: z.boolean().optional() })
+  .object({ name: z.string().trim().min(1).max(40).optional(), archived: z.boolean().optional(), countsAsIncome: z.boolean().optional() })
   .strict()
-  .refine((v) => v.name !== undefined || v.archived !== undefined, { message: "name or archived is required" });
+  .refine((v) => v.name !== undefined || v.archived !== undefined || v.countsAsIncome !== undefined, {
+    message: "name, archived or countsAsIncome is required",
+  });
 export type UpdateCategoryInput = z.infer<typeof UpdateCategoryInput>;
 
 export const MonthCount = z.object({ month: MonthString, count: z.int().nonnegative() });

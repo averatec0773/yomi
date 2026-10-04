@@ -15,9 +15,10 @@ describe("seed", () => {
     expect(ps).toHaveLength(1);
     expect(ps[0]).toMatchObject({ name: "我", isSelf: true, userId: 1 });
     const cats = await db.select().from(categories).orderBy(asc(categories.id));
-    expect(cats.filter((c) => c.kind === "expense").map((c) => c.name)).toEqual([...SYSTEM_EXPENSE_CATEGORIES]);
-    expect(cats.filter((c) => c.kind === "income").map((c) => c.name)).toEqual([...SYSTEM_INCOME_CATEGORIES]);
-    expect(cats.every((c) => c.isSystem && c.userId === 1)).toBe(true);
+    expect(cats.filter((c) => c.kind === "expense").map((c) => [c.key, c.name])).toEqual(SYSTEM_EXPENSE_CATEGORIES.map((c) => [c.key, c.name]));
+    expect(cats.filter((c) => c.kind === "income").map((c) => [c.key, c.name])).toEqual(SYSTEM_INCOME_CATEGORIES.map((c) => [c.key, c.name]));
+    expect(cats.every((c) => c.isSystem && c.userId === 1 && c.archivedAt === null)).toBe(true);
+    expect(cats.filter((c) => !c.countsAsIncome).map((c) => c.key)).toEqual(["reimbursement"]);
   });
 
   it("is idempotent", async () => {

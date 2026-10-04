@@ -81,11 +81,11 @@ describe("BoA CSV import", () => {
     expect(view).toEqual([
       ["Sample Coffee House", "expense", "餐饮"],
       ["Sample Coffee House", "expense", "餐饮"],
-      ["Alex Tester", "income", "转入"],
+      ["Alex Tester", "income", "其他收入"],
       ["Alex Tester", "expense", "人情"],
       ["Sample Payroll", "income", "工资"],
       ["Credit card", "transfer", null],
-      ["Sample Sender", "income", "转入"],
+      ["Sample Sender", "income", "其他收入"],
       ["Wire Transfer Fee", "expense", "其他"],
       ["Sample Mart", "expense", "其他"],
     ]);

@@ -26,7 +26,9 @@ export const KEYWORD_CATEGORIES: ReadonlyArray<readonly [RegExp, string]> = [
     /MCDONALD|HAIDILAO|\bPHO\b|KITCHEN|\bCAFE\b|COFFEE|\bTEA\b|\bBOBA\b|NOODLE|RAMEN|\bBBQ\b|BURGER|PIZZA|SUSHI|\bGRILL\b|BAKERY|DUMPLING|HOT\s?POT|TACO|CHICKEN|RESTAURANT|\bDINER\b|BISTRO|餐厅|饭店|小吃|奶茶|咖啡/,
     "餐饮",
   ],
-  [/REBATE|CASH\s?BACK/, "其他收入"],
+  // Income words last, so a merchant name above wins for spending; they only apply to income rows (see resolveCategoryId).
+  [/REBATE|CASH\s?BACK|\bREWARDS?\b/, "返现"],
+  [/余额宝.*收益|\bINTEREST\b|利息/, "利息"],
 ];
 
 const ALIPAY_CATEGORIES: Record<string, string> = {
@@ -57,20 +59,24 @@ const PLAID_PRIMARY_CATEGORIES: Record<string, string> = {
   GENERAL_SERVICES: "其他",
   INCOME: "其他收入",
 };
+// Plaid's detailed key for pay is INCOME_WAGES; INCOME_SALARY is mapped too in case a feed uses it.
 const PLAID_DETAILED_CATEGORIES: Record<string, string> = {
   FOOD_AND_DRINK_GROCERIES: "买菜",
+  INCOME_WAGES: "工资",
   INCOME_SALARY: "工资",
+  INCOME_INTEREST_EARNED: "利息",
+  INCOME_DIVIDENDS: "利息",
 };
 
 // Bank of America CSV sourceCategory (set by the importer from the description). Kind-dependent ones
 // are resolved in sourceCategoryName; Purchase / ACH / Transfer / ATM fall through.
 const BOA_CATEGORIES: Record<string, { expense?: string; income?: string }> = {
-  Zelle: { expense: "人情", income: "转入" },
-  Wire: { expense: "其他", income: "转入" },
+  Zelle: { expense: "人情", income: "其他收入" },
+  Wire: { expense: "其他", income: "其他收入" },
   Fee: { expense: "其他" },
   Payroll: { income: "工资" },
-  Interest: { income: "其他收入" },
-  Rewards: { income: "其他收入" },
+  Interest: { income: "利息" },
+  Rewards: { income: "返现" },
   Deposit: { income: "其他收入" },
 };
 

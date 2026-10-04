@@ -281,7 +281,7 @@ describe("status, categories and batches", () => {
     const tx = await db.select().from(transactions).orderBy(asc(transactions.id));
     const txCats = [];
     for (const t of tx) txCats.push(await catName(db, t.categoryId));
-    expect(txCats).toEqual(["旅行", "餐饮", "交通", "餐饮", "餐饮", "其他收入", "其他", null]);
+    expect(txCats).toEqual(["旅行", "餐饮", "交通", "餐饮", "餐饮", "返现", "其他", null]);
     expect(tx[0]!.merchant).toBe("Acme Travel");
     expect(res.participantSuggestions).toEqual([
       { lineNo: rows[0]!.lineNo, transactionId: tx[0]!.id, merchant: "Acme Travel", participantIds: [roommate.id] },

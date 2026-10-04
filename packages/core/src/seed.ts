@@ -1,25 +1,23 @@
-import { categories, type Db, participants } from "@yomi/db";
+import { type Db, participants } from "@yomi/db";
+import { type IncomeUpgradeResult, upgradeIncomeTaxonomy } from "./ledger/income-taxonomy";
+import { ensureSystemCategories } from "./ledger/system-categories";
 import { getCurrentUser } from "./user";
+
+export { LEGACY_INCOME_CATEGORIES, SYSTEM_EXPENSE_CATEGORIES, SYSTEM_INCOME_CATEGORIES, type SystemCategory } from "./ledger/system-categories";
 
 export const SELF_PARTICIPANT_NAME = "我";
 
-export const SYSTEM_EXPENSE_CATEGORIES = [
-  "餐饮", "买菜", "交通", "购物", "日用", "居住", "娱乐", "订阅", "医疗", "教育", "旅行", "人情", "公益", "其他",
-] as const;
-
-export const SYSTEM_INCOME_CATEGORIES = ["工资", "退款", "转入", "其他收入"] as const;
-
-/** Inserts the self participant and system categories for the current user. Safe to run repeatedly. */
-export async function seed(db: Db): Promise<void> {
-  const userId = getCurrentUser().id;
+/**
+ * Inserts the self participant and system categories for the current user, then runs the one-time income upgrade of
+ * existing rows (its counts, or null when it ran before). Safe to run repeatedly.
+ */
+export async function seed(db: Db): Promise<IncomeUpgradeResult | null> {
+  const user = getCurrentUser();
   await db.transaction(async (tx) => {
     await tx.insert(participants)
-      .values({ userId, name: SELF_PARTICIPANT_NAME, isSelf: true })
+      .values({ userId: user.id, name: SELF_PARTICIPANT_NAME, isSelf: true })
       .onConflictDoNothing();
-    const rows = [
-      ...SYSTEM_EXPENSE_CATEGORIES.map((name, i) => ({ userId, name, kind: "expense" as const, isSystem: true, sort: i })),
-      ...SYSTEM_INCOME_CATEGORIES.map((name, i) => ({ userId, name, kind: "income" as const, isSystem: true, sort: i })),
-    ];
-    await tx.insert(categories).values(rows).onConflictDoNothing();
+    await ensureSystemCategories(tx, user.id);
   });
+  return await upgradeIncomeTaxonomy(db, user);
 }

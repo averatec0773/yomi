@@ -42,7 +42,11 @@ describe("keywordCategoryName", () => {
     ["Popeyes Chicken", "餐饮"],
     ["某某小吃", "餐饮"],
     ["奶茶店", "餐饮"],
-    ["CASHBACK REBATE", "其他收入"],
+    ["CASHBACK REBATE", "返现"],
+    ["Card Rewards Credit", "返现"],
+    ["余额宝-2026.09.01-收益发放", "利息"],
+    ["INTEREST PAYMENT", "利息"],
+    ["Interest Kitchen", "餐饮"],
     ["Steamboat Supplies", "娱乐"],
     ["ANTHROPIC", "订阅"],
     ["Claude.ai Subscription", "订阅"],
@@ -61,5 +65,17 @@ describe("sourceCategoryName", () => {
     expect(sourceCategoryName({ source: "wechat", sourceCategory: "转账-退款" })).toBe("人情");
     expect(sourceCategoryName({ source: "wechat", sourceCategory: "微信红包-退款" })).toBe("人情");
     expect(sourceCategoryName({ source: "wechat", sourceCategory: "商户消费-退款" })).toBeNull();
+  });
+
+  it("files income by kind: Zelle and wires in as other income (never 转入), rewards, interest and Plaid pay by detail", () => {
+    expect(sourceCategoryName({ source: "boa_csv", sourceCategory: "Zelle", kind: "income" })).toBe("其他收入");
+    expect(sourceCategoryName({ source: "boa_csv", sourceCategory: "Wire", kind: "income" })).toBe("其他收入");
+    expect(sourceCategoryName({ source: "boa_csv", sourceCategory: "Rewards", kind: "income" })).toBe("返现");
+    expect(sourceCategoryName({ source: "boa_csv", sourceCategory: "Interest", kind: "income" })).toBe("利息");
+    expect(sourceCategoryName({ source: "plaid", sourceCategory: "INCOME/INCOME_WAGES" })).toBe("工资");
+    expect(sourceCategoryName({ source: "plaid", sourceCategory: "INCOME/INCOME_SALARY" })).toBe("工资");
+    expect(sourceCategoryName({ source: "plaid", sourceCategory: "INCOME/INCOME_INTEREST_EARNED" })).toBe("利息");
+    expect(sourceCategoryName({ source: "plaid", sourceCategory: "INCOME/INCOME_DIVIDENDS" })).toBe("利息");
+    expect(sourceCategoryName({ source: "plaid", sourceCategory: "INCOME/INCOME_OTHER_INCOME" })).toBe("其他收入");
   });
 });

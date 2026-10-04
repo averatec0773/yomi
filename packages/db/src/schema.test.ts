@@ -75,7 +75,7 @@ describe("migrations", () => {
   it("is idempotent: a second run applies nothing and logs one migration per journal entry", async () => {
     await migrate(db);
     const log = await queryRows<{ n: number }>(db, sql`select count(*)::int as n from drizzle.__drizzle_migrations`);
-    expect(log[0]!.n).toBe(6);
+    expect(log[0]!.n).toBe(7);
     expect(await listTables(db)).toHaveLength(24);
   });
 

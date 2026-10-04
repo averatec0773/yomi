@@ -39,8 +39,12 @@ export const categories = pgTable(
     isSystem: boolean("is_system").notNull().default(false),
     sort: integer("sort").notNull().default(0),
     archivedAt: text("archived_at"),
+    /** Dictionary key of a system category (`dining`, `salary`, ...); null for categories the user made. */
+    key: text("key"),
+    /** Income on this category counts in income totals and the savings rate (meaningful for kind income only). */
+    countsAsIncome: boolean("counts_as_income").notNull().default(true),
   },
-  (t) => [uniqueIndex("categories_user_name_uq").on(t.userId, t.name)],
+  (t) => [uniqueIndex("categories_user_name_uq").on(t.userId, t.name), uniqueIndex("categories_user_key_uq").on(t.userId, t.key)],
 );
 
 export const importBatches = pgTable("import_batches", {
@@ -68,6 +72,14 @@ export const importBatches = pgTable("import_batches", {
 
 export const PROVISIONAL_KINDS = ["capture", "hold"] as const;
 export type ProvisionalKind = (typeof PROVISIONAL_KINDS)[number];
+export const TRANSACTION_KINDS = ["expense", "income", "transfer", "refund"] as const;
+/**
+ * Why a row is an own-account transfer: own_name (the sender or receiver is one of my names), pair (the other leg is in
+ * another of my accounts), broker (a brokerage deposit or withdrawal), hint (the bank calls it a transfer, nothing else
+ * confirms it; only set when the user confirms).
+ */
+export const KIND_RULES = ["own_name", "pair", "broker", "hint"] as const;
+export type KindRule = (typeof KIND_RULES)[number];
 
 export const transactions = pgTable(
   "transactions",
@@ -86,7 +98,7 @@ export const transactions = pgTable(
     currency: text("currency").notNull(),
     originalAmountMinor: bigint("original_amount_minor", { mode: "number" }),
     originalCurrency: text("original_currency"),
-    kind: text("kind", { enum: ["expense", "income", "transfer", "refund"] }).notNull(),
+    kind: text("kind", { enum: TRANSACTION_KINDS }).notNull(),
     counterpartyRaw: text("counterparty_raw").notNull().default(""),
     descriptionRaw: text("description_raw").notNull().default(""),
     merchant: text("merchant").notNull().default(""),
@@ -111,6 +123,14 @@ export const transactions = pgTable(
      * pre-authorisation) is not counted until superseded. Null = final (statements, syncs, manual entries).
      */
     provisional: text("provisional", { enum: PROVISIONAL_KINDS }),
+    /** The other leg of an own-account transfer (both legs point at each other). */
+    transferPeerId: integer("transfer_peer_id").references((): AnyPgColumn => transactions.id),
+    /** Set when a transfer rule (or the user confirming one) made this row a transfer; see KIND_RULES. */
+    kindRule: text("kind_rule", { enum: KIND_RULES }),
+    /** Kind before kind_rule changed it; undo restores it. */
+    priorKind: text("prior_kind", { enum: TRANSACTION_KINDS }),
+    /** The user said a repayment or own-transfer proposal for this row is wrong; it is not proposed again. */
+    reviewDismissedAt: text("review_dismissed_at"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -120,6 +140,7 @@ export const transactions = pgTable(
     index("transactions_user_occurred_on_idx").on(t.userId, t.occurredOn),
     index("transactions_user_merchant_idx").on(t.userId, t.merchant),
     index("transactions_duplicate_of_idx").on(t.duplicateOfId),
+    index("transactions_transfer_peer_idx").on(t.transferPeerId),
   ],
 );
 
@@ -258,7 +279,7 @@ export const settlements = pgTable(
     /** 'payment': money changed hands. 'opening': an opening balance, not a payment. */
     kind: text("kind", { enum: ["payment", "opening"] }).notNull().default("payment"),
     /** Kind of the linked transaction before the settlement flipped it to transfer; restored on delete. */
-    priorKind: text("prior_kind", { enum: ["expense", "income", "transfer", "refund"] }),
+    priorKind: text("prior_kind", { enum: TRANSACTION_KINDS }),
     createdAt: createdAt(),
   },
   (t) => [index("settlements_transaction_idx").on(t.transactionId)],
