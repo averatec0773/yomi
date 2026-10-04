@@ -1,15 +1,15 @@
 import type { AnalysisCurrency, RangeCurrencyOverview } from "@yomi/core";
-import { ChartColumnIcon, TagIcon } from "lucide-react";
+import { ChartColumnIcon } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { ProvisionalLabel, ProvisionalNote } from "@/components/capture/provisional";
 import { Money } from "@/components/money";
-import { ListCard } from "@/components/ui-kit/list-card";
 import { fmt, plural } from "@/i18n";
 import type { Dictionary } from "@/i18n/en";
 import { rich } from "@/i18n/rich";
 import { getI18n } from "@/i18n/server";
 import { dayLabel } from "@/lib/month";
+import { CategoriesCard } from "./categories-card";
 import { CategoryList } from "./category-list";
 import { LargestCard } from "./largest-card";
 import { MonthlyTrend } from "./monthly-trend";
@@ -153,9 +153,11 @@ export async function CurrencySection({ data, period, days, inProgress, previous
 
       <div className="grid gap-6 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <div className="flex min-w-0 flex-col gap-3">
-          <ListCard icon={TagIcon} title={<>{t.analysis.categories}{code}</>}>
-            <CategoryList period={period} currency={cur} items={data.byCategory} />
-          </ListCard>
+          <CategoriesCard
+            code={code}
+            spending={<CategoryList period={period} currency={cur} items={data.byCategory} />}
+            income={<CategoryList period={period} currency={cur} items={data.incomeByCategory} income />}
+          />
           {data.smallPayments.count > 0 && (
             <p className="text-body text-2">
               {rich(plural(t.analysis.small, data.smallPayments.count), {
