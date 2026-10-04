@@ -58,7 +58,7 @@ export function TransferNames({ selfId, initial }: { selfId: number; initial: Id
   };
 
   return (
-    <div className="flex flex-col gap-2" data-testid="transfer-names">
+    <div className="mt-3 flex flex-col gap-2" data-testid="transfer-names">
       <h3 id="transfer-names-label" className="text-body font-medium">
         {s.title}
       </h3>

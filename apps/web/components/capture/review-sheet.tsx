@@ -1,6 +1,19 @@
 "use client";
 
-import type { BulkReviewAction, CaptureReviewItem, MatchCandidate, ResolveResult, ReviewAction, ReviewList } from "@yomi/contracts";
+import type {
+  BulkReviewAction,
+  BulkTransactionReviewResult,
+  CaptureReviewItem,
+  Category,
+  CategoryList,
+  MatchCandidate,
+  ResolveResult,
+  ReviewAction,
+  ReviewItem,
+  ReviewList,
+  TransactionReviewBody,
+  TransactionReviewResult,
+} from "@yomi/contracts";
 import { CircleAlertIcon, InboxIcon, RotateCwIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, useTransition } from "react";
@@ -18,24 +31,31 @@ import { apiFetch } from "@/lib/api";
 import { dayLabel } from "@/lib/month";
 import { localTimeOf, useTimeZone } from "@/lib/time-zone";
 import { cn } from "@/lib/utils";
+import { RepaymentItem, TransferItem } from "./transaction-items";
 
 /** Phones get the sheet at full height, thumb-reachable, with the bulk bar at its foot. */
 const PHONE_FULL =
   "max-sm:inset-0 max-sm:top-0 max-sm:left-0 max-sm:h-dvh max-sm:max-h-dvh max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-none max-sm:ring-0";
 
-/** Bulk actions each type allows (choosing a candidate is never bulk). */
-const BULK: Record<CaptureReviewItem["type"], BulkReviewAction[]> = {
+/** Bulk actions each type allows (choosing a candidate or settling a repayment is never bulk). */
+const BULK: Record<ReviewItem["type"], (BulkReviewAction | "own_transfer")[]> = {
   ambiguous: ["keep_separate", "discard"],
   near_miss: ["keep_separate", "discard"],
   stale: ["keep_final", "discard"],
   amount_changed: [],
+  repayment: [],
+  own_transfer: ["own_transfer"],
 };
 
 type Sheet = Dictionary["capture"]["sheet"];
+type BulkAction = BulkReviewAction | "own_transfer";
 
-function bulkLabel(s: Sheet, action: BulkReviewAction): string {
-  return { keep_separate: s.actions.keepSeparate, keep_final: s.actions.keepFinal, discard: s.actions.discard }[action];
+function bulkLabel(s: Sheet, action: BulkAction): string {
+  return { keep_separate: s.actions.keepSeparate, keep_final: s.actions.keepFinal, discard: s.actions.discard, own_transfer: s.actions.confirmTransfers }[action];
 }
+
+/** One selection key per item: captures by capture id, ledger rows by transaction id. */
+const keyOf = (i: ReviewItem) => (i.subject === "capture" ? `c${i.captureId}` : `t${i.transactionId}`);
 
 /** "1 day later", "same day", "2 days earlier". */
 function dayShift(s: Sheet, days: number): string {
@@ -58,17 +78,19 @@ function ReviewBody() {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [list, setList] = useState<ReviewList | null>(null);
+  const [incomeCategories, setIncomeCategories] = useState<Category[]>([]);
   const [loadFailed, setLoadFailed] = useState(false);
   const [selecting, setSelecting] = useState(false);
-  const [selected, setSelected] = useState<ReadonlySet<number>>(new Set());
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoadFailed(false);
     try {
-      const next = await apiFetch<ReviewList>("/review");
+      const [next, cats] = await Promise.all([apiFetch<ReviewList>("/review"), apiFetch<CategoryList>("/categories")]);
       setList(next);
-      setSelected((sel) => new Set([...sel].filter((id) => next.items.some((i) => i.subject === "capture" && i.captureId === id))));
+      setIncomeCategories(cats.categories.filter((c) => c.kind === "income" && c.archivedAt === null));
+      setSelected((sel) => new Set([...sel].filter((k) => next.items.some((i) => keyOf(i) === k))));
     } catch {
       // apiFetch toasted; with no queue shown yet, the sheet offers Try again instead of a skeleton that never ends.
       setLoadFailed(true);
@@ -83,25 +105,27 @@ function ReviewBody() {
     startTransition(() => router.refresh());
   }, [load, router]);
 
-  const undo = useCallback(
-    async (ids: number[]) => {
-      try {
-        for (const id of [...ids].reverse()) await apiFetch<ResolveResult>(`/captures/${id}/undo`, { method: "POST" });
-        toast(t.transactions.toastUndone);
-      } catch {
-        /* apiFetch toasted */
-      }
-      await refresh();
-    },
-    [refresh, t],
-  );
-
+  /** Runs an action, then toasts `message` with an Undo that calls `undo` with the action's result. */
   const run = useCallback(
-    async (ids: number[], message: string, send: () => Promise<unknown>) => {
+    async <T,>(message: string, send: () => Promise<T>, undo: (result: T) => Promise<void>) => {
       setBusy(true);
       try {
-        await send();
-        toast.success(message, { action: { label: t.common.undo, onClick: () => void undo(ids) } });
+        const result = await send();
+        toast.success(message, {
+          action: {
+            label: t.common.undo,
+            onClick: () =>
+              void (async () => {
+                try {
+                  await undo(result);
+                  toast(t.transactions.toastUndone);
+                } catch {
+                  /* apiFetch toasted */
+                }
+                await refresh();
+              })(),
+          },
+        });
         await refresh();
       } catch {
         /* apiFetch toasted */
@@ -109,22 +133,71 @@ function ReviewBody() {
         setBusy(false);
       }
     },
-    [refresh, undo, t],
+    [refresh, t],
   );
 
-  const act = (item: CaptureReviewItem, action: ReviewAction, candidateId?: number) =>
-    run([item.captureId], s.toasts[action], () => apiFetch<ResolveResult>(`/review/${item.captureId}`, { json: { action, candidateId } }));
-
-  const items = (list?.items ?? []).filter((i): i is CaptureReviewItem => i.subject === "capture");
-  const chosen = items.filter((i) => selected.has(i.captureId));
-  const bulkActions = (["keep_separate", "keep_final", "discard"] as const).filter((a) => chosen.length > 0 && chosen.every((i) => BULK[i.type].includes(a)));
-  const bulk = (action: BulkReviewAction) => {
-    const ids = chosen.map((i) => i.captureId);
-    void run(ids, plural(s.bulkToasts[action], ids.length), async () => {
-      await apiFetch<ResolveResult>("/review/bulk", { json: { captureIds: ids, action } });
-      setSelected(new Set());
-    });
+  const undoCaptures = async (ids: number[]) => {
+    for (const id of [...ids].reverse()) await apiFetch<ResolveResult>(`/captures/${id}/undo`, { method: "POST" });
   };
+  /** Takes back a transaction item's action: a settlement is deleted, anything else goes back to the row's prior state. */
+  const undoTransaction = async (r: TransactionReviewResult, action: TransactionReviewBody["action"]) => {
+    if (r.settlementId != null) await apiFetch(`/settlements/${r.settlementId}`, { method: "DELETE" });
+    else if (action !== "settle") await apiFetch<TransactionReviewResult>(`/review/transactions/${r.transactionId}/undo`, { json: { action, prior: r.prior } });
+  };
+
+  const act = (item: CaptureReviewItem, action: ReviewAction, candidateId?: number) =>
+    run(
+      s.toasts[action],
+      () => apiFetch<ResolveResult>(`/review/${item.captureId}`, { json: { action, candidateId } }),
+      () => undoCaptures([item.captureId]),
+    );
+  const actOn = (transactionId: number, body: TransactionReviewBody, message: string) =>
+    run(
+      message,
+      () => apiFetch<TransactionReviewResult>(`/review/transactions/${transactionId}`, { json: body }),
+      (r) => undoTransaction(r, body.action),
+    );
+
+  const items = list?.items ?? [];
+  const chosen = items.filter((i) => selected.has(keyOf(i)));
+  const bulkActions = (["keep_separate", "keep_final", "discard", "own_transfer"] as const).filter((a) => chosen.length > 0 && chosen.every((i) => BULK[i.type].includes(a)));
+  const bulk = (action: BulkAction) => {
+    if (action === "own_transfer") {
+      const ids = chosen.flatMap((i) => (i.subject === "transaction" ? [i.transactionId] : []));
+      void run(
+        plural(s.bulkToasts.own_transfer, ids.length),
+        async () => {
+          const r = await apiFetch<BulkTransactionReviewResult>("/review/transactions/bulk", { json: { transactionIds: ids, action } });
+          setSelected(new Set());
+          return r;
+        },
+        async (r) => {
+          for (const x of [...r.results].reverse()) await undoTransaction(x, "own_transfer");
+        },
+      );
+      return;
+    }
+    const ids = chosen.flatMap((i) => (i.subject === "capture" ? [i.captureId] : []));
+    void run(
+      plural(s.bulkToasts[action], ids.length),
+      async () => {
+        await apiFetch<ResolveResult>("/review/bulk", { json: { captureIds: ids, action } });
+        setSelected(new Set());
+      },
+      () => undoCaptures(ids),
+    );
+  };
+  const check = (item: ReviewItem) => ({
+    selecting,
+    checked: selected.has(keyOf(item)),
+    onCheck: (on: boolean) =>
+      setSelected((sel) => {
+        const next = new Set(sel);
+        if (on) next.add(keyOf(item));
+        else next.delete(keyOf(item));
+        return next;
+      }),
+  });
 
   return (
     <DialogContent
@@ -187,24 +260,15 @@ function ReviewBody() {
             {s.empty}
           </EmptyState>
         )}
-        {items.map((item) => (
-          <Item
-            key={item.captureId}
-            item={item}
-            busy={busy}
-            selecting={selecting}
-            checked={selected.has(item.captureId)}
-            onCheck={(on) =>
-              setSelected((sel) => {
-                const next = new Set(sel);
-                if (on) next.add(item.captureId);
-                else next.delete(item.captureId);
-                return next;
-              })
-            }
-            onAct={(action, candidateId) => void act(item, action, candidateId)}
-          />
-        ))}
+        {items.map((item) =>
+          item.subject === "capture" ? (
+            <Item key={keyOf(item)} item={item} busy={busy} {...check(item)} onAct={(action, candidateId) => void act(item, action, candidateId)} />
+          ) : item.type === "repayment" ? (
+            <RepaymentItem key={keyOf(item)} item={item} busy={busy} selecting={selecting} incomeCategories={incomeCategories} onAct={(body, message) => void actOn(item.transactionId, body, message)} />
+          ) : (
+            <TransferItem key={keyOf(item)} item={item} busy={busy} {...check(item)} incomeCategories={incomeCategories} onAct={(body, message) => void actOn(item.transactionId, body, message)} />
+          ),
+        )}
       </div>
       {selecting && chosen.length > 0 && (
         <div

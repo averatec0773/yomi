@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { ReviewSheet } from "./review-sheet";
 
 /**
- * The quiet line that leads to the review queue: Inbox icon, "3 captures need a look", text button "Review" (opens the
+ * The quiet line that leads to the review queue: Inbox icon, "3 items need a look", text button "Review" (opens the
  * sheet). Not a card, no badge; nothing while the queue is empty. `text` picks the wording (Transactions, the import
  * receipt).
  */
