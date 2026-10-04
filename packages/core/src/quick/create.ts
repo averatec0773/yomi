@@ -18,7 +18,8 @@ export interface QuickEntryInput {
   categoryHint: string | null;
 }
 
-async function manualAccountId(db: Db, user: CurrentUser, currency: string): Promise<number> {
+/** The auto-created "手动记账" (manual entries) cash account rows typed without an account land on. */
+export async function manualAccountId(db: Db, user: CurrentUser, currency: string): Promise<number> {
   const found = (await db
     .select({ id: accounts.id })
     .from(accounts)

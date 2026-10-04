@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { CaptureState } from "./capture";
-import { CurrencyCode, DateString, MessageParams } from "./common";
+import { Currency, CurrencyCode, DateString, Id, MessageParams } from "./common";
 import { CreatedEntry, SplitMode } from "./split";
 
 export const QuickParseBody = z.object({
@@ -79,3 +79,34 @@ export const QuickCreated = CreatedEntry.extend({
   review: z.enum(["ambiguous", "near_miss", "amount_changed"]).nullable().optional(),
 });
 export type QuickCreated = z.infer<typeof QuickCreated>;
+
+/** One of my accounts as the quick-add income and transfer forms offer it. */
+export const QuickAccount = z.object({ id: z.int(), name: z.string(), currency: CurrencyCode });
+export type QuickAccount = z.infer<typeof QuickAccount>;
+
+/** GET /api/quick/accounts. */
+export const QuickAccountList = z.object({ accounts: z.array(QuickAccount) });
+export type QuickAccountList = z.infer<typeof QuickAccountList>;
+
+/** POST /api/quick/income: income typed by hand; `accountId` null books it on the manual cash account. */
+export const QuickIncomeBody = z
+  .object({
+    amountMinor: z.int().positive(),
+    currency: Currency,
+    categoryId: Id,
+    date: DateString,
+    accountId: Id.nullable(),
+    note: z.string().max(200).nullable().optional(),
+  })
+  .strict();
+export type QuickIncomeBody = z.infer<typeof QuickIncomeBody>;
+
+/** POST /api/quick/transfer: money moved between two of my accounts (same currency). */
+export const QuickTransferBody = z
+  .object({ fromAccountId: Id, toAccountId: Id, amountMinor: z.int().positive(), date: DateString })
+  .strict();
+export type QuickTransferBody = z.infer<typeof QuickTransferBody>;
+
+/** POST /api/quick/income and /api/quick/transfer: the rows created (a transfer's outgoing leg first). */
+export const QuickRowsCreated = z.object({ transactionIds: z.array(z.int()) });
+export type QuickRowsCreated = z.infer<typeof QuickRowsCreated>;

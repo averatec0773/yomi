@@ -1,6 +1,6 @@
-import { ApiError, QuickCreated, QuickDraft } from "@yomi/contracts";
-import { createParticipant, getCurrentUser, seed } from "@yomi/core";
-import { transactions } from "@yomi/db";
+import { ApiError, QuickAccountList, QuickCreated, QuickDraft, QuickRowsCreated } from "@yomi/contracts";
+import { createParticipant, getCurrentUser, listCategories, seed } from "@yomi/core";
+import { accounts, transactions } from "@yomi/db";
 import { testDb } from "@yomi/db/testing";
 import { describe, expect, it } from "vitest";
 import { createApi } from "./index";
@@ -71,5 +71,39 @@ describe("quick add with a pasted ICBC alert", () => {
     expect(again.status).toBe(200);
     expect(QuickCreated.parse(await again.json())).toMatchObject({ alreadyAdded: true });
     expect((await db.select().from(transactions)).map((t) => t.source)).toEqual(["sms"]);
+  });
+});
+
+describe("quick add income and transfers", () => {
+  it("lists my accounts, saves income and a transfer pair, and answers bad requests with a code", async () => {
+    const { db, app } = await setup();
+    const [checking, savings] = await db
+      .insert(accounts)
+      .values([
+        { userId: getCurrentUser().id, name: "Checking 3141", kind: "debit_card", currency: "USD" },
+        { userId: getCurrentUser().id, name: "Savings 5501", kind: "debit_card", currency: "USD" },
+      ])
+      .returning({ id: accounts.id });
+    const list = QuickAccountList.parse(await (await app.request("/api/quick/accounts")).json());
+    expect(list.accounts.map((a) => a.name)).toEqual(["Checking 3141", "Savings 5501"]);
+
+    const salary = (await listCategories(db, getCurrentUser())).find((c) => c.key === "salary")!.id;
+    const income = await app.request("/api/quick/income", post({ amountMinor: 320000, currency: "usd", categoryId: salary, date: "2026-09-15", accountId: checking!.id, note: "Paycheck" }));
+    expect(income.status).toBe(201);
+    expect(QuickRowsCreated.parse(await income.json()).transactionIds).toHaveLength(1);
+
+    const transfer = await app.request("/api/quick/transfer", post({ fromAccountId: checking!.id, toAccountId: savings!.id, amountMinor: 50000, date: "2026-09-12" }));
+    expect(transfer.status).toBe(201);
+    const [out, into] = QuickRowsCreated.parse(await transfer.json()).transactionIds;
+    const peers = new Map((await db.select().from(transactions)).map((t) => [t.id, t.transferPeerId]));
+    expect([peers.get(out!), peers.get(into!)]).toEqual([into, out]);
+
+    const same = await app.request("/api/quick/transfer", post({ fromAccountId: checking!.id, toAccountId: checking!.id, amountMinor: 1, date: "2026-09-12" }));
+    expect(same.status).toBe(400);
+    expect(ApiError.parse(await same.json()).code).toBe("quick_transfer_same_account");
+    const missing = await app.request("/api/quick/income", post({ amountMinor: 1, currency: "USD", categoryId: salary, date: "2026-09-15", accountId: 9999 }));
+    expect(missing.status).toBe(404);
+    const invalid = await app.request("/api/quick/income", post({ amountMinor: 1, currency: "USD", categoryId: salary, date: "2026-09-15" }));
+    expect(ApiError.parse(await invalid.json()).code).toBe("validation_failed");
   });
 });
