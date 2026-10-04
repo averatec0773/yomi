@@ -21,7 +21,7 @@ export interface IdentityInput {
 }
 
 /** Kinds "me" can hold: the names my own transfers carry ("Names on my transfers"), used to spot own-account transfers. */
-export const SELF_IDENTITY_KINDS: readonly IdentityKind[] = ["bank_name", "zelle_name", "alipay", "wechat"];
+const SELF_IDENTITY_KINDS: readonly IdentityKind[] = ["bank_name", "zelle_name", "alipay", "wechat"];
 
 /** Kinds whose value can appear inside free bank or wallet text, so a contains-match is meaningful. */
 export const TEXT_MATCH_KINDS: readonly IdentityKind[] = ["wechat", "zelle_name", "alipay"];
