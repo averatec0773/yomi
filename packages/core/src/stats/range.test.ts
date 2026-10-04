@@ -47,7 +47,16 @@ describe("rangeOverview", () => {
     // 5000 + 3000 + 10000 (my half) − 500 + 4000
     expect(cny).toMatchObject({ currency: "CNY", spendingMinor: 21500, incomeMinor: 800000, transactionCount: 5, sharedReceivableMinor: 10000 });
     expect(cny!.dailyAverageMinor).toBe(Math.round(21500 / 92));
-    expect(cny!.previous).toEqual({ spendingMinor: 8000, incomeMinor: 0, transactionCount: 2, dailyAverageMinor: Math.round(8000 / 91) });
+    expect(cny!.previous).toEqual({
+      spendingMinor: 8000,
+      incomeMinor: 0,
+      incomeNotCountedMinor: 0,
+      netMinor: -8000,
+      savingsRateBp: null,
+      transactionCount: 2,
+      dailyAverageMinor: Math.round(8000 / 91),
+    });
+    expect(cny).toMatchObject({ netMinor: 800000 - 21500, savingsRateBp: Math.round(((800000 - 21500) * 10000) / 800000) });
     expect(cny!.monthly).toEqual([
       { month: "2026-07", spendingMinor: 5000, partial: false },
       { month: "2026-08", spendingMinor: 3000, partial: false },

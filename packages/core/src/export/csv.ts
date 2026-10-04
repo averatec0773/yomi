@@ -1,4 +1,5 @@
-import type { Db } from "@yomi/db";
+import { accounts, type Db, transactions } from "@yomi/db";
+import { and, eq, inArray, isNotNull } from "@yomi/db/orm";
 import { LedgerError } from "../ledger/errors";
 import { countsAsSpending } from "../ledger/share";
 import { listTransactions, type TransactionItem } from "../ledger/transactions";
@@ -43,7 +44,7 @@ const LABELS: Record<CsvLocale, CsvLabels> = {
   en: {
     kind: { expense: "Expense", income: "Income", transfer: "Transfer", refund: "Refund" },
     source: { alipay: "Alipay", wechat: "WeChat", icbc_pdf: "ICBC credit card", plaid: "Bank sync", boa_csv: "Bank of America CSV", sms: "SMS", manual: "Manual" },
-    transactionColumns: ["Date", "Time", "Merchant", "Description", "Category", "Type", "Amount", "Currency", "My share", "Split", "Payer", "Account", "Source", "Note"],
+    transactionColumns: ["Date", "Time", "Merchant", "Description", "Category", "Type", "Amount", "Currency", "My share", "Split", "Payer", "Account", "Transfer account", "Source", "Note"],
     splitColumns: ["Date", "Type", "Merchant", "Total", "Their share", "Payer", "Change", "Note"],
     me: "Me",
     carried: "Carried over",
@@ -66,7 +67,7 @@ const LABELS: Record<CsvLocale, CsvLabels> = {
   "zh-CN": {
     kind: { expense: "支出", income: "收入", transfer: "转账", refund: "退款" },
     source: { alipay: "支付宝", wechat: "微信", icbc_pdf: "工商银行信用卡", plaid: "银行同步", boa_csv: "美国银行 CSV", sms: "短信", manual: "手动" },
-    transactionColumns: ["日期", "时间", "商户", "说明", "分类", "类型", "金额", "币种", "我承担", "分摊", "付款人", "账户", "来源", "备注"],
+    transactionColumns: ["日期", "时间", "商户", "说明", "分类", "类型", "金额", "币种", "我承担", "分摊", "付款人", "账户", "转账账户", "来源", "备注"],
     splitColumns: ["日期", "类型", "商户", "总额", "对方份额", "付款人", "变动", "备注"],
     me: "我",
     carried: "此前结余",
@@ -99,7 +100,31 @@ export function toCsv(rows: readonly (readonly string[])[]): string {
   return BOM + rows.map((r) => r.map(cell).join(",")).join("\r\n") + "\r\n";
 }
 
-function transactionRow(t: TransactionItem, l: CsvLabels, timeZone: string): string[] {
+/** For rows of an own-account transfer pair, the other leg's account name, keyed by row id. */
+async function transferAccounts(db: Db, user: CurrentUser, ids: readonly number[]): Promise<Map<number, string>> {
+  const out = new Map<number, string>();
+  for (let i = 0; i < ids.length; i += PAGE) {
+    const pairs = await db
+      .select({ id: transactions.id, peerId: transactions.transferPeerId })
+      .from(transactions)
+      .where(and(eq(transactions.userId, user.id), inArray(transactions.id, ids.slice(i, i + PAGE)), isNotNull(transactions.transferPeerId)));
+    if (pairs.length === 0) continue;
+    const peers = new Map(
+      (await db
+        .select({ id: transactions.id, account: accounts.name })
+        .from(transactions)
+        .innerJoin(accounts, eq(accounts.id, transactions.accountId))
+        .where(inArray(transactions.id, pairs.map((p) => p.peerId!)))).map((p) => [p.id, p.account]),
+    );
+    for (const p of pairs) {
+      const name = peers.get(p.peerId!);
+      if (name) out.set(p.id, name);
+    }
+  }
+  return out;
+}
+
+function transactionRow(t: TransactionItem, l: CsvLabels, timeZone: string, transferAccount: string): string[] {
   const c = t.currency;
   const others = t.splits.filter((s) => !s.isSelf);
   const self = t.splits.filter((s) => s.isSelf);
@@ -119,6 +144,7 @@ function transactionRow(t: TransactionItem, l: CsvLabels, timeZone: string): str
     split,
     t.splits.length > 0 && payer ? name(payer) : "",
     t.accountName ?? "",
+    transferAccount,
     l.source[t.source] ?? t.source,
     t.note ?? "",
   ];
@@ -149,10 +175,9 @@ export async function exportTransactionsCsv(
     if (page.items.length < PAGE) break;
   }
   const zone = await getTimeZone(db, user);
-  const rows = items
-    .filter((t) => t.status === "ok" && t.duplicateOfId == null)
-    .reverse()
-    .map((t) => transactionRow(t, l, zone));
+  const visible = items.filter((t) => t.status === "ok" && t.duplicateOfId == null).reverse();
+  const peers = await transferAccounts(db, user, visible.filter((t) => t.kind === "transfer").map((t) => t.id));
+  const rows = visible.map((t) => transactionRow(t, l, zone, peers.get(t.id) ?? ""));
   return toCsv([[...l.transactionColumns], ...rows]);
 }
 

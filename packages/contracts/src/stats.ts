@@ -24,9 +24,20 @@ export const StatsQuery = z
   });
 export type StatsQuery = z.infer<typeof StatsQuery>;
 
+/** Income of one category; `counted` false when its category does not count as income. Share of all the period's income. */
+export const IncomeCategoryShare = CategoryShare.extend({ counted: z.boolean() });
+export type IncomeCategoryShare = z.infer<typeof IncomeCategoryShare>;
+
 export const PeriodMetrics = z.object({
   spendingMinor: z.int(),
+  /** Income on categories that count as income. */
   incomeMinor: z.int(),
+  /** Income on categories that do not count (reimbursements by default). */
+  incomeNotCountedMinor: z.int(),
+  /** incomeMinor − spendingMinor. */
+  netMinor: z.int(),
+  /** net ÷ income in basis points; null without income. */
+  savingsRateBp: z.int().nullable(),
   transactionCount: z.int().nonnegative(),
   dailyAverageMinor: z.int(),
 });
@@ -35,6 +46,8 @@ export type PeriodMetrics = z.infer<typeof PeriodMetrics>;
 export const RangeCurrencyOverview = PeriodMetrics.extend(ProvisionalTotals.shape).extend({
   currency: CurrencyCode,
   byCategory: z.array(CategoryShare),
+  /** Counted categories first, then largest. */
+  incomeByCategory: z.array(IncomeCategoryShare),
   smallPayments: z.object({ thresholdMinor: z.int(), count: z.int().nonnegative(), minor: z.int() }),
   largest: z.array(z.object({ id: z.int(), merchant: z.string(), minor: z.int(), occurredAt: z.string(), occurredOn: z.string(), provisional: z.boolean() })),
   sharedReceivableMinor: z.int(),

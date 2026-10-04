@@ -60,6 +60,9 @@ describe("ledger api", () => {
     const unc = TransactionPage.parse(await (await app.request("/api/transactions?uncategorized=true&limit=2")).json());
     expect(unc).toMatchObject({ total: 3 });
     expect(unc.items).toHaveLength(2);
+    for (const [kind, total] of [["expense", 3], ["income", 0], ["transfer", 0]] as const) {
+      expect(TransactionPage.parse(await (await app.request(`/api/transactions?kind=${kind}`)).json()).total, kind).toBe(total);
+    }
     const bad = await app.request("/api/transactions?month=2026-9");
     expect(bad.status).toBe(400);
     expect(ApiError.parse(await bad.json()).code).toBe("validation_failed");

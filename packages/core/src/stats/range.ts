@@ -1,7 +1,7 @@
 import { categories, type Db } from "@yomi/db";
 import { eq } from "@yomi/db/orm";
 import { LedgerError } from "../ledger/errors";
-import { countsAsIncome, countsAsSpending } from "../ledger/share";
+import { countsAsIncome, countsAsSpending, isIncome } from "../ledger/share";
 import { loadRangeRows, type ProvisionalTotals, provisionalTotals, type SpendingRow } from "../ledger/transactions";
 import { getMonthlyTarget, type MonthTarget } from "../month/target";
 import { getTimeZone } from "../settings/time-zone";
@@ -30,10 +30,22 @@ export interface LargestRow {
   provisional: boolean;
 }
 
+/** Income of one category in a period: counted (its category counts as income) or shown apart. */
+export interface IncomeCategoryShare extends CategoryShare {
+  counted: boolean;
+}
+
 export interface PeriodMetrics {
   /** Σ my share (plan §3). */
   spendingMinor: number;
+  /** Income on categories that count as income. */
   incomeMinor: number;
+  /** Income on categories that do not count (reimbursements by default): listed, never in the totals below. */
+  incomeNotCountedMinor: number;
+  /** incomeMinor − spendingMinor. */
+  netMinor: number;
+  /** net ÷ income in basis points (10000 = 100%); null without income. */
+  savingsRateBp: number | null;
   /** Rows counted as spending. */
   transactionCount: number;
   dailyAverageMinor: number;
@@ -49,6 +61,8 @@ export interface MonthlyPoint {
 export interface RangeCurrencyOverview extends PeriodMetrics, ProvisionalTotals {
   currency: string;
   byCategory: CategoryShare[];
+  /** Income per category, largest first, counted ones before the rest; share of all the period's income. */
+  incomeByCategory: IncomeCategoryShare[];
   smallPayments: { thresholdMinor: number; count: number; minor: number };
   largest: LargestRow[];
   /** Money I fronted for others on rows I paid (Σ others' owed). */
@@ -103,15 +117,41 @@ function divisorDays(r: DateRange, today: string): number {
   return daysInclusive(r.from, today);
 }
 
+/** Income, the part not counted, net and savings rate of one currency's rows (the cash-flow numbers). */
+export function cashFlow(rows: readonly SpendingRow[]): Pick<PeriodMetrics, "spendingMinor" | "incomeMinor" | "incomeNotCountedMinor" | "netMinor" | "savingsRateBp"> {
+  const spendingMinor = rows.filter(countsAsSpending).reduce((a, r) => a + r.myShareMinor, 0);
+  const incomeMinor = rows.filter(countsAsIncome).reduce((a, r) => a + r.amountMinor, 0);
+  const incomeNotCountedMinor = rows.filter((r) => isIncome(r) && !countsAsIncome(r)).reduce((a, r) => a + r.amountMinor, 0);
+  const netMinor = incomeMinor - spendingMinor;
+  return { spendingMinor, incomeMinor, incomeNotCountedMinor, netMinor, savingsRateBp: incomeMinor > 0 ? Math.round((netMinor * 10000) / incomeMinor) : null };
+}
+
 function metrics(rows: readonly SpendingRow[], days: number): PeriodMetrics {
-  const spend = rows.filter(countsAsSpending);
-  const spendingMinor = spend.reduce((a, r) => a + r.myShareMinor, 0);
-  return {
-    spendingMinor,
-    incomeMinor: rows.filter(countsAsIncome).reduce((a, r) => a + r.amountMinor, 0),
-    transactionCount: spend.length,
-    dailyAverageMinor: Math.round(spendingMinor / days),
-  };
+  const flow = cashFlow(rows);
+  return { ...flow, transactionCount: rows.filter(countsAsSpending).length, dailyAverageMinor: Math.round(flow.spendingMinor / days) };
+}
+
+/** Income per category of one currency's rows: counted first, then largest; shares of all income rows. */
+export function incomeCategories(rows: readonly SpendingRow[], names: ReadonlyMap<number, string>): IncomeCategoryShare[] {
+  const income = rows.filter(isIncome);
+  const total = income.reduce((a, r) => a + r.amountMinor, 0);
+  const cats = new Map<number | null, IncomeCategoryShare>();
+  for (const r of income) {
+    const c = cats.get(r.categoryId) ?? {
+      categoryId: r.categoryId,
+      name: r.categoryId == null ? UNCATEGORIZED : (names.get(r.categoryId) ?? UNCATEGORIZED),
+      minor: 0,
+      count: 0,
+      share: 0,
+      counted: r.incomeCounted,
+    };
+    c.minor += r.amountMinor;
+    c.count += 1;
+    cats.set(r.categoryId, c);
+  }
+  return [...cats.values()]
+    .map((c) => ({ ...c, share: total > 0 ? Math.round((c.minor * 10000) / total) : 0 }))
+    .sort((a, b) => Number(b.counted) - Number(a.counted) || b.minor - a.minor || a.name.localeCompare(b.name));
 }
 
 /**
@@ -211,6 +251,7 @@ export async function rangeOverview(
       currency,
       ...m,
       byCategory,
+      incomeByCategory: incomeCategories(mine, names),
       smallPayments: { thresholdMinor, count: small.length, minor: small.reduce((a, r) => a + r.myShareMinor, 0) },
       largest,
       sharedReceivableMinor: mine.reduce((a, r) => a + receivable(r), 0),

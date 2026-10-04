@@ -34,6 +34,10 @@ export const AnalysisToolInput = z.object({
 });
 export type AnalysisToolInput = z.infer<typeof AnalysisToolInput>;
 
+/** Income and cash flow (core incomeSummary) for the same selection, optionally one currency. */
+export const IncomeSummaryToolInput = AnalysisToolInput.extend({ currency: Currency.optional() });
+export type IncomeSummaryToolInput = z.infer<typeof IncomeSummaryToolInput>;
+
 /** Net worth (core netWorth) on a day, over a range, optionally totalled in one currency. */
 export const NetWorthToolInput = z.object({ asOf: DateString.optional(), range: NetWorthRange.optional(), currency: Currency.optional() });
 export type NetWorthToolInput = z.infer<typeof NetWorthToolInput>;
