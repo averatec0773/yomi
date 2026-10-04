@@ -120,7 +120,7 @@ export function IncomeForm({ today }: { today: string }) {
               ))}
             </NativeSelect>
           )}
-          <AmountInput value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" autoFocus aria-invalid={invalid} />
+          <AmountInput value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" autoFocus aria-label={t.common.amount} aria-invalid={invalid} />
         </div>
       </Field>
       <div className="grid gap-3 sm:grid-cols-2">
@@ -215,7 +215,7 @@ export function TransferForm({ today }: { today: string }) {
         <Field label={t.common.amount} hint={invalid ? t.common.badAmount : undefined}>
           <div className="flex gap-2">
             <span className="inline-flex h-9 w-12 shrink-0 items-center text-body text-2">{currency}</span>
-            <AmountInput value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" autoFocus aria-invalid={invalid} />
+            <AmountInput value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" autoFocus aria-label={t.common.amount} aria-invalid={invalid} />
           </div>
         </Field>
         <Field label={t.common.date}>

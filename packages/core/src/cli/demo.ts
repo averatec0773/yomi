@@ -10,9 +10,11 @@ import {
   balances,
   commitImport,
   createFriendPaidExpense,
+  createIncomeEntry,
   createParticipant,
   createQuickEntry,
   createSmsEntry,
+  createTransferEntry,
   formatMinor,
   getCurrentUser,
   listCategories,
@@ -735,6 +737,18 @@ for (let i = 0; i < DAYS.length; i += 3) {
   await upsertBalanceSnapshot(db, user, { accountId: checking, asOf: day, balanceMinor: chk, currency: "USD", source: "plaid", raw: { demo: true } });
 }
 await upsertBalanceSnapshot(db, user, { accountId: checking, asOf: TODAY, balanceMinor: chk + 31240, currency: "USD", source: "plaid", raw: { demo: true } });
+
+// ---------- income typed by hand, and one transfer between my accounts ----------
+// September's paychecks and family support on checking, a reimbursement (not counted as income by default) and a
+// top-up of the Alipay balance from the debit card (a linked transfer pair). The ICBC rebates are the cashback.
+const incomeCategory = new Map((await listCategories(db, user)).map((c) => [c.key, c.id]));
+const income = async (key: string, date: string, amountMinor: number, note: string) =>
+  await createIncomeEntry(db, user, { amountMinor, currency: "USD", categoryId: incomeCategory.get(key)!, date, accountId: checking, note });
+await income("salary", "2026-09-01", 310000, "Lakeside Lab payroll");
+await income("salary", "2026-09-15", 310000, "Lakeside Lab payroll");
+await income("familySupport", "2026-09-05", 70000, "Family support");
+await income("reimbursement", "2026-09-22", 4250, "Conference travel reimbursement");
+await createTransferEntry(db, user, { fromAccountId: await accountId("招商银行储蓄卡 0001"), toAccountId: await accountId("支付宝余额"), amountMinor: 50000, date: "2026-09-12" });
 
 const bal = (await balances(db, user))
   .map((b) => `${b.name} ${b.currency} ${formatMinor(b.owedToMeMinor, b.currency)}`)
