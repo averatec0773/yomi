@@ -1265,6 +1265,7 @@ export const zhCN: Dictionary = {
       label: "设置分区",
       general: "通用",
       profile: "个人资料",
+      categories: "分类",
       appearance: "外观",
       shortcuts: "快捷键",
       connections: "连接",
@@ -1280,6 +1281,14 @@ export const zhCN: Dictionary = {
     timeZoneEmpty: "没有匹配的时区",
     timeZoneSaved: "时区已设为 {zone}",
     timeZoneMoved: { one: "时区已设为 {zone}，1 笔交易换到了另一天。", other: "时区已设为 {zone}，{count} 笔交易换到了另一天。" },
+    categories: {
+      title: "分类",
+      hint: "关掉的分类里的收入仍会列出、也能筛选，但不计入收入合计和储蓄率。报销默认关闭：它是对已计支出的返还。",
+      income: "收入分类",
+      countsColumn: "计入收入",
+      counted: "{name} 计入收入",
+      notCounted: "{name} 不再计入收入",
+    },
     appearance: {
       title: "外观",
       hint: "跟随系统会按设备的浅色或深色设置显示。更改立即生效，并同步到你的所有设备。",

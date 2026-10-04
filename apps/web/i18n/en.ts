@@ -1343,6 +1343,7 @@ export const en = {
       label: "Settings sections",
       general: "General",
       profile: "Profile",
+      categories: "Categories",
       appearance: "Appearance",
       shortcuts: "Shortcuts",
       connections: "Connections",
@@ -1358,6 +1359,14 @@ export const en = {
     timeZoneEmpty: "No matching time zone",
     timeZoneSaved: "Time zone set to {zone}",
     timeZoneMoved: { one: "Time zone set to {zone}. 1 transaction moved to another day.", other: "Time zone set to {zone}. {count} transactions moved to another day." },
+    categories: {
+      title: "Categories",
+      hint: "Income in a category that is off stays in the list and its filters, but not in income totals or the savings rate. Reimbursements are off by default: they pay back spending already counted.",
+      income: "Income categories",
+      countsColumn: "Counts as income",
+      counted: "{name} counts as income",
+      notCounted: "{name} no longer counts as income",
+    },
     appearance: {
       title: "Appearance",
       hint: "System follows your device's light or dark setting. A change applies at once and follows you to every device.",
