@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { TransactionQuery } from "./ledger";
-import { AnalysisToolInput, InvestOverviewToolInput, NetWorthToolInput, NoToolInput, StatementToolInput, TransactionsToolInput } from "./tools";
+import { AnalysisToolInput, IncomeSummaryToolInput, InvestOverviewToolInput, NetWorthToolInput, NoToolInput, StatementToolInput, TransactionsToolInput } from "./tools";
 
 describe("tool input schemas", () => {
   it("each converts to a JSON Schema object", () => {
-    for (const s of [TransactionsToolInput, AnalysisToolInput, NetWorthToolInput, InvestOverviewToolInput, StatementToolInput, NoToolInput]) {
+    for (const s of [TransactionsToolInput, AnalysisToolInput, IncomeSummaryToolInput, NetWorthToolInput, InvestOverviewToolInput, StatementToolInput, NoToolInput]) {
       expect(z.toJSONSchema(s, { io: "input" })).toMatchObject({ type: "object" });
     }
   });

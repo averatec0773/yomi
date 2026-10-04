@@ -10,7 +10,8 @@ async function open(): Promise<Db> {
   const db = await createDb();
   const backup = await migrate(db);
   if (backup) console.log(`[yomi] Backed up the database before migrating: ${backup}`);
-  await seed(db);
+  const income = await seed(db);
+  if (income && Object.values(income).some((n) => n > 0)) console.log(`[yomi] Moved to the income categories: ${JSON.stringify(income)}`);
   configureKeyFile(defaultKeyFilePath());
   await upgradeSecretsOnOpen(db);
   const regrouped = await ensureOccurredOn(db, getCurrentUser());

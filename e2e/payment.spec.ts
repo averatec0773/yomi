@@ -205,6 +205,8 @@ test("profile email and phone: shared by payment methods, per-method override, s
   await phone.blur();
   await expect(page.getByText("That does not look like a full number in United States.")).toBeVisible();
   expect((await (await request.get("/api/settings/profile")).json()).phone).toBeNull();
+  // Focus first: on macOS End does not move the caret, so the field must regain focus with its caret where typing left it.
+  await phone.focus();
   await phone.press("End");
   await phone.pressSequentially("0143");
   await expect(phone).toHaveValue("202-555-0143");

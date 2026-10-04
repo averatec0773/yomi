@@ -1,5 +1,14 @@
 import { DatabaseIcon, KeyboardIcon, PaletteIcon, PlugIcon, Settings2Icon, ShieldCheckIcon, UserRoundIcon, type LucideIcon } from "lucide-react";
-import { balances, getCurrentUser, getDisplayName, getPaymentMethods, getProfileContact, readAccessToken, settingsStatus } from "@yomi/core";
+import {
+  balances,
+  getCurrentUser,
+  getDisplayName,
+  getPaymentMethods,
+  getProfileContact,
+  listParticipants,
+  readAccessToken,
+  settingsStatus,
+} from "@yomi/core";
 import { dbTarget, pgDumpHint } from "@yomi/db";
 import { connection } from "next/server";
 import type { ReactNode } from "react";
@@ -18,6 +27,7 @@ import { AnchorFlash } from "@/components/ui-kit/anchor-flash";
 import { ListCard } from "@/components/ui-kit/list-card";
 import { PageHeader } from "@/components/ui-kit/page-header";
 import { TimeZonePicker } from "@/components/time-zone-picker";
+import { TransferNames } from "@/components/transfer-names";
 import { fmt } from "@/i18n";
 import { errorText } from "@/i18n/errors";
 import { getI18n } from "@/i18n/server";
@@ -91,6 +101,7 @@ export default async function SettingsPage() {
   const user = getCurrentUser();
   const status = await settingsStatus(db, user);
   const lines = await balances(db, user);
+  const me = (await listParticipants(db, user)).find((p) => p.isSelf)!;
   const month = (await getToday()).slice(0, 7);
   const { security } = status;
   const accessOn = readAccessToken() !== null;
@@ -118,6 +129,7 @@ export default async function SettingsPage() {
       <Section id="profile" title={s.profile.title}>
         <ProfileContactProvider initial={await getProfileContact(db, user)}>
           <ProfileSettings initialName={await getDisplayName(db, user)} />
+          <TransferNames selfId={me.id} initial={me.identities} />
           <div id="payment-methods" data-anchor className="mt-4 scroll-mt-18">
             <PaymentSettings initial={await getPaymentMethods(db, user)} />
           </div>

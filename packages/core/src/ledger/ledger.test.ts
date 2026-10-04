@@ -192,7 +192,7 @@ describe("recategorizeUnedited", () => {
     const transfer = await addTx(db, { amountMinor: -100, kind: "transfer", counterpartyRaw: "朋友", merchant: "朋友" });
     const rebate = await addTx(db, { amountMinor: 250, kind: "refund", source: "icbc_pdf", currency: "USD", counterpartyRaw: "CASHBACK REBATE", merchant: "Cashback Rebate", categoryId: await catId(db, "其他收入") });
 
-    expect(await recategorizeUnedited(db, user)).toEqual({ scanned: 5, categoryChanged: 3, merchantChanged: 1, kindChanged: 1 });
+    expect(await recategorizeUnedited(db, user)).toEqual({ scanned: 5, categoryChanged: 4, merchantChanged: 1, kindChanged: 1 });
     const rows = new Map((await db.select().from(transactions)).map((t) => [t.id, t]));
     expect(rows.get(nin)).toMatchObject({ merchant: "Nintendo", categoryId: await catId(db, "娱乐"), userEditedAt: null });
     expect(rows.get(edited)).toMatchObject({ categoryId: food });
@@ -200,7 +200,7 @@ describe("recategorizeUnedited", () => {
     expect(rows.get(eats)!.categoryId).toBe(food);
     expect(rows.get(eatsRefund)!.categoryId).toBe(food);
     expect(rows.get(transfer)!.categoryId).toBeNull();
-    expect(rows.get(rebate)).toMatchObject({ kind: "income", categoryId: await catId(db, "其他收入") });
+    expect(rows.get(rebate)).toMatchObject({ kind: "income", categoryId: await catId(db, "返现") });
     // Idempotent.
     expect(await recategorizeUnedited(db, user)).toMatchObject({ categoryChanged: 0, merchantChanged: 0, kindChanged: 0 });
   });

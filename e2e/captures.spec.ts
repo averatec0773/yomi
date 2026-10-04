@@ -4,11 +4,12 @@ import { expect, test } from "./fixtures";
 // The demo ledger (packages/core/src/cli/demo.ts) has five pasted alerts on the made-up ICBC card 3141 and that card's
 // statement through Sep 26: one alert is confirmed, one hold has two equal statement rows (ambiguous), one hold came in
 // 15% higher (near miss), one alert has no row though the statement covers its day (stale), and the last alert is
-// after the statement (provisional). Every test leaves the queue as it found it (Undo).
+// after the statement (provisional). The queue also holds the ledger's three partial repayments from friends
+// (e2e/income-review.spec.ts). Every test leaves the queue as it found it (Undo).
 
 /** Opens the review sheet from the line on Transactions (retrying while the page hydrates). */
 async function openReview(page: Page): Promise<Locator> {
-  const sheet = page.getByRole("dialog", { name: "Review captures" });
+  const sheet = page.getByRole("dialog", { name: "Needs a look" });
   await expect(async () => {
     await page.getByTestId("review-line").getByRole("button", { name: "Review" }).click();
     await expect(sheet).toBeVisible({ timeout: 1_000 });
@@ -21,7 +22,7 @@ const item = (sheet: Locator, type: string) => sheet.locator(`[data-testid=revie
 test("captures: the Transactions line, row labels and totals that say what rests on captures", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/transactions?month=2026-09");
-  await expect(page.getByTestId("review-line")).toContainText("3 captures need a look");
+  await expect(page.getByTestId("review-line")).toContainText("6 items need a look");
   await expect(page.getByTestId("provisional-note")).toHaveText("incl. $32.22 provisional (2) · 2 card holds not counted, $59.99");
   const heb = page.getByRole("row").filter({ hasText: "H-E-B" }).filter({ hasText: "Provisional" });
   await expect(heb).toContainText(/Provisional\s*·\s*ICBC credit card 3141 · from SMS/);
@@ -40,7 +41,7 @@ test("captures: the review sheet resolves each kind of item, with Undo", async (
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/transactions?month=2026-09");
   const sheet = await openReview(page);
-  await expect(sheet.getByTestId("review-item")).toHaveCount(3);
+  await expect(sheet.getByTestId("review-item")).toHaveCount(6);
 
   const ambiguous = item(sheet, "ambiguous");
   await expect(ambiguous).toContainText("Which statement row is this?");
@@ -60,15 +61,15 @@ test("captures: the review sheet resolves each kind of item, with Undo", async (
   await ambiguous.getByRole("button", { name: "Link selected" }).click();
   await page.getByRole("button", { name: "Undo" }).click();
   await expect(page.getByText("Undone")).toBeVisible();
-  await expect(sheet.getByTestId("review-item")).toHaveCount(3);
+  await expect(sheet.getByTestId("review-item")).toHaveCount(6);
 
-  // Keep as final: the stale alert becomes a normal row and the line counts 2.
+  // Keep as final: the stale alert becomes a normal row and the line counts one fewer.
   await stale.getByRole("button", { name: "Keep as final" }).click();
-  await expect(sheet.getByTestId("review-item")).toHaveCount(2);
-  await expect(page.getByTestId("review-line")).toContainText("2 captures need a look");
+  await expect(sheet.getByTestId("review-item")).toHaveCount(5);
+  await expect(page.getByTestId("review-line")).toContainText("5 items need a look");
   await page.getByRole("button", { name: "Undo" }).click();
-  await expect(sheet.getByTestId("review-item")).toHaveCount(3);
-  await expect(page.getByTestId("review-line")).toContainText("3 captures need a look");
+  await expect(sheet.getByTestId("review-item")).toHaveCount(6);
+  await expect(page.getByTestId("review-line")).toContainText("6 items need a look");
 
   // Select: the bulk bar offers only what every selected item allows (a near miss cannot be kept as final).
   await sheet.getByRole("button", { name: "Select", exact: true }).click();
@@ -78,9 +79,9 @@ test("captures: the review sheet resolves each kind of item, with Undo", async (
   await expect(bar).toContainText("2 selected");
   await expect(bar.getByRole("button", { name: "Keep as final" })).toHaveCount(0);
   await bar.getByRole("button", { name: "Discard" }).click();
-  await expect(sheet.getByTestId("review-item")).toHaveCount(1);
+  await expect(sheet.getByTestId("review-item")).toHaveCount(4);
   await page.getByRole("button", { name: "Undo" }).click();
-  await expect(sheet.getByTestId("review-item")).toHaveCount(3);
+  await expect(sheet.getByTestId("review-item")).toHaveCount(6);
 });
 
 test("captures: a queue that fails to load says so instead of loading forever, and Try again loads it", async ({ page }) => {
@@ -92,7 +93,7 @@ test("captures: a queue that fails to load says so instead of loading forever, a
   await expect(sheet.getByTestId("review-loading")).toHaveCount(0);
   await page.unroute("**/api/review");
   await sheet.getByRole("button", { name: "Try again" }).click();
-  await expect(sheet.getByTestId("review-item")).toHaveCount(3);
+  await expect(sheet.getByTestId("review-item")).toHaveCount(6);
 });
 
 test("captures: on a phone the sheet fills the screen; the details show the capture", async ({ page }) => {

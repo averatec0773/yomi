@@ -329,6 +329,15 @@ export interface AnalysisSelection {
   to?: string;
 }
 
+/** The range a request names, resolved against `today`; this month when it names no period. */
+export function selectionRange(sel: AnalysisSelection, today: string): DateRange {
+  const { period, date, preset, from, to } = sel;
+  return resolveAnalysisPeriod(
+    period ? { period, date } : preset ? { preset } : from !== undefined && to !== undefined ? { from, to } : { period: "month" },
+    today,
+  );
+}
+
 /** The report for a request, resolved against today in the user's zone (`today` pins it); this month when it names no period. */
 export async function analysisFor(
   db: Db,
@@ -337,10 +346,5 @@ export async function analysisFor(
   opts: { today?: string; env?: NodeJS.ProcessEnv } = {},
 ): Promise<AnalysisReport> {
   const today = opts.today ?? todayIn(await getTimeZone(db, user));
-  const { period, date, preset, from, to } = sel;
-  const range = resolveAnalysisPeriod(
-    period ? { period, date } : preset ? { preset } : from !== undefined && to !== undefined ? { from, to } : { period: "month" },
-    today,
-  );
-  return await analysisReport(db, user, range, { today, env: opts.env });
+  return await analysisReport(db, user, selectionRange(sel, today), { today, env: opts.env });
 }

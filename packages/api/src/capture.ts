@@ -1,12 +1,32 @@
-import { BulkResolveBody, ResolveBody, type ResolveResult, type ReviewList } from "@yomi/contracts";
-import { getCurrentUser, listReview, resolveReview, resolveReviewBulk, undoCapture } from "@yomi/core";
+import {
+  BulkResolveBody,
+  BulkTransactionReviewBody,
+  type BulkTransactionReviewResult,
+  ResolveBody,
+  type ResolveResult,
+  type ReviewList,
+  TransactionReviewBody,
+  type TransactionReviewResult,
+  TransactionReviewUndoBody,
+} from "@yomi/contracts";
+import {
+  confirmOwnTransfers,
+  getCurrentUser,
+  listReview,
+  resolveReview,
+  resolveReviewBulk,
+  resolveTransactionReview,
+  undoCapture,
+  undoTransactionReview,
+} from "@yomi/core";
 import type { Db } from "@yomi/db";
 import { Hono } from "hono";
 import { idParam, readJson } from "./http";
 
 /**
- * The capture review queue (thin over core/capture; the v0.3 MCP tools call the same functions):
- * GET /review · POST /review/bulk · POST /review/:captureId · POST /captures/:captureId/undo.
+ * The review queue (thin over core/capture; the v0.3 MCP tools call the same functions):
+ * GET /review · POST /review/bulk · POST /review/:captureId · POST /captures/:captureId/undo, and for items about ledger
+ * rows POST /review/transactions/bulk · POST /review/transactions/:transactionId · POST /review/transactions/:transactionId/undo.
  */
 export function captureRoutes(deps: { getDb: () => Db | Promise<Db>; today?: () => string }): Hono {
   const r = new Hono();
@@ -17,6 +37,20 @@ export function captureRoutes(deps: { getDb: () => Db | Promise<Db>; today?: () 
   r.post("/review/bulk", async (c) => {
     const body = await readJson(c, BulkResolveBody);
     return c.json((await resolveReviewBulk(await db(), user(), body)) satisfies ResolveResult);
+  });
+  r.post("/review/transactions/bulk", async (c) => {
+    const body = await readJson(c, BulkTransactionReviewBody);
+    return c.json({ results: await confirmOwnTransfers(await db(), user(), body.transactionIds) } satisfies BulkTransactionReviewResult);
+  });
+  r.post("/review/transactions/:transactionId", async (c) => {
+    const id = idParam(c, "transactionId");
+    const body = await readJson(c, TransactionReviewBody);
+    return c.json((await resolveTransactionReview(await db(), user(), id, body)) satisfies TransactionReviewResult);
+  });
+  r.post("/review/transactions/:transactionId/undo", async (c) => {
+    const id = idParam(c, "transactionId");
+    const body = await readJson(c, TransactionReviewUndoBody);
+    return c.json((await undoTransactionReview(await db(), user(), id, body)) satisfies TransactionReviewResult);
   });
   r.post("/review/:captureId", async (c) => {
     const id = idParam(c, "captureId");

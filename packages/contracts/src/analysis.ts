@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CurrencyCode, DateString, MonthString } from "./common";
+import { Currency, CurrencyCode, DateString, MonthString } from "./common";
 import { RangeCurrencyOverview, StatsPreset } from "./stats";
 
 export const PeriodKind = z.enum(["day", "week", "month", "year"]);
@@ -13,27 +13,57 @@ export type AnalysisPreset = z.infer<typeof AnalysisPreset>;
  * without a date Day is yesterday and the others contain today: the form MCP tools use), `?preset=`, or `?from=&to=`
  * (inclusive, at most five years). Nothing given means this month. Weeks start on Monday.
  */
-export const AnalysisQuery = z
-  .object({
-    period: PeriodKind.optional(),
-    date: DateString.optional(),
-    preset: AnalysisPreset.optional(),
-    from: DateString.optional(),
-    to: DateString.optional(),
-  })
-  .strict()
-  .superRefine((q, ctx) => {
-    const range = q.from !== undefined || q.to !== undefined;
-    if (range && (q.from === undefined || q.to === undefined)) ctx.addIssue({ code: "custom", message: "from and to go together" });
-    if (q.date !== undefined && q.period === undefined) ctx.addIssue({ code: "custom", path: ["date"], message: "date needs period" });
-    if ([q.period !== undefined, q.preset !== undefined, range].filter(Boolean).length > 1) {
-      ctx.addIssue({ code: "custom", message: "use one of period, preset or from/to" });
-    }
-    if (q.from !== undefined && q.to !== undefined && q.from > q.to) {
-      ctx.addIssue({ code: "custom", path: ["from"], message: "the start date cannot be after the end date" });
-    }
-  });
+const selectionShape = {
+  period: PeriodKind.optional(),
+  date: DateString.optional(),
+  preset: AnalysisPreset.optional(),
+  from: DateString.optional(),
+  to: DateString.optional(),
+};
+
+function checkSelection(
+  q: { period?: unknown; date?: unknown; preset?: unknown; from?: string; to?: string },
+  ctx: z.RefinementCtx,
+): void {
+  const range = q.from !== undefined || q.to !== undefined;
+  if (range && (q.from === undefined || q.to === undefined)) ctx.addIssue({ code: "custom", message: "from and to go together" });
+  if (q.date !== undefined && q.period === undefined) ctx.addIssue({ code: "custom", path: ["date"], message: "date needs period" });
+  if ([q.period !== undefined, q.preset !== undefined, range].filter(Boolean).length > 1) {
+    ctx.addIssue({ code: "custom", message: "use one of period, preset or from/to" });
+  }
+  if (q.from !== undefined && q.to !== undefined && q.from > q.to) {
+    ctx.addIssue({ code: "custom", path: ["from"], message: "the start date cannot be after the end date" });
+  }
+}
+
+export const AnalysisQuery = z.object(selectionShape).strict().superRefine(checkSelection);
 export type AnalysisQuery = z.infer<typeof AnalysisQuery>;
+
+/** GET /api/analysis/income query: AnalysisQuery plus an optional `currency` to keep one. */
+export const IncomeQuery = z
+  .object({ ...selectionShape, currency: Currency.optional() })
+  .strict()
+  .superRefine(checkSelection);
+export type IncomeQuery = z.infer<typeof IncomeQuery>;
+
+export const CurrencyIncome = z.object({
+  currency: CurrencyCode,
+  incomeMinor: z.int(),
+  incomeNotCountedMinor: z.int(),
+  spendingMinor: z.int(),
+  netMinor: z.int(),
+  savingsRateBp: z.int().nullable(),
+  byCategory: z.array(z.object({ key: z.string().nullable(), name: z.string(), minor: z.int(), count: z.int().positive(), counted: z.boolean() })),
+  /** Money in on transfer rows that are not repayments. */
+  transfersInMinor: z.int(),
+  /** Money friends paid back (rows recorded as a settlement). */
+  repaymentsMinor: z.int(),
+});
+export type CurrencyIncome = z.infer<typeof CurrencyIncome>;
+
+/** GET /api/analysis/income: cash flow per currency (core incomeSummary). */
+export const IncomeSummary = z.object({ from: DateString, to: DateString, currencies: z.array(CurrencyIncome) });
+export type IncomeSummary = z.infer<typeof IncomeSummary>;
 
 const DateRange = z.object({ from: DateString, to: DateString });
 

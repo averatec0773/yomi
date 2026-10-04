@@ -1,5 +1,6 @@
 import { categories, type Db, merchantRules, transactions, transactionSplits } from "@yomi/db";
 import { and, asc, eq, inArray, isNull, max, ne } from "@yomi/db/orm";
+import { releaseTransfer } from "../import/transfers";
 import type { CurrentUser } from "../user";
 import { LedgerError } from "./errors";
 import { getTransaction, type TransactionItem, type TransactionKind } from "./transactions";
@@ -18,6 +19,10 @@ export interface CategoryItem {
   isSystem: boolean;
   sort: number;
   archivedAt: string | null;
+  /** Dictionary key of a system category; null for categories the user made. */
+  key: string | null;
+  /** Income on it counts in income totals (income categories). */
+  countsAsIncome: boolean;
 }
 
 const now = () => new Date().toISOString();
@@ -104,6 +109,8 @@ export async function updateTransaction(db: Db, user: CurrentUser, id: number, p
     if (!m) throw new LedgerError("invalid", "merchant_empty", "The merchant cannot be empty");
     set.merchant = m;
   }
+  // A new kind ends an own-account transfer a rule made: its other leg gets its prior kind back.
+  if (patch.kind !== undefined && patch.kind !== row.kind) await releaseTransfer(db, user, [id]);
   await db.update(transactions)
     .set(set)
     .where(and(eq(transactions.userId, userId), eq(transactions.id, id)));
@@ -205,6 +212,7 @@ export async function bulkUpdate(
       if (patch.kind !== undefined) set.kind = patch.kind;
       if (patch.categoryId !== undefined) set.categoryId = patch.categoryId;
       else if (row.categoryId != null && !fits(kind, await kindOfCategory(row.categoryId))) set.categoryId = null;
+      if (kind !== row.kind) await releaseTransfer(tx, user, [row.id]);
       await tx.update(transactions)
         .set(set)
         .where(and(eq(transactions.userId, userId), eq(transactions.id, row.id)));
@@ -214,16 +222,20 @@ export async function bulkUpdate(
   });
 }
 
+const CATEGORY_ITEM = {
+  id: categories.id,
+  name: categories.name,
+  kind: categories.kind,
+  isSystem: categories.isSystem,
+  sort: categories.sort,
+  archivedAt: categories.archivedAt,
+  key: categories.key,
+  countsAsIncome: categories.countsAsIncome,
+};
+
 export async function listCategories(db: Db, user: CurrentUser): Promise<CategoryItem[]> {
   return await db
-    .select({
-      id: categories.id,
-      name: categories.name,
-      kind: categories.kind,
-      isSystem: categories.isSystem,
-      sort: categories.sort,
-      archivedAt: categories.archivedAt,
-    })
+    .select(CATEGORY_ITEM)
     .from(categories)
     .where(eq(categories.userId, user.id))
     .orderBy(asc(categories.kind), asc(categories.sort), asc(categories.id));
@@ -256,14 +268,7 @@ export async function createCategory(db: Db, user: CurrentUser, name: string, ki
   return (await db
     .insert(categories)
     .values({ userId, name: n, kind, isSystem: false, sort: (top?.s ?? -1) + 1 })
-    .returning({
-      id: categories.id,
-      name: categories.name,
-      kind: categories.kind,
-      isSystem: categories.isSystem,
-      sort: categories.sort,
-      archivedAt: categories.archivedAt,
-    })
+    .returning(CATEGORY_ITEM)
     )[0]!;
 }
 
@@ -281,6 +286,19 @@ export async function renameCategory(db: Db, user: CurrentUser, id: number, name
     .set({ name: n })
     .where(and(eq(categories.userId, user.id), eq(categories.id, id)));
   return (await listCategories(db, user)).find((c) => c.id === id)!;
+}
+
+/**
+ * Whether income on an income category counts in income totals and the savings rate (system categories too: family
+ * support or reimbursements are the user's call). Rows on it stay income either way.
+ */
+export async function setCountsAsIncome(db: Db, user: CurrentUser, id: number, counts: boolean): Promise<CategoryItem> {
+  const c = await categoryOf(db, user.id, id);
+  if (c.kind !== "income") throw categoryKindMismatch(c.name, "income");
+  await db.update(categories)
+    .set({ countsAsIncome: counts })
+    .where(and(eq(categories.userId, user.id), eq(categories.id, id)));
+  return (await listCategories(db, user)).find((x) => x.id === id)!;
 }
 
 /** Archived categories stay on existing rows; the UI stops offering them. */

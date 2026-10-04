@@ -16,6 +16,7 @@ export {
   type Settlement,
 } from "./settlements";
 export * from "./candidates";
+export * from "./repayments";
 export {
   addIdentity,
   IDENTITY_KINDS,

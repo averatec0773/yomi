@@ -1,4 +1,4 @@
-import { AnalysisReport, ApiError, FreshnessResponse } from "@yomi/contracts";
+import { AnalysisReport, ApiError, FreshnessResponse, IncomeSummary } from "@yomi/contracts";
 import { getCurrentUser, seed, setTimeZone } from "@yomi/core";
 import { importBatches, transactions } from "@yomi/db";
 import { testDb } from "@yomi/db/testing";
@@ -74,6 +74,21 @@ describe("GET /api/analysis", () => {
     const long = await app.request("/api/analysis?from=2020-01-01&to=2026-01-01");
     expect(long.status).toBe(400);
     expect(ApiError.parse(await long.json()).code).toBe("range_too_long");
+  });
+});
+
+describe("GET /api/analysis/income", () => {
+  it("answers the cash flow per currency for the same selections, one currency on request", async () => {
+    const { app } = await setup();
+    const res = await app.request("/api/analysis/income?period=month&date=2026-09-10");
+    expect(res.status).toBe(200);
+    const body = IncomeSummary.parse(await res.json());
+    expect(body).toMatchObject({ from: "2026-09-01", to: "2026-09-30" });
+    expect(body.currencies).toEqual([
+      { currency: "CNY", incomeMinor: 0, incomeNotCountedMinor: 0, spendingMinor: 4600, netMinor: -4600, savingsRateBp: null, byCategory: [], transfersInMinor: 0, repaymentsMinor: 0 },
+    ]);
+    expect(IncomeSummary.parse(await (await app.request("/api/analysis/income?preset=this_month&currency=usd")).json()).currencies).toEqual([]);
+    expect((await app.request("/api/analysis/income?period=day&preset=today")).status).toBe(400);
   });
 });
 

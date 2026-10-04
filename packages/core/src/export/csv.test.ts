@@ -86,15 +86,15 @@ describe("exportTransactionsCsv", () => {
     const csv = await exportTransactionsCsv(db, user, { month: "2026-09", locale: "zh-CN" });
     expect(csv.charCodeAt(0)).toBe(0xfeff);
     const rows = parseCsv(csv.slice(1));
-    expect(rows[0]).toEqual(["日期", "时间", "商户", "说明", "分类", "类型", "金额", "币种", "我承担", "分摊", "付款人", "账户", "来源", "备注"]);
+    expect(rows[0]).toEqual(["日期", "时间", "商户", "说明", "分类", "类型", "金额", "币种", "我承担", "分摊", "付款人", "账户", "转账账户", "来源", "备注"]);
     expect(rows.slice(1)).toEqual([
-      ["2026-09-03", "12:05:09", "面馆, 二楼", '牛肉面 "大碗"', "餐饮", "支出", "-35.00", "CNY", "17.50", "室友 17.50; 我 17.50", "我", "", "支付宝", "第一行\n第二行"],
-      ["2026-09-05", "09:00:00", "Uber", "", "", "支出", "-12.34", "USD", "6.17", "室友 6.17; 我 6.17", "室友", "", "手动", ""],
-      ["2026-09-10", "09:00:00", "公司", "", "", "收入", "5000.00", "CNY", "", "", "", "", "支付宝", ""],
+      ["2026-09-03", "12:05:09", "面馆, 二楼", '牛肉面 "大碗"', "餐饮", "支出", "-35.00", "CNY", "17.50", "室友 17.50; 我 17.50", "我", "", "", "支付宝", "第一行\n第二行"],
+      ["2026-09-05", "09:00:00", "Uber", "", "", "支出", "-12.34", "USD", "6.17", "室友 6.17; 我 6.17", "室友", "", "", "手动", ""],
+      ["2026-09-10", "09:00:00", "公司", "", "", "收入", "5000.00", "CNY", "", "", "", "", "", "支付宝", ""],
     ]);
     const en = parseCsv((await exportTransactionsCsv(db, user, { month: "2026-09" })).slice(1));
-    expect(en[0]).toEqual(["Date", "Time", "Merchant", "Description", "Category", "Type", "Amount", "Currency", "My share", "Split", "Payer", "Account", "Source", "Note"]);
-    expect(en[1]!.slice(5, 13)).toEqual(["Expense", "-35.00", "CNY", "17.50", "室友 17.50; Me 17.50", "Me", "", "Alipay"]);
+    expect(en[0]).toEqual(["Date", "Time", "Merchant", "Description", "Category", "Type", "Amount", "Currency", "My share", "Split", "Payer", "Account", "Transfer account", "Source", "Note"]);
+    expect(en[1]!.slice(5, 14)).toEqual(["Expense", "-35.00", "CNY", "17.50", "室友 17.50; Me 17.50", "Me", "", "", "Alipay"]);
   });
 
   it("exports every month without a filter and rejects a bad month", async () => {

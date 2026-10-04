@@ -81,6 +81,8 @@ export const ImportResult = ImportPreview.extend({
   linked: z.int().nonnegative(),
   /** Pasted card alerts this import confirmed, and the size of the review queue after it. */
   captures: z.object({ linked: z.int().nonnegative(), toReview: z.int().nonnegative() }),
+  /** Rows high-confidence own-account transfer rules made transfers (new rows, or the other leg of one). */
+  ownTransfers: z.int().nonnegative(),
 });
 export type ImportResult = z.infer<typeof ImportResult>;
 

@@ -351,6 +351,8 @@ export interface SpendingRow {
   provisional: TransactionItem["provisional"];
   /** When the row was written (ISO instant): what arrived on a day, whatever its occurred_on. */
   createdAt: string;
+  /** The row's category counts as income (true without a category). */
+  incomeCounted: boolean;
   splits: SplitItem[];
   myShareMinor: number;
 }
@@ -411,8 +413,10 @@ async function loadRowsBetween(db: Db, userId: number, start: string, end: strin
       source: transactions.source,
       provisional: transactions.provisional,
       createdAt: transactions.createdAt,
+      incomeCounted: categories.countsAsIncome,
     })
     .from(transactions)
+    .leftJoin(categories, eq(categories.id, transactions.categoryId))
     .where(and(eq(transactions.userId, userId), gte(transactions.occurredOn, start), lt(transactions.occurredOn, end)))
     .orderBy(desc(transactions.occurredOn), desc(transactions.occurredAt), desc(transactions.id));
   const splits = await loadSplits(
@@ -420,9 +424,9 @@ async function loadRowsBetween(db: Db, userId: number, start: string, end: strin
     userId,
     rows.map((r) => r.id),
   );
-  return rows.map((r) => {
+  return rows.map(({ incomeCounted, ...r }) => {
     const s = splits.get(r.id) ?? [];
-    return { ...r, splits: s, myShareMinor: myShareMinor(r, s) };
+    return { ...r, incomeCounted: incomeCounted ?? true, splits: s, myShareMinor: myShareMinor(r, s) };
   });
 }
 

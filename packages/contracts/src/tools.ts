@@ -1,8 +1,7 @@
 import { z } from "zod";
 import { AnalysisPreset, PeriodKind } from "./analysis";
 import { NetWorthRange } from "./assets";
-import { Currency, DateString, Id, Locale, MonthString } from "./common";
-import { TransactionKind } from "./ledger";
+import { Currency, DateString, Id, Locale, MonthString, TransactionKind } from "./common";
 import { StatementFlag, StatementScope } from "./split";
 
 // Inputs of the reads the MCP endpoint will expose: plain JSON objects (real booleans, numbers and arrays, no
@@ -34,6 +33,10 @@ export const AnalysisToolInput = z.object({
   to: DateString.optional(),
 });
 export type AnalysisToolInput = z.infer<typeof AnalysisToolInput>;
+
+/** Income and cash flow (core incomeSummary) for the same selection, optionally one currency. */
+export const IncomeSummaryToolInput = AnalysisToolInput.extend({ currency: Currency.optional() });
+export type IncomeSummaryToolInput = z.infer<typeof IncomeSummaryToolInput>;
 
 /** Net worth (core netWorth) on a day, over a range, optionally totalled in one currency. */
 export const NetWorthToolInput = z.object({ asOf: DateString.optional(), range: NetWorthRange.optional(), currency: Currency.optional() });

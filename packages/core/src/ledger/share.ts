@@ -10,6 +10,8 @@ export interface ShareRow {
   amountMinor: number;
   /** A provisional capture counts (labelled); a card hold (pre-authorisation) does not until a statement row replaces it. */
   provisional: "capture" | "hold" | null;
+  /** False when the row's category does not count as income (its counts_as_income flag is off); missing = counted. */
+  incomeCounted?: boolean;
 }
 
 export interface ShareSplit {
@@ -21,9 +23,14 @@ export function countsAsSpending(row: ShareRow): boolean {
   return (row.kind === "expense" || row.kind === "refund") && row.status === "ok" && row.duplicateOfId == null && row.provisional !== "hold";
 }
 
-/** Income on the summary card: the whole amount of ok income rows that are not linked duplicates. */
-export function countsAsIncome(row: ShareRow): boolean {
+/** An income row of the period whatever its category's flag: ok and not a linked duplicate. */
+export function isIncome(row: ShareRow): boolean {
   return row.kind === "income" && row.status === "ok" && row.duplicateOfId == null;
+}
+
+/** Income on the summary card: the whole amount of income rows (isIncome) whose category counts as income. */
+export function countsAsIncome(row: ShareRow): boolean {
+  return isIncome(row) && row.incomeCounted !== false;
 }
 
 export function myShareMinor(row: ShareRow, splits: readonly ShareSplit[]): number {

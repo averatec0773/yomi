@@ -29,6 +29,7 @@ import { statementCoverage } from "./coverage";
 import { computeDedupKeys, sha256Hex } from "./dedup";
 import { type LinkRow, planLinks } from "./link";
 import { cleanMerchant } from "./merchant";
+import { applyNewTransfers, releaseTransfer } from "./transfers";
 
 export type ParseFn = (bytes: Uint8Array, fileName: string) => Promise<ParseResult>;
 
@@ -91,6 +92,8 @@ export interface ImportResult extends ImportPreview {
   linked: number;
   /** Pasted card alerts this import confirmed, and the size of the review queue after it. */
   captures: { linked: number; toReview: number };
+  /** Rows (new, or the other leg of a new one) that high-confidence own-account transfer rules made transfers. */
+  ownTransfers: number;
 }
 
 export interface BatchSummary {
@@ -501,6 +504,8 @@ export async function commitParsed(db: Db, user: CurrentUser, parsed: ParseResul
 
     // Pasted card alerts this file confirms: strict one-to-one, ties and near misses to the review queue.
     const matched = await runMatching(tx, user, { by: opts.by ?? `import:${batch.id}`, newAuthorityIds: [...idByKey.values()] });
+    // Own-account transfers among the new rows: high confidence applies (Undo restores it), the rest waits in review.
+    const ownTransfers = await applyNewTransfers(tx, user, [...idByKey.values()]);
 
     const participantSuggestions = fresh
       .filter((p) => p.participantIds)
@@ -520,6 +525,7 @@ export async function commitParsed(db: Db, user: CurrentUser, parsed: ParseResul
       skippedDup: preview.dupCount,
       linked: preview.linkCount,
       captures: { linked: matched.linked, toReview: await countReview(tx, user) },
+      ownTransfers,
     };
   });
 }
@@ -551,6 +557,8 @@ export async function revertBatch(db: Db, user: CurrentUser, batchId: number, op
     for (const captureId of await capturesConfirmedBy(tx, user, ids)) await detachFromAuthority(tx, user, captureId, { by: `revert:${batchId}` });
     const parts = chunks(ids);
     for (const part of parts) {
+      // A kept row paired with a deleted one as an own-account transfer gets its prior kind back.
+      await releaseTransfer(tx, user, part);
       await tx.update(transactions)
         .set({ duplicateOfId: null })
         .where(and(eq(transactions.userId, userId), inArray(transactions.duplicateOfId, part)));

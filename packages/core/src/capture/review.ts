@@ -6,12 +6,17 @@ import { addDays, dayDiff, daysInclusive } from "../time/day";
 import { todayIn } from "../time/zone";
 import type { CurrentUser } from "../user";
 import { type MatchReason, PDF_WINDOW, runMatching } from "./match";
+import { countTransactionReview, type TransactionReviewItem, transactionReviewItems } from "./proposals";
 import { CaptureError, type CaptureRow, captureRow, getCapture, recordResolution, supersede, undoResolution } from "./supersede";
 
 // The review queue: open captures the matcher could not settle alone (ambiguous, near miss), captures no statement
-// row arrived for (stale, derived when read), and confirmed captures whose exact split no longer adds up.
+// row arrived for (stale, derived when read), confirmed captures whose exact split no longer adds up, and ledger rows
+// that look like a friend paying me back (repayment) or money moving between my own accounts (own_transfer), both
+// derived when read (proposals.ts).
 
-export const REVIEW_TYPES = ["ambiguous", "near_miss", "stale", "amount_changed"] as const;
+export const CAPTURE_REVIEW_TYPES = ["ambiguous", "near_miss", "stale", "amount_changed"] as const;
+export type CaptureReviewType = (typeof CAPTURE_REVIEW_TYPES)[number];
+export const REVIEW_TYPES = [...CAPTURE_REVIEW_TYPES, "repayment", "own_transfer"] as const;
 export type ReviewType = (typeof REVIEW_TYPES)[number];
 export type ReviewAction = "link" | "keep_separate" | "keep_final" | "discard" | "keep_shares";
 /** Actions that apply to several items at once; choosing a candidate is always one at a time. */
@@ -50,9 +55,10 @@ export interface ReviewCandidate {
 
 export type StaleReason = { reason: "covered"; source: "icbc_pdf"; through: string } | { reason: "age"; days: number };
 
-export interface ReviewItem {
+export interface CaptureReviewItem {
+  subject: "capture";
   captureId: number;
-  type: ReviewType;
+  type: CaptureReviewType;
   capture: ReviewCapture;
   candidates: ReviewCandidate[];
   /** stale: why. */
@@ -61,6 +67,8 @@ export interface ReviewItem {
   shares: { sharesMinor: number; amountMinor: number } | null;
   createdAt: string;
 }
+
+export type ReviewItem = CaptureReviewItem | TransactionReviewItem;
 
 export interface ReviewList {
   items: ReviewItem[];
@@ -101,7 +109,7 @@ function staleReason(c: Pick<ReviewCapture, "last4" | "occurredOn">, reach: Map<
 }
 
 function emptyCounts(): Record<ReviewType, number> {
-  return { ambiguous: 0, near_miss: 0, stale: 0, amount_changed: 0 };
+  return { ambiguous: 0, near_miss: 0, stale: 0, amount_changed: 0, repayment: 0, own_transfer: 0 };
 }
 
 /** Stored reviews and provisional captures, newest first, with the statement reach of the cards that may be stale. */
@@ -118,18 +126,18 @@ async function queueRows(q: Db, user: CurrentUser) {
 
 /** The item type of a queued capture: its stored review, else stale or nothing to look at (null). */
 function classify(
-  c: { review: ReviewType | null; last4: string | null },
+  c: { review: CaptureReviewType | null; last4: string | null },
   occurredOn: string,
   reach: Map<string, { from: string; through: string }>,
   today: string,
-): { type: ReviewType; stale: StaleReason | null } | null {
+): { type: CaptureReviewType; stale: StaleReason | null } | null {
   if (c.review) return { type: c.review, stale: null };
   const stale = staleReason({ last4: c.last4, occurredOn }, reach, today);
   return stale ? { type: "stale", stale } : null;
 }
 
 /** An ambiguous or near-miss item is a choice between candidates; with none left it is not listed. */
-const needsCandidates = (type: ReviewType) => type === "ambiguous" || type === "near_miss";
+const needsCandidates = (type: CaptureReviewType) => type === "ambiguous" || type === "near_miss";
 /** A candidate still on offer: not closed and not linked to another row. */
 const isOpenCandidate = (t: { status: string; duplicateOfId: number | null }) => t.status === "ok" && t.duplicateOfId == null;
 
@@ -169,7 +177,7 @@ export async function listReview(q: Db, user: CurrentUser, opts: { today?: strin
       hold: c.hold,
       merchant,
     };
-    let shares: ReviewItem["shares"] = null;
+    let shares: CaptureReviewItem["shares"] = null;
     if (kind.type === "amount_changed") {
       const s = splits.get(c.transactionId!) ?? [];
       shares = { sharesMinor: s.reduce((a, x) => a + x.owedMinor, 0), amountMinor: Math.abs(amountMinor) };
@@ -195,8 +203,9 @@ export async function listReview(q: Db, user: CurrentUser, opts: { today?: strin
       ];
     });
     if (needsCandidates(kind.type) && candidates.length === 0) continue;
-    items.push({ captureId: c.id, type: kind.type, capture, candidates, stale: kind.stale, shares, createdAt: c.createdAt });
+    items.push({ subject: "capture", captureId: c.id, type: kind.type, capture, candidates, stale: kind.stale, shares, createdAt: c.createdAt });
   }
+  items.push(...(await transactionReviewItems(q, user, { today })));
   items.sort((a, b) => REVIEW_TYPES.indexOf(a.type) - REVIEW_TYPES.indexOf(b.type));
   const counts = emptyCounts();
   for (const i of items) counts[i.type] += 1;
@@ -223,7 +232,7 @@ export async function countReview(q: Db, user: CurrentUser, opts: { today?: stri
       .filter(isOpenCandidate)
       .map((t) => t.id),
   );
-  return queued.filter((x) => !needsCandidates(x.type) || x.candidateIds.some((id) => open.has(id))).length;
+  return queued.filter((x) => !needsCandidates(x.type) || x.candidateIds.some((id) => open.has(id))).length + (await countTransactionReview(q, user, { today }));
 }
 
 export interface ResolveResult {

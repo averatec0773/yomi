@@ -24,6 +24,7 @@ import {
   recategorizeUnedited,
   renameCategory,
   setCategory,
+  setCountsAsIncome,
   transactionPage,
   updateTransaction,
 } from "@yomi/core";
@@ -72,6 +73,7 @@ export function ledgerRoutes(deps: { getDb: () => Db | Promise<Db> }): Hono {
     let out: Category | undefined;
     if (body.name !== undefined) out = await renameCategory(db, user, id, body.name);
     if (body.archived !== undefined) out = await archiveCategory(db, user, id, body.archived);
+    if (body.countsAsIncome !== undefined) out = await setCountsAsIncome(db, user, id, body.countsAsIncome);
     return c.json(out! satisfies Category);
   });
 

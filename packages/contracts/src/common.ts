@@ -49,5 +49,8 @@ export type MessageParams = z.infer<typeof MessageParams>;
 export const Notice = z.object({ code: z.string(), params: MessageParams, message: z.string() });
 export type Notice = z.infer<typeof Notice>;
 
+export const TransactionKind = z.enum(["expense", "income", "transfer", "refund"]);
+export type TransactionKind = z.infer<typeof TransactionKind>;
+
 export const SourceId = z.enum(["alipay", "wechat", "icbc_pdf", "plaid", "boa_csv", "sms"]);
 export type SourceId = z.infer<typeof SourceId>;

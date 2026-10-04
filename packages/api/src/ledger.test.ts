@@ -60,6 +60,9 @@ describe("ledger api", () => {
     const unc = TransactionPage.parse(await (await app.request("/api/transactions?uncategorized=true&limit=2")).json());
     expect(unc).toMatchObject({ total: 3 });
     expect(unc.items).toHaveLength(2);
+    for (const [kind, total] of [["expense", 3], ["income", 0], ["transfer", 0]] as const) {
+      expect(TransactionPage.parse(await (await app.request(`/api/transactions?kind=${kind}`)).json()).total, kind).toBe(total);
+    }
     const bad = await app.request("/api/transactions?month=2026-9");
     expect(bad.status).toBe(400);
     expect(ApiError.parse(await bad.json()).code).toBe("validation_failed");
@@ -97,6 +100,15 @@ describe("ledger api", () => {
     expect((await app.request(`/api/categories/${await cat("餐饮")}`, json("PATCH", { name: "吃" }))).status).toBe(403);
     const list = CategoryList.parse(await (await app.request("/api/categories")).json());
     expect(list.categories.find((x) => x.id === pet.id)?.archivedAt).not.toBeNull();
+    expect(list.categories.find((x) => x.name === "家人资助")).toMatchObject({ key: "familySupport", isSystem: true, countsAsIncome: true });
+  });
+
+  it("turns counts-as-income off on a system income category, never on an expense one", async () => {
+    const { app, cat } = await setup();
+    const off = await app.request(`/api/categories/${await cat("家人资助")}`, json("PATCH", { countsAsIncome: false }));
+    expect(Category.parse(await off.json())).toMatchObject({ key: "familySupport", countsAsIncome: false });
+    expect((await app.request(`/api/categories/${await cat("餐饮")}`, json("PATCH", { countsAsIncome: false }))).status).toBe(400);
+    expect((await app.request(`/api/categories/${await cat("餐饮")}`, json("PATCH", {}))).status).toBe(400);
   });
 
   it("targets in stats, and recategorize", async () => {

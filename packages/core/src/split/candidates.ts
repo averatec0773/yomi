@@ -176,6 +176,8 @@ export interface MarkAsSettlementInput {
    */
   fxRate?: string | null;
   note?: string | null;
+  /** Open split items with this person (in `currency`) the transfer pays; see recordSettlement. */
+  itemTransactionIds?: number[];
 }
 
 /**
@@ -218,6 +220,7 @@ export async function markAsSettlement(db: Db, user: CurrentUser, txId: number, 
       settledOn: t.occurredOn,
       note: input.note ?? null,
       transactionId: t.id,
+      itemTransactionIds: input.itemTransactionIds ?? null,
     });
     await learnIdentityFromRow(q, user, p.id, {
       source: t.source,
