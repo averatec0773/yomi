@@ -1,15 +1,15 @@
 import type { AnalysisCurrency, RangeCurrencyOverview } from "@yomi/core";
-import { ChartColumnIcon, TagIcon } from "lucide-react";
+import { ChartColumnIcon } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { ProvisionalLabel, ProvisionalNote } from "@/components/capture/provisional";
 import { Money } from "@/components/money";
-import { ListCard } from "@/components/ui-kit/list-card";
 import { fmt, plural } from "@/i18n";
 import type { Dictionary } from "@/i18n/en";
 import { rich } from "@/i18n/rich";
 import { getI18n } from "@/i18n/server";
 import { dayLabel } from "@/lib/month";
+import { CategoriesCard } from "./categories-card";
 import { CategoryList } from "./category-list";
 import { LargestCard } from "./largest-card";
 import { MonthlyTrend } from "./monthly-trend";
@@ -49,6 +49,12 @@ function Comparison({ data, inProgress, label, t }: { data: RangeCurrencyOvervie
   if (diff === 0) return <span>{fmt(inProgress ? c.dailySame : c.same, { prev: label })}</span>;
   const template = diff < 0 ? (inProgress ? c.dailyLess : c.less) : inProgress ? c.dailyMore : c.more;
   return <span>{rich(template, { prev: label, amount: <Money minor={Math.abs(diff)} currency={data.currency} /> })}</span>;
+}
+
+/** Basis points as a whole percent, negative with a minus sign like amounts. */
+function percent(bp: number): string {
+  const n = Math.round(bp / 100);
+  return n < 0 ? `−${-n}%` : `${n}%`;
 }
 
 /** Separator between facts; phones put one fact per line instead. */
@@ -98,24 +104,35 @@ export async function CurrencySection({ data, period, days, inProgress, previous
             <Dot />
             <span>{plural(t.analysis.count, data.transactionCount)}</span>
           </div>
-          {(data.incomeMinor > 0 || data.sharedReceivableMinor > 0) && (
-            <div className="flex flex-col gap-y-1 text-body text-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-2">
-              {data.incomeMinor > 0 && (
-                <span>
-                  {rich(t.analysis.income, { amount: <Money minor={data.incomeMinor} currency={cur} sign="inflow" /> })}
-                </span>
+          <div className="flex flex-col gap-y-1 text-body text-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-2" data-testid="cash-flow">
+            <span>
+              <Link href={`/transactions?${new URLSearchParams({ ...period, kind: "income" }).toString()}`} className="underline-offset-4 hover:underline">
+                {rich(t.analysis.income, { amount: <Money minor={data.incomeMinor} currency={cur} sign="inflow" /> })}
+              </Link>
+              {data.incomeNotCountedMinor > 0 && (
+                <span className="text-3">{rich(t.analysis.incomeNotCounted, { amount: <Money minor={data.incomeNotCountedMinor} currency={cur} sign="signed" /> })}</span>
               )}
-              {data.incomeMinor > 0 && data.sharedReceivableMinor > 0 && <Dot />}
-              {data.sharedReceivableMinor > 0 && (
+            </span>
+            <Dot />
+            <span>{rich(t.analysis.net, { amount: <Money minor={data.netMinor} currency={cur} sign="signed" className="text-foreground" /> })}</span>
+            {data.savingsRateBp !== null && (
+              <>
+                <Dot />
+                <span>{rich(t.analysis.saved, { rate: <span className="num text-foreground">{percent(data.savingsRateBp)}</span> })}</span>
+              </>
+            )}
+            {data.sharedReceivableMinor > 0 && (
+              <>
+                <Dot />
                 <span>
                   {rich(t.analysis.fronted, { amount: <Money minor={data.sharedReceivableMinor} currency={cur} /> })}
                   <Link href="/split" className="ml-0.5 text-primary underline-offset-4 hover:underline">
                     {t.analysis.frontedLink}
                   </Link>
                 </span>
-              )}
-            </div>
-          )}
+              </>
+            )}
+          </div>
           {insights}
         </div>
         {month && (
@@ -136,9 +153,11 @@ export async function CurrencySection({ data, period, days, inProgress, previous
 
       <div className="grid gap-6 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <div className="flex min-w-0 flex-col gap-3">
-          <ListCard icon={TagIcon} title={<>{t.analysis.categories}{code}</>}>
-            <CategoryList period={period} currency={cur} items={data.byCategory} />
-          </ListCard>
+          <CategoriesCard
+            code={code}
+            spending={<CategoryList period={period} currency={cur} items={data.byCategory} />}
+            income={<CategoryList period={period} currency={cur} items={data.incomeByCategory} income />}
+          />
           {data.smallPayments.count > 0 && (
             <p className="text-body text-2">
               {rich(plural(t.analysis.small, data.smallPayments.count), {

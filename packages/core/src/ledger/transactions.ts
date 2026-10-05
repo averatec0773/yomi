@@ -62,6 +62,8 @@ export interface TransactionItem {
   categoryName: string | null;
   accountId: number | null;
   accountName: string | null;
+  /** The other leg's account when this row is one side of a transfer between my accounts (transfer_peer_id set). */
+  transferAccountName: string | null;
   source: "alipay" | "wechat" | "icbc_pdf" | "plaid" | "boa_csv" | "sms" | "manual";
   importBatchId: number | null;
   duplicateOfId: number | null;
@@ -215,6 +217,20 @@ export async function loadSplits(db: Db, userId: number, ids: readonly number[])
   return out;
 }
 
+/** The account of each given peer row (the other leg of an own-account transfer), keyed by peer id. */
+async function loadPeerAccounts(db: Db, userId: number, peerIds: readonly number[]): Promise<Map<number, string>> {
+  const out = new Map<number, string>();
+  for (const part of chunks(peerIds)) {
+    const rows = await db
+      .select({ id: transactions.id, account: accounts.name })
+      .from(transactions)
+      .innerJoin(accounts, eq(accounts.id, transactions.accountId))
+      .where(and(eq(transactions.userId, userId), inArray(transactions.id, part)));
+    for (const r of rows) out.set(r.id, r.account);
+  }
+  return out;
+}
+
 /** The capture behind each of the given rows, keyed by transaction id. */
 async function loadCaptures(db: Db, userId: number, ids: readonly number[]): Promise<Map<number, CaptureInfo>> {
   const out = new Map<number, CaptureInfo>();
@@ -277,6 +293,7 @@ export async function listTransactions(db: Db, user: CurrentUser, filter: Transa
       userEditedAt: transactions.userEditedAt,
       provisional: transactions.provisional,
       splitSuggestionDismissedAt: transactions.splitSuggestionDismissedAt,
+      transferPeerId: transactions.transferPeerId,
     })
     .from(transactions)
     .leftJoin(categories, eq(categories.id, transactions.categoryId))
@@ -303,11 +320,18 @@ export async function listTransactions(db: Db, user: CurrentUser, filter: Transa
     rows.filter((r) => r.source === "sms").map((r) => r.id),
   );
 
-  const items = rows.map(({ splitSuggestionDismissedAt: _d, ...r }): TransactionItem => {
+  const peerAccounts = await loadPeerAccounts(
+    db,
+    userId,
+    rows.flatMap((r) => (r.transferPeerId == null ? [] : [r.transferPeerId])),
+  );
+
+  const items = rows.map(({ splitSuggestionDismissedAt: _d, transferPeerId, ...r }): TransactionItem => {
     const s = splits.get(r.id) ?? [];
     const suggestion = suggestions.get(r.id) ?? null;
     return {
       ...r,
+      transferAccountName: transferPeerId == null ? null : (peerAccounts.get(transferPeerId) ?? null),
       capture: captured.get(r.id) ?? null,
       splits: s,
       myShareMinor: myShareMinor(r, s),

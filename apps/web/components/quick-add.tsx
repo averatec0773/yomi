@@ -10,6 +10,8 @@ import { toast } from "sonner";
 import { CategoryPill } from "@/components/category-pill";
 import { Money } from "@/components/money";
 import { ParticipantChip } from "@/components/participant-chip";
+import { IncomeForm, TransferForm } from "@/components/quick-entry-forms";
+import { Segmented } from "@/components/ui-kit/segmented";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { fmt } from "@/i18n";
 import { useLocale, useT } from "@/i18n/client";
@@ -24,6 +26,7 @@ import { cn } from "@/lib/utils";
 const PARSE_DELAY_MS = 150;
 
 type Draft = QuickDraft & { text: string };
+type Mode = "expense" | "income" | "transfer";
 
 async function parse(text: string, today: string): Promise<Draft> {
   const draft = await apiFetch<QuickDraft>("/quick/parse", { json: { text, today }, silent: true });
@@ -68,7 +71,10 @@ function shareLine(draft: QuickDraft, selfId: number | undefined, t: Dictionary)
     : fmt(t.quickAdd.youAndOthers, { mine: formatMinor(mine, draft.currency), each: formatMinor(each, draft.currency) });
 }
 
-/** Global quick-add palette. Mounted once in the root layout; open it with openQuickAdd() or ⌘K / "/". */
+/**
+ * Global quick-add palette. Mounted once in the root layout; open it with openQuickAdd() or ⌘K / "/". Expense (the
+ * default) parses typed text; Income and Transfer are small forms (quick-entry-forms.tsx).
+ */
 export function QuickAdd() {
   const router = useRouter();
   const t = useT();
@@ -77,6 +83,7 @@ export function QuickAdd() {
   const timeZone = useTimeZone();
   const q = t.quickAdd;
   const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<Mode>("expense");
   const [text, setText] = useState("");
   const [draft, setDraft] = useState<Draft | null>(null);
   const [parsing, setParsing] = useState(false);
@@ -98,7 +105,10 @@ export function QuickAdd() {
   useEffect(() => {
     const onOpen = (e: Event) => {
       const prefill = (e as CustomEvent<{ text?: string }>).detail?.text;
-      if (prefill !== undefined) setText(prefill);
+      if (prefill !== undefined) {
+        setText(prefill);
+        setMode("expense");
+      }
       setOpen(true);
       void loadParticipants();
     };
@@ -204,6 +214,22 @@ export function QuickAdd() {
       >
         <DialogTitle className="sr-only">{q.title}</DialogTitle>
         <DialogDescription className="sr-only">{q.description}</DialogDescription>
+        <div className="border-b border-border px-4 py-2">
+          <Segmented<Mode>
+            label={q.modes.label}
+            value={mode}
+            onChange={setMode}
+            options={[
+              { value: "expense", label: q.modes.expense },
+              { value: "income", label: q.modes.income },
+              { value: "transfer", label: q.modes.transfer },
+            ]}
+          />
+        </div>
+        {mode === "income" && <IncomeForm today={todayIn(timeZone)} />}
+        {mode === "transfer" && <TransferForm today={todayIn(timeZone)} />}
+        {mode === "expense" && (
+        <>
         <div className="flex items-center gap-2 border-b border-border px-4">
           <input
             ref={inputRef}
@@ -308,6 +334,8 @@ export function QuickAdd() {
             <kbd className="ml-3 rounded-sm border border-border bg-surface px-1">Esc</kbd> {q.close}
           </span>
         </div>
+        </>
+        )}
       </DialogContent>
     </Dialog>
   );

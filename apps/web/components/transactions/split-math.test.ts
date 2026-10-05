@@ -26,6 +26,7 @@ function tx(over: Partial<TransactionItem> = {}): TransactionItem {
     categoryName: null,
     accountId: 1,
     accountName: "支付宝",
+    transferAccountName: null,
     source: "alipay",
     importBatchId: null,
     duplicateOfId: null,

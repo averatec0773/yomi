@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckIcon, FunnelIcon, SplitIcon, TagIcon, UsersIcon, XIcon } from "lucide-react";
+import { ArrowDownUpIcon, CheckIcon, FunnelIcon, SplitIcon, TagIcon, UsersIcon, XIcon } from "lucide-react";
 import { categoryIcon } from "@/components/category-icon";
 import { FilterChip } from "@/components/ui-kit/filter-chip";
 import {
@@ -16,14 +16,14 @@ import { fmt, plural } from "@/i18n";
 import { categoryLabel } from "@/i18n/categories";
 import { useT } from "@/i18n/client";
 import { cn } from "@/lib/utils";
-import type { Category, Participant, TxFilters } from "./types";
+import { type Category, hasFilters, type Participant, TX_KINDS, type TxFilters } from "./types";
 import { useUpdateParams } from "./use-params";
 
 const itemCls = "h-9 gap-2 text-body";
 const menuCls = "max-h-80 min-w-52 rounded-xl bg-raised p-1 shadow-dialog ring-1 ring-line-strong";
 
 /**
- * Filter chips under the spend strip (an icon on every chip): category, person, "Not split", more filters
+ * Filter chips under the spend strip (an icon on every chip): category, type (spending, income, transfers, refunds), person, "Not split", more filters
  * (uncategorized only, show closed and duplicates). The URL is the only state. Right: counts and "Clear filters".
  */
 export function TxToolbar({
@@ -52,7 +52,7 @@ export function TxToolbar({
   const category = categories.find((c) => c.id === filters.categoryId);
   const person = others.find((p) => p.id === filters.participantId);
   const moreOn = filters.uncategorized || filters.showAll;
-  const filtered = Boolean(filters.q || filters.categoryId || filters.participantId || filters.uncategorized || filters.unsplit);
+  const filtered = hasFilters(filters);
 
   const categoryItem = (c: Category) => {
     const Icon = categoryIcon(c.name);
@@ -94,6 +94,22 @@ export function TxToolbar({
                 {income.map(categoryItem)}
               </>
             )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <DropdownMenu modal={false}>
+          <DropdownMenuTrigger asChild>
+            <FilterChip icon={ArrowDownUpIcon} menu active={Boolean(filters.kind)} aria-label={tb.filterKind}>
+              {filters.kind ? tb.kinds[filters.kind] : tb.kinds.all}
+            </FilterChip>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className={menuCls}>
+            {([undefined, ...TX_KINDS] as const).map((k) => (
+              <DropdownMenuItem key={k ?? "all"} className={cn(itemCls, k === filters.kind && "text-primary")} onSelect={() => update({ kind: k })}>
+                <span className="flex-1">{tb.kinds[k ?? "all"]}</span>
+                {k === filters.kind && <CheckIcon className="size-4" />}
+              </DropdownMenuItem>
+            ))}
           </DropdownMenuContent>
         </DropdownMenu>
 
@@ -177,7 +193,7 @@ export function TxToolbar({
           <button
             type="button"
             className="hit relative inline-flex items-center gap-1 rounded-sm text-2 underline-offset-2 hover:text-foreground hover:underline"
-            onClick={() => update({ q: undefined, categoryId: undefined, participantId: undefined, uncategorized: undefined, unsplit: undefined })}
+            onClick={() => update({ q: undefined, categoryId: undefined, kind: undefined, participantId: undefined, uncategorized: undefined, unsplit: undefined })}
           >
             <XIcon className="size-3.5" aria-hidden />
             {tb.clearFilters}

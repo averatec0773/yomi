@@ -423,8 +423,8 @@ test("language: switching to 中文 in settings shows Chinese nav labels and sta
   await page.getByRole("link", { name: "Settings" }).click();
   await expect(page).toHaveURL(/\/settings$/);
   const tablist = page.getByRole("tablist", { name: "Settings sections" });
-  await expect(tablist.getByRole("tab")).toHaveText(["General", "Profile", "Appearance", "Shortcuts", "Connections", "Security", "Data"]);
-  const headings = ["General", "Profile", "Appearance", "Keyboard shortcuts", "Connections", "Security", "Data"];
+  await expect(tablist.getByRole("tab")).toHaveText(["General", "Profile", "Categories", "Appearance", "Shortcuts", "Connections", "Security", "Data"]);
+  const headings = ["General", "Profile", "Categories", "Appearance", "Keyboard shortcuts", "Connections", "Security", "Data"];
   for (const [i, heading] of headings.entries()) {
     await tablist.getByRole("tab").nth(i).click();
     await expect(page.getByRole("tabpanel").getByRole("heading", { level: 2 })).toHaveText(heading);
@@ -437,8 +437,8 @@ test("language: switching to 中文 in settings shows Chinese nav labels and sta
 
   await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
   const zhTabs = page.getByRole("tablist", { name: "设置分区" }).getByRole("tab");
-  await expect(zhTabs).toHaveText(["通用", "个人资料", "外观", "快捷键", "连接", "安全", "数据"]);
-  await zhTabs.nth(3).click();
+  await expect(zhTabs).toHaveText(["通用", "个人资料", "分类", "外观", "快捷键", "连接", "安全", "数据"]);
+  await zhTabs.nth(4).click();
   await expect(page.getByRole("tabpanel").getByRole("heading", { level: 2 })).toHaveText("键盘快捷键");
   const zhNav = page.getByRole("navigation", { name: "主导航" });
   await zhNav.getByRole("link", { name: "交易" }).click();
@@ -501,9 +501,12 @@ test("settings tabs: server-rendered ?tab=, arrows and back/forward switch tabs,
   await expect(page.locator('[role="tab"][tabindex="0"]')).toHaveCount(1);
   await tab("Profile").focus();
   await page.keyboard.press("ArrowRight");
+  await expect(tab("Categories")).toBeFocused();
+  await page.keyboard.press("ArrowRight");
   await expect(tab("Appearance")).toBeFocused();
   await expect(tab("Appearance")).toHaveAttribute("aria-selected", "true");
   await expect(page.getByRole("radiogroup", { name: "Theme" })).toBeVisible();
+  await page.keyboard.press("ArrowLeft");
   await page.keyboard.press("ArrowLeft");
   await page.keyboard.press("ArrowLeft");
   await expect(tab("General")).toBeFocused();

@@ -13,7 +13,7 @@ import {
 } from "@yomi/core";
 import { AddButton, TxSearch } from "@/components/transactions/tx-search";
 import { TxView } from "@/components/transactions/tx-view";
-import type { TxFilters } from "@/components/transactions/types";
+import { hasFilters, TX_KINDS, type TxFilters } from "@/components/transactions/types";
 import { PageHeader } from "@/components/ui-kit/page-header";
 import { PeriodBar } from "@/components/ui-kit/period-bar";
 import { getI18n } from "@/i18n/server";
@@ -23,6 +23,10 @@ import { getToday } from "@/lib/settings";
 
 function first(v: string | string[] | undefined): string | undefined {
   return Array.isArray(v) ? v[0] : v;
+}
+
+function kindOf(v: string | undefined): TxFilters["kind"] {
+  return TX_KINDS.find((k) => k === v);
 }
 
 function positiveId(v: string | undefined): number | undefined {
@@ -50,18 +54,20 @@ export default async function TransactionsPage({ searchParams }: PageProps<"/tra
   const filters: TxFilters = {
     q: first(sp.q)?.trim() ?? "",
     categoryId: positiveId(first(sp.categoryId)),
+    kind: kindOf(first(sp.kind)),
     participantId: positiveId(first(sp.participantId)),
     uncategorized: ["1", "true"].includes(first(sp.uncategorized) ?? ""),
     unsplit: ["1", "true"].includes(first(sp.unsplit) ?? ""),
     showAll: first(sp.show) === "all",
   };
 
-  const filtered = Boolean(filters.q || filters.categoryId || filters.participantId || filters.uncategorized || filters.unsplit);
+  const filtered = hasFilters(filters);
   const [page, periodTotal, totals, participants, categories, autoSplitRules, allBalances, reviewCount] = await Promise.all([
     listTransactions(db, user, {
       ...range,
       q: filters.q || undefined,
       categoryId: filters.categoryId,
+      kind: filters.kind,
       participantId: filters.participantId,
       uncategorized: filters.uncategorized || undefined,
       unsplit: filters.unsplit || undefined,

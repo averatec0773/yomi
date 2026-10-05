@@ -5,7 +5,7 @@ import { useEffect, useRef, type KeyboardEvent, type ReactNode } from "react";
 import { useT } from "@/i18n/client";
 import { cn } from "@/lib/utils";
 
-const SETTINGS_TABS = ["general", "profile", "appearance", "shortcuts", "connections", "security", "data"] as const;
+const SETTINGS_TABS = ["general", "profile", "categories", "appearance", "shortcuts", "connections", "security", "data"] as const;
 export type SettingsTab = (typeof SETTINGS_TABS)[number];
 
 /** The tab in the URL (`?tab=`), general when missing or unknown. */

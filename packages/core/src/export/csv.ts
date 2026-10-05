@@ -1,5 +1,4 @@
-import { accounts, type Db, transactions } from "@yomi/db";
-import { and, eq, inArray, isNotNull } from "@yomi/db/orm";
+import type { Db } from "@yomi/db";
 import { LedgerError } from "../ledger/errors";
 import { countsAsSpending } from "../ledger/share";
 import { listTransactions, type TransactionItem } from "../ledger/transactions";
@@ -100,31 +99,7 @@ export function toCsv(rows: readonly (readonly string[])[]): string {
   return BOM + rows.map((r) => r.map(cell).join(",")).join("\r\n") + "\r\n";
 }
 
-/** For rows of an own-account transfer pair, the other leg's account name, keyed by row id. */
-async function transferAccounts(db: Db, user: CurrentUser, ids: readonly number[]): Promise<Map<number, string>> {
-  const out = new Map<number, string>();
-  for (let i = 0; i < ids.length; i += PAGE) {
-    const pairs = await db
-      .select({ id: transactions.id, peerId: transactions.transferPeerId })
-      .from(transactions)
-      .where(and(eq(transactions.userId, user.id), inArray(transactions.id, ids.slice(i, i + PAGE)), isNotNull(transactions.transferPeerId)));
-    if (pairs.length === 0) continue;
-    const peers = new Map(
-      (await db
-        .select({ id: transactions.id, account: accounts.name })
-        .from(transactions)
-        .innerJoin(accounts, eq(accounts.id, transactions.accountId))
-        .where(inArray(transactions.id, pairs.map((p) => p.peerId!)))).map((p) => [p.id, p.account]),
-    );
-    for (const p of pairs) {
-      const name = peers.get(p.peerId!);
-      if (name) out.set(p.id, name);
-    }
-  }
-  return out;
-}
-
-function transactionRow(t: TransactionItem, l: CsvLabels, timeZone: string, transferAccount: string): string[] {
+function transactionRow(t: TransactionItem, l: CsvLabels, timeZone: string): string[] {
   const c = t.currency;
   const others = t.splits.filter((s) => !s.isSelf);
   const self = t.splits.filter((s) => s.isSelf);
@@ -144,7 +119,7 @@ function transactionRow(t: TransactionItem, l: CsvLabels, timeZone: string, tran
     split,
     t.splits.length > 0 && payer ? name(payer) : "",
     t.accountName ?? "",
-    transferAccount,
+    t.transferAccountName ?? "",
     l.source[t.source] ?? t.source,
     t.note ?? "",
   ];
@@ -176,8 +151,7 @@ export async function exportTransactionsCsv(
   }
   const zone = await getTimeZone(db, user);
   const visible = items.filter((t) => t.status === "ok" && t.duplicateOfId == null).reverse();
-  const peers = await transferAccounts(db, user, visible.filter((t) => t.kind === "transfer").map((t) => t.id));
-  const rows = visible.map((t) => transactionRow(t, l, zone, peers.get(t.id) ?? ""));
+  const rows = visible.map((t) => transactionRow(t, l, zone));
   return toCsv([[...l.transactionColumns], ...rows]);
 }
 

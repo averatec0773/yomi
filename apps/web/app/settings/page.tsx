@@ -1,10 +1,11 @@
-import { DatabaseIcon, KeyboardIcon, PaletteIcon, PlugIcon, Settings2Icon, ShieldCheckIcon, UserRoundIcon, type LucideIcon } from "lucide-react";
+import { DatabaseIcon, KeyboardIcon, PaletteIcon, PlugIcon, Settings2Icon, ShieldCheckIcon, TagIcon, UserRoundIcon, type LucideIcon } from "lucide-react";
 import {
   balances,
   getCurrentUser,
   getDisplayName,
   getPaymentMethods,
   getProfileContact,
+  listCategories,
   listParticipants,
   readAccessToken,
   settingsStatus,
@@ -15,6 +16,7 @@ import type { ReactNode } from "react";
 import { SignOutButton } from "@/components/access/access-form";
 import { AppearanceSettings } from "@/components/appearance-settings";
 import { ConnectionsPanel } from "@/components/bank/connections-panel";
+import { CategorySettings } from "@/components/category-settings";
 import { CsvLink } from "@/components/csv-link";
 import { BackupButton } from "@/components/import/backup-button";
 import { Recategorize } from "@/components/import/recategorize";
@@ -44,6 +46,7 @@ export async function generateMetadata() {
 const ICONS: Record<SettingsTab, LucideIcon> = {
   general: Settings2Icon,
   profile: UserRoundIcon,
+  categories: TagIcon,
   appearance: PaletteIcon,
   shortcuts: KeyboardIcon,
   connections: PlugIcon,
@@ -134,6 +137,11 @@ export default async function SettingsPage() {
             <PaymentSettings initial={await getPaymentMethods(db, user)} />
           </div>
         </ProfileContactProvider>
+      </Section>
+
+      <Section id="categories" title={s.categories.title}>
+        <p className="text-body text-2">{s.categories.hint}</p>
+        <CategorySettings initial={(await listCategories(db, user)).filter((c) => c.kind === "income" && !c.archivedAt)} />
       </Section>
 
       <Section id="appearance" title={s.appearance.title}>
