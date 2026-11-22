@@ -212,6 +212,7 @@ function NoteEditor({ tx, onDone }: { tx: Tx; onDone: (note: string | null | und
       aria-label={t.common.note}
       onChange={(e) => setValue(e.target.value)}
       onKeyDown={(e) => {
+        if (e.nativeEvent.isComposing || e.keyCode === 229) return;
         if (e.key === "Enter") finish(value.trim() || null);
         if (e.key === "Escape") {
           e.stopPropagation();
@@ -228,6 +229,7 @@ const badge = "shrink-0 rounded-sm bg-tile px-1.5 text-hint font-normal";
 
 function TxRowImpl({ tx, others, selfId, nameOf, categories, selected, focused, selecting, panel, actions, done, autoSplit, desktop }: TxRowProps) {
   const t = useT();
+  const afterMenu = useRef<PanelType | null>(null);
   const r = t.transactions.row;
   const splittable = canSplit(tx);
   const hidden = tx.status !== "ok" || tx.duplicateOfId != null;
@@ -358,27 +360,26 @@ function TxRowImpl({ tx, others, selfId, nameOf, categories, selected, focused, 
       </div>
 
       {/* category pill (desktop) */}
-      {desktop && <div className="w-[124px] shrink-0">{categoryMenu("pill")}</div>}
+      {desktop && <div className="hidden w-[124px] shrink-0 md:block">{categoryMenu("pill")}</div>}
 
-      {/* Split marker: its own column on desktop, under the amount on phones */}
-      {desktop && <div className="flex w-[120px] shrink-0 items-center">{slot}</div>}
-
-      {/* amount + my share */}
-      <div className="flex shrink-0 flex-col items-end justify-center gap-1 md:w-[120px] md:gap-0.5">
-        <Money
-          minor={tx.amountMinor}
-          currency={tx.currency}
-          sign="inflow"
-          tone={transfer || hidden ? "muted" : undefined}
-          className={cn("text-body font-medium", transfer && "text-transfer")}
-        />
-        {showMine && desktop && (
-          <span className="inline-flex items-baseline gap-1 text-hint leading-4 text-2">
-            {r.mine}
-            <Money minor={mine} currency={tx.currency} tone="muted" />
-          </span>
-        )}
-        {!desktop && slot}
+      {/* Keep the split trigger mounted while the responsive layout changes during hydration. */}
+      <div className="flex shrink-0 flex-col items-end gap-1 md:flex-row md:items-center md:gap-4">
+        <div className="order-2 flex items-center max-md:justify-end md:order-1 md:w-[120px]">{slot}</div>
+        <div className="order-1 flex flex-col items-end justify-center md:order-2 md:w-[120px] md:gap-0.5">
+          <Money
+            minor={tx.amountMinor}
+            currency={tx.currency}
+            sign="inflow"
+            tone={transfer || hidden ? "muted" : undefined}
+            className={cn("text-body font-medium", transfer && "text-transfer")}
+          />
+          {showMine && desktop && (
+            <span className="hidden items-baseline gap-1 text-hint leading-4 text-2 md:inline-flex">
+              {r.mine}
+              <Money minor={mine} currency={tx.currency} tone="muted" />
+            </span>
+          )}
+        </div>
       </div>
 
       {/* row menu */}
@@ -396,13 +397,21 @@ function TxRowImpl({ tx, others, selfId, nameOf, categories, selected, focused, 
               <EllipsisIcon className="size-4" />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-52 rounded-xl bg-raised p-1 shadow-dialog ring-1 ring-line-strong" onCloseAutoFocus={(e) => e.preventDefault()}>
+          <DropdownMenuContent
+            align="end"
+            className="w-52 rounded-xl bg-raised p-1 shadow-dialog ring-1 ring-line-strong"
+            onCloseAutoFocus={(e) => {
+              e.preventDefault();
+              const next = afterMenu.current;
+              afterMenu.current = null;
+              if (next) actions.openPanel(tx.id, next);
+            }}
+          >
             {!desktop && splittable && (
               <DropdownMenuItem
                 className="h-9 text-body"
                 onSelect={() => {
-                  // Let the menu close first so the popover keeps focus.
-                  window.setTimeout(() => actions.openPanel(tx.id, "split"), 0);
+                  afterMenu.current = "split";
                 }}
               >
                 {t.aa.slot.label}
@@ -426,14 +435,18 @@ function TxRowImpl({ tx, others, selfId, nameOf, categories, selected, focused, 
             <DropdownMenuItem
               className="h-9 text-body"
               onSelect={() => {
-                // Let the menu close (and restore focus) before the inline input takes focus.
-                window.setTimeout(() => actions.openPanel(tx.id, "note"), 0);
+                afterMenu.current = "note";
               }}
             >
               {tx.note ? r.editNote : r.addNote}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="h-9 text-body" onSelect={() => actions.openPanel(tx.id, "details")}>
+            <DropdownMenuItem
+              className="h-9 text-body"
+              onSelect={() => {
+                afterMenu.current = "details";
+              }}
+            >
               {r.sourceDetails}
             </DropdownMenuItem>
           </DropdownMenuContent>
